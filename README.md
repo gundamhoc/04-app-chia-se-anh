@@ -1,4 +1,4 @@
-# K27-GROUP4 - Ứng dụng Chia Sẻ Hình Ảnh Trực Tiếp (Locket Clone)
+# K27-GROUP4 - Ứng dụng Chia Sẻ Hình Ảnh Trực Tiếp 
 
 Đây là kho lưu trữ mã nguồn của **Nhóm 4** cho đề tài ứng dụng kết nối và chia sẻ hình ảnh trực tiếp thời gian thực, hoạt động tương tự như ứng dụng **Locket Locket**.
 
