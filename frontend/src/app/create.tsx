@@ -7,45 +7,84 @@ import {
   SafeAreaView,
   TextInput,
   Image,
-  Modal,
   ScrollView,
   Platform,
   Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { mockStore } from '../constants/mock-store';
 import BottomNav from '../components/bottom-nav';
-
-// Các ảnh mẫu cực đẹp để người dùng chọn làm demo
-const STOCK_PHOTOS = [
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800',
-  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800',
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800',
-  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800',
-  'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=800',
-];
 
 export default function CreateScreen() {
   const [caption, setCaption] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [cameraFlash, setCameraFlash] = useState(false);
 
-  // Giả lập chụp ảnh mới (Chớp màn hình và tự chọn ngẫu nhiên 1 ảnh đẹp)
-  const handleCameraPress = () => {
-    setCameraFlash(true);
-    setTimeout(() => {
-      setCameraFlash(false);
-      const randomIndex = Math.floor(Math.random() * STOCK_PHOTOS.length);
-      setSelectedImage(STOCK_PHOTOS[randomIndex]);
-    }, 300);
+  // Gọi camera thật để chụp ảnh
+  const handleCameraPress = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        if (Platform.OS === 'web') {
+          alert('Chúng tôi cần quyền truy cập camera để chụp ảnh!');
+        } else {
+          Alert.alert('Quyền truy cập', 'Chúng tôi cần quyền truy cập camera để chụp ảnh!');
+        }
+        return;
+      }
+
+      setCameraFlash(true);
+      setTimeout(async () => {
+        setCameraFlash(false);
+        const result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          setSelectedImage(result.assets[0].uri);
+        }
+      }, 200);
+    } catch (error) {
+      console.error('Lỗi khi mở camera:', error);
+      if (Platform.OS === 'web') {
+        alert('Không thể mở camera trên trình duyệt web của bạn.');
+      }
+    }
   };
 
-  // Chia sẻ ảnh
+  // Mở thư viện ảnh của điện thoại thật
+  const handleGalleryPress = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        if (Platform.OS === 'web') {
+          alert('Chúng tôi cần quyền truy cập thư viện để chọn ảnh!');
+        } else {
+          Alert.alert('Quyền truy cập', 'Chúng tôi cần quyền truy cập thư viện để chọn ảnh!');
+        }
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Lỗi khi mở thư viện ảnh:', error);
+    }
+  };
+
+  // Chia sẻ ảnh lên feed Locket
   const handleShare = () => {
     if (!selectedImage) {
       if (Platform.OS === 'web') {
@@ -58,11 +97,11 @@ export default function CreateScreen() {
 
     mockStore.addPhoto(selectedImage, caption);
     
-    // Reset state
+    // Reset trạng thái
     setSelectedImage(null);
     setCaption('');
     
-    // Quay lại màn hình chính
+    // Điều hướng quay lại màn hình chính
     router.replace('/');
   };
 
@@ -87,7 +126,7 @@ export default function CreateScreen() {
       {/* Nội dung chính */}
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {selectedImage ? (
-          // Giao diện sau khi đã chọn được ảnh
+          // Giao diện sau khi đã chọn/chụp được ảnh thật
           <View style={styles.previewContainer}>
             <Image source={{ uri: selectedImage }} style={styles.previewImage} />
             
@@ -120,12 +159,12 @@ export default function CreateScreen() {
             </View>
           </View>
         ) : (
-          // Giao diện chọn hành động ban đầu giống hệt thiết kế
+          // Giao diện menu tròn chọn camera/thư viện giống hệt Demo
           <View style={styles.menuContainer}>
             <Text style={styles.title}>Locket</Text>
 
             <View style={styles.optionsRow}>
-              {/* Nút Chụp ảnh mới */}
+              {/* Nút Chụp ảnh thật */}
               <View style={styles.optionWrapper}>
                 <TouchableOpacity
                   style={styles.circleButtonBlue}
@@ -137,11 +176,11 @@ export default function CreateScreen() {
                 <Text style={styles.optionLabel}>Take New Photo</Text>
               </View>
 
-              {/* Nút Chọn từ thư viện */}
+              {/* Nút Chọn từ thư viện thật */}
               <View style={styles.optionWrapper}>
                 <TouchableOpacity
                   style={styles.circleButtonWhite}
-                  onPress={() => setIsGalleryOpen(true)}
+                  onPress={handleGalleryPress}
                   activeOpacity={0.85}
                 >
                   <Feather name="image" size={32} color="#007AFF" />
@@ -152,36 +191,6 @@ export default function CreateScreen() {
           </View>
         )}
       </ScrollView>
-
-      {/* Modal thư viện ảnh giả lập */}
-      <Modal visible={isGalleryOpen} transparent={true} animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chọn ảnh từ thư viện</Text>
-              <TouchableOpacity onPress={() => setIsGalleryOpen(false)}>
-                <Feather name="x" size={24} color="#1F2937" />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView contentContainerStyle={styles.galleryGrid}>
-              {STOCK_PHOTOS.map((url, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.galleryItem}
-                  onPress={() => {
-                    setSelectedImage(url);
-                    setIsGalleryOpen(false);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Image source={{ uri: url }} style={styles.galleryImage} />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       {/* Điều hướng chân trang */}
       <BottomNav activeTab="create" />
@@ -344,47 +353,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-  // Modal Style
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1F2937',
-  },
-  galleryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  galleryItem: {
-    width: '48%',
-    aspectRatio: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  galleryImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
   },
 });
