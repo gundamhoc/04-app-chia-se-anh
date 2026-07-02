@@ -1,0 +1,40 @@
+# Dependencies
+**/node_modules/
+**/dist/
+**/.expo/
+web-build/
+expo-env.d.ts
+
+# Native builds
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+/ios
+/android
+
+# Metro Cache
+.metro-health-check*
+
+# Debug logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS files
+.DS_Store
+*.pem
+
+# Local configuration & credentials (CRITICAL - DO NOT COMMIT)
+backend/.env
+.env*.local
+
+# SQLite Working Databases (CRITICAL - DO NOT COMMIT)
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+
+# Typescript
+*.tsbuildinfo

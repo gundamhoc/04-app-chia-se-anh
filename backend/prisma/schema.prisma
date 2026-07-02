@@ -1,0 +1,46 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                  String       @id @default(uuid())
+  username            String       @unique
+  email               String       @unique
+  password            String
+  fullName            String
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  sentRequests        Friendship[] @relation("SentRequests")
+  receivedRequests    Friendship[] @relation("ReceivedRequests")
+  photos              Photo[]
+}
+
+model Photo {
+  id        String   @id @default(uuid())
+  userId    String
+  imageUrl  String
+  caption   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  status    String   @default("PENDING") // PENDING, ACCEPTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User @relation("SentRequests", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("ReceivedRequests", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+}
