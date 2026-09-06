@@ -47,6 +47,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
     username: string;
     name: string;
   } | null>(null);
+  const [activeEmojiPopoverCommentId, setActiveEmojiPopoverCommentId] = useState<number | null>(null);
 
   const inputRef = useRef<TextInput | null>(null);
 
@@ -57,6 +58,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       setComments([]);
       setInputText('');
       setReplyingTo(null);
+      setActiveEmojiPopoverCommentId(null);
     }
   }, [visible, photoId]);
 
@@ -162,6 +164,10 @@ export const CommentModal: React.FC<CommentModalProps> = ({
     const isReply = !!item.parent_id;
 
     const reactions = item.reactions || [];
+    const userReaction = reactions.find((r) => r.user_reacted);
+    const hasUserReacted = !!userReaction;
+    const totalReactionsCount = reactions.reduce((acc, r) => acc + r.count, 0);
+    const topReactions = [...reactions].sort((a, b) => b.count - a.count).slice(0, 2);
 
     return (
       <View style={[styles.commentRow, isReply && styles.replyRow]}>
@@ -186,11 +192,56 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           {/* Content */}
           <Text style={styles.commentContent}>{item.content}</Text>
 
-          {/* Actions: Reply + Emojis + Delete */}
+          {/* Actions: Thích + Trả lời + Badge + Xóa */}
           <View style={styles.commentActions}>
+            {/* Floating Emoji Dock khi ấn giữ nút Thích của comment */}
+            {activeEmojiPopoverCommentId === item.id && (
+              <View style={styles.floatingEmojiDock}>
+                {VALID_EMOJIS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={styles.floatingEmojiItem}
+                    onPress={() => {
+                      setActiveEmojiPopoverCommentId(null);
+                      handleToggleReaction(item.id, emoji);
+                    }}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.floatingEmojiText}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Nút Thích (giống bài đăng: 🤍 Thích / <Emoji> Đã thích) */}
             <TouchableOpacity
-              style={styles.actionBtn}
+              style={[styles.commentActionBtn, hasUserReacted && styles.commentActionBtnActive]}
               onPress={() => {
+                if (activeEmojiPopoverCommentId === item.id) {
+                  setActiveEmojiPopoverCommentId(null);
+                } else {
+                  handleToggleReaction(item.id, userReaction ? userReaction.emoji : '❤️');
+                }
+              }}
+              onLongPress={() => {
+                setActiveEmojiPopoverCommentId(item.id);
+              }}
+              delayLongPress={220}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.commentActionIcon}>
+                {hasUserReacted ? userReaction.emoji : '🤍'}
+              </Text>
+              <Text style={[styles.commentActionText, hasUserReacted && styles.commentActionTextActive]}>
+                {hasUserReacted ? 'Đã thích' : 'Thích'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Nút Trả lời (giống bài đăng: 💬 Trả lời) */}
+            <TouchableOpacity
+              style={styles.commentActionBtn}
+              onPress={() => {
+                setActiveEmojiPopoverCommentId(null);
                 setReplyingTo({
                   id: item.id,
                   username: item.author_username,
@@ -198,34 +249,38 @@ export const CommentModal: React.FC<CommentModalProps> = ({
                 });
                 inputRef.current?.focus();
               }}
+              activeOpacity={0.7}
             >
-              <Text style={styles.actionBtnText}>Trả lời</Text>
+              <Text style={styles.commentActionIcon}>💬</Text>
+              <Text style={styles.commentActionText}>Trả lời</Text>
             </TouchableOpacity>
 
-            {/* Emoji bar for comment */}
-            <View style={styles.emojiListMini}>
-              {VALID_EMOJIS.map((emoji) => {
-                const reactionData = reactions.find((r) => r.emoji === emoji);
-                const count = reactionData?.count || 0;
-                const hasReacted = reactionData?.user_reacted || false;
-
-                return (
-                  <TouchableOpacity
-                    key={emoji}
-                    style={[styles.emojiMiniBtn, hasReacted && styles.emojiMiniBtnActive]}
-                    onPress={() => handleToggleReaction(item.id, emoji)}
-                  >
-                    <Text style={styles.emojiMiniText}>{emoji}</Text>
-                    {count > 0 && <Text style={styles.emojiMiniCount}>{count}</Text>}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {/* Badge hiển thị tương tác nếu có */}
+            {totalReactionsCount > 0 && (
+              <TouchableOpacity
+                style={styles.commentReactionsBadge}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setActiveEmojiPopoverCommentId(item.id);
+                }}
+              >
+                <Text style={styles.commentReactionsBadgeIcons}>
+                  {topReactions.map((r) => r.emoji).join('')}
+                </Text>
+                <Text style={styles.commentReactionsBadgeCount}>
+                  {totalReactionsCount}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {isOwner && (
               <TouchableOpacity
                 style={styles.deleteBtn}
-                onPress={() => handleDeleteComment(item.id)}
+                onPress={() => {
+                  setActiveEmojiPopoverCommentId(null);
+                  handleDeleteComment(item.id);
+                }}
+                activeOpacity={0.7}
               >
                 <Text style={styles.deleteBtnText}>Xóa</Text>
               </TouchableOpacity>
@@ -242,7 +297,17 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.overlay}
       >
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={() => {
+            if (activeEmojiPopoverCommentId) {
+              setActiveEmojiPopoverCommentId(null);
+            } else {
+              onClose();
+            }
+          }}
+        />
 
         <View style={styles.modalCard}>
           {/* Drag handle */}
@@ -251,7 +316,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>
-              Bình luận {comments.length > 0 ? `(${comments.length})` : ''}
+              💬 Bình luận {comments.length > 0 ? `(${comments.length})` : ''}
             </Text>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
               <Text style={styles.closeText}>✕</Text>
@@ -277,6 +342,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
               renderItem={renderCommentItem}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              onScrollBeginDrag={() => setActiveEmojiPopoverCommentId(null)}
             />
           )}
 
@@ -463,50 +529,86 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   commentActions: {
+    position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 10,
+    marginTop: 6,
+    gap: 12,
+    zIndex: 10,
   },
-  actionBtn: {
-    paddingVertical: 2,
-    paddingHorizontal: 4,
+  commentActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    gap: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
-  actionBtnText: {
+  commentActionBtnActive: {
+    backgroundColor: 'rgba(108, 99, 255, 0.18)',
+  },
+  commentActionIcon: {
+    fontSize: 14,
+  },
+  commentActionText: {
     fontSize: 12,
-    color: C.primary,
-    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
+    color: C.textMuted,
   },
-  emojiListMini: {
+  commentActionTextActive: {
+    color: C.primaryLight,
+  },
+  commentReactionsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
-  emojiMiniBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    paddingHorizontal: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
-  },
-  emojiMiniBtnActive: {
-    backgroundColor: 'rgba(108, 99, 255, 0.25)',
-    borderColor: C.primary,
     borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    gap: 3,
   },
-  emojiMiniText: {
-    fontSize: 13,
+  commentReactionsBadgeIcons: {
+    fontSize: 11,
   },
-  emojiMiniCount: {
+  commentReactionsBadgeCount: {
     fontSize: 10,
+    fontFamily: 'Inter_700Bold',
     color: '#FFFFFF',
-    marginLeft: 3,
-    fontWeight: 'bold',
+  },
+  floatingEmojiDock: {
+    position: 'absolute',
+    bottom: 32,
+    left: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E2F',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 20,
+    zIndex: 9999,
+    gap: 6,
+  },
+  floatingEmojiItem: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  floatingEmojiText: {
+    fontSize: 18,
   },
   deleteBtn: {
-    paddingVertical: 2,
-    paddingHorizontal: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
     marginLeft: 'auto',
   },
   deleteBtnText: {
