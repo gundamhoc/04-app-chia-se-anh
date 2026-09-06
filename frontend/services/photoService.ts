@@ -4,10 +4,13 @@ import { ApiResponse, Photo, PhotoReaction } from '../types';
 import { compressImage } from '../utils/imageCompressor';
 
 export const photoService = {
-  // Lấy danh sách bài viết Locket Feed (hỗ trợ tìm kiếm theo caption, tác giả)
-  async getPhotoFeed(query?: string): Promise<Photo[]> {
+  // Lấy danh sách bài viết Locket Feed (hỗ trợ tìm kiếm theo caption, tác giả và phạm vi friends/public)
+  async getPhotoFeed(query?: string, scope: 'friends' | 'public' = 'friends'): Promise<Photo[]> {
     const res = await api.get<ApiResponse<Photo[]>>('/photos/feed', {
-      params: query ? { q: query } : undefined,
+      params: {
+        ...(query ? { q: query } : {}),
+        scope,
+      },
     });
     return res.data.data || [];
   },

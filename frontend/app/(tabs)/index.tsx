@@ -53,11 +53,12 @@ export default function HomeScreen() {
   // Search bài viết / bài đăng
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchScope, setSearchScope] = useState<'friends' | 'public'>('friends');
   const [isSearchingBackend, setIsSearchingBackend] = useState(false);
 
-  const fetchFeed = useCallback(async (query?: string) => {
+  const fetchFeed = useCallback(async (query?: string, scope: 'friends' | 'public' = 'friends') => {
     try {
-      const data = await photoService.getPhotoFeed(query);
+      const data = await photoService.getPhotoFeed(query, scope);
       setPhotos(data);
     } catch (error: unknown) {
       console.warn('Fetch feed error:', error);
@@ -69,13 +70,15 @@ export default function HomeScreen() {
     }
   }, []);
 
-  const handleSearchBackend = async (q: string) => {
-    if (!q.trim()) {
-      fetchFeed();
-      return;
-    }
+  const handleSearchBackend = async (q: string, scope = searchScope) => {
     setIsSearchingBackend(true);
-    fetchFeed(q.trim());
+    fetchFeed(q.trim() || undefined, scope);
+  };
+
+  const handleScopeChange = (newScope: 'friends' | 'public') => {
+    setSearchScope(newScope);
+    setIsSearchingBackend(true);
+    fetchFeed(searchQuery.trim() || undefined, newScope);
   };
 
   // Lọc bài viết realtime trên client theo caption và tên/username người đăng
@@ -423,43 +426,89 @@ export default function HomeScreen() {
 
       {/* App Bar hoặc Search Bar bài viết */}
       {isSearchVisible ? (
-        <View style={styles.searchBarWrapper}>
-          <View style={styles.searchBarBox}>
-            <Text style={styles.searchBarIcon}>🔍</Text>
-            <TextInput
-              style={styles.searchBarInput}
-              placeholder="Tìm bài viết, caption, tác giả..."
-              placeholderTextColor={C.textMuted}
-              value={searchQuery}
-              onChangeText={(text) => setSearchQuery(text)}
-              autoFocus
-              returnKeyType="search"
-              onSubmitEditing={() => handleSearchBackend(searchQuery)}
-            />
-            {isSearchingBackend ? (
-              <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 6 }} />
-            ) : searchQuery.length > 0 ? (
-              <TouchableOpacity
-                onPress={() => {
-                  setSearchQuery('');
-                  fetchFeed();
-                }}
-                style={styles.clearSearchBtn}
-              >
-                <Text style={styles.clearSearchText}>✕</Text>
-              </TouchableOpacity>
-            ) : null}
+        <View style={styles.searchHeaderContainer}>
+          <View style={styles.searchBarWrapper}>
+            <View style={styles.searchBarBox}>
+              <Text style={styles.searchBarIcon}>🔍</Text>
+              <TextInput
+                style={styles.searchBarInput}
+                placeholder={
+                  searchScope === 'friends'
+                    ? 'Tìm bài viết của bạn bè...'
+                    : 'Khám phá bài viết công khai của mọi người...'
+                }
+                placeholderTextColor={C.textMuted}
+                value={searchQuery}
+                onChangeText={(text) => setSearchQuery(text)}
+                autoFocus
+                returnKeyType="search"
+                onSubmitEditing={() => handleSearchBackend(searchQuery, searchScope)}
+              />
+              {isSearchingBackend ? (
+                <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 6 }} />
+              ) : searchQuery.length > 0 ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSearchQuery('');
+                    fetchFeed(undefined, searchScope);
+                  }}
+                  style={styles.clearSearchBtn}
+                >
+                  <Text style={styles.clearSearchText}>✕</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              style={styles.closeSearchBtn}
+              onPress={() => {
+                setIsSearchVisible(false);
+                setSearchQuery('');
+                setSearchScope('friends');
+                fetchFeed();
+              }}
+            >
+              <Text style={styles.closeSearchText}>Đóng</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.closeSearchBtn}
-            onPress={() => {
-              setIsSearchVisible(false);
-              setSearchQuery('');
-              fetchFeed();
-            }}
-          >
-            <Text style={styles.closeSearchText}>Đóng</Text>
-          </TouchableOpacity>
+
+          {/* 2 Scope Switcher: Bạn bè vs Khám phá (Công khai) */}
+          <View style={styles.scopeSwitcherRow}>
+            <TouchableOpacity
+              style={[
+                styles.scopeChip,
+                searchScope === 'friends' && styles.scopeChipActive,
+              ]}
+              onPress={() => handleScopeChange('friends')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.scopeChipText,
+                  searchScope === 'friends' && styles.scopeChipTextActive,
+                ]}
+              >
+                👥 Bài viết bạn bè
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.scopeChip,
+                searchScope === 'public' && styles.scopeChipActive,
+              ]}
+              onPress={() => handleScopeChange('public')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.scopeChipText,
+                  searchScope === 'public' && styles.scopeChipTextActive,
+                ]}
+              >
+                🌐 Khám phá (Toàn MXH)
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         <View style={styles.appBar}>
@@ -493,12 +542,12 @@ export default function HomeScreen() {
       {isSearchVisible && searchQuery.trim().length > 0 && (
         <View style={styles.searchBanner}>
           <Text style={styles.searchBannerText} numberOfLines={1}>
-            📝 Kết quả tìm bài viết: "{searchQuery.trim()}" ({filteredPhotos.length} bài)
+            {searchScope === 'friends' ? '👥 Bạn bè' : '🌐 Khám phá'}: "{searchQuery.trim()}" ({filteredPhotos.length} bài)
           </Text>
           <TouchableOpacity
             onPress={() => {
               setSearchQuery('');
-              fetchFeed();
+              fetchFeed(undefined, searchScope);
             }}
           >
             <Text style={styles.searchBannerReset}>Bỏ lọc</Text>
@@ -519,13 +568,24 @@ export default function HomeScreen() {
               <Text style={styles.emptyEmoji}>🔎</Text>
               <Text style={styles.emptyTitle}>Không tìm thấy bài viết</Text>
               <Text style={styles.emptySub}>
-                Không có bài viết hoặc bài đăng nào khớp với từ khóa "{searchQuery}". Hãy thử tìm kiếm với nội dung caption hoặc tên tác giả khác!
+                Không có bài viết nào khớp với từ khóa "{searchQuery}" trong phạm vi{' '}
+                {searchScope === 'friends' ? 'bạn bè' : 'khám phá công khai'}.
               </Text>
+              {searchScope === 'friends' && (
+                <TouchableOpacity
+                  style={styles.btnSwitchExplore}
+                  onPress={() => handleScopeChange('public')}
+                >
+                  <Text style={styles.btnSwitchExploreText}>
+                    🌐 Tìm kiếm trong Khám phá công khai
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.btnCreateFirst}
                 onPress={() => {
                   setSearchQuery('');
-                  fetchFeed();
+                  fetchFeed(undefined, searchScope);
                 }}
               >
                 <Text style={styles.btnCreateFirstText}>✕ Xóa từ khóa tìm kiếm</Text>
@@ -963,14 +1023,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
   },
+  searchHeaderContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    backgroundColor: C.card,
+  },
   searchBarWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    backgroundColor: C.card,
+    paddingTop: 10,
+    paddingBottom: 6,
     gap: 10,
   },
   searchBarBox: {
@@ -1011,6 +1074,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     color: C.primary,
   },
+  scopeSwitcherRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  scopeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: '#242426',
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  scopeChipActive: {
+    backgroundColor: `${C.primary}25`,
+    borderColor: C.primary,
+  },
+  scopeChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: C.textMuted,
+  },
+  scopeChipTextActive: {
+    color: C.primary,
+    fontFamily: 'Inter_600SemiBold',
+  },
   searchBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1032,5 +1122,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     color: C.textMuted,
     marginLeft: 8,
+  },
+  btnSwitchExplore: {
+    backgroundColor: `${C.primary}20`,
+    borderWidth: 1,
+    borderColor: C.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  btnSwitchExploreText: {
+    color: C.primaryLight || C.primary,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

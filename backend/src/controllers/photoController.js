@@ -146,6 +146,7 @@ const getPhotoFeed = async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const queryTerm = req.query.q ? req.query.q.trim() : '';
+    const scope = req.query.scope === 'public' ? 'public' : 'friends';
 
     let querySql = `
       SELECT DISTINCT
@@ -165,10 +166,17 @@ const getPhotoFeed = async (req, res) => {
       LEFT JOIN friendships f 
         ON ((f.requester_id = ? AND f.receiver_id = p.user_id) 
          OR (f.receiver_id = ? AND f.requester_id = p.user_id))
-      WHERE (p.user_id = ? 
-         OR (f.status = 'accepted' AND (p.recipient_id IS NULL OR p.recipient_id = ?)))
     `;
-    const queryParams = [currentUserId, currentUserId, currentUserId, currentUserId];
+    let queryParams = [currentUserId, currentUserId];
+
+    if (scope === 'public') {
+      // Phạm vi công khai / khám phá: bài đăng công khai của bất kỳ ai trong hệ thống (kể cả người lạ)
+      querySql += ` WHERE (p.recipient_id IS NULL)`;
+    } else {
+      // Phạm vi bạn bè: bài đăng của chính bản thân HOẶC của bạn bè đã accepted
+      querySql += ` WHERE (p.user_id = ? OR (f.status = 'accepted' AND (p.recipient_id IS NULL OR p.recipient_id = ?)))`;
+      queryParams.push(currentUserId, currentUserId);
+    }
 
     if (queryTerm) {
       querySql += ` AND (p.caption LIKE ? OR u.full_name LIKE ? OR u.username LIKE ?)`;
