@@ -309,5 +309,234 @@ const forgotPassword = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getProfile, updateAvatar, forgotPassword };
+/**
+ * 6. Cập nhật Username
+ * PUT /api/auth/username (protected - cần JWT)
+ * Body: { username }
+ */
+const updateUsername = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    let { username } = req.body;
+
+    if (!username || typeof username !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng cung cấp username hợp lệ.',
+      });
+    }
+
+    username = username.trim();
+
+    if (username.length < 3 || username.length > 30) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username phải từ 3 đến 30 ký tự.',
+      });
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(username)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username chỉ được chứa chữ cái, số và dấu gạch dưới (_).',
+      });
+    }
+
+    // Kiểm tra xem username đã có người dùng khác sử dụng chưa
+    const [existing] = await pool.query(
+      'SELECT id FROM users WHERE username = ? AND id != ?',
+      [username, currentUserId]
+    );
+
+    if (existing.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Username này đã được sử dụng bởi người khác.',
+      });
+    }
+
+    await pool.query('UPDATE users SET username = ? WHERE id = ?', [username, currentUserId]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật username thành công!',
+      data: { username },
+    });
+  } catch (error) {
+    console.error('UpdateUsername error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi cập nhật username.',
+    });
+  }
+};
+
+/**
+ * 7. Cập nhật Email đăng ký (Yêu cầu nhập đúng mật khẩu hiện tại)
+ * PUT /api/auth/email (protected - cần JWT)
+ * Body: { email, password }
+ */
+const updateEmail = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    let { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng nhập email mới và mật khẩu hiện tại để xác thực.',
+      });
+    }
+
+    email = email.trim().toLowerCase();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Định dạng email không hợp lệ.',
+      });
+    }
+
+    // Lấy thông tin user hiện tại
+    const [users] = await pool.query(
+      'SELECT id, email, password_hash FROM users WHERE id = ?',
+      [currentUserId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng.',
+      });
+    }
+
+    const currentUser = users[0];
+
+    // Xác thực mật khẩu đúng mới cho đổi email
+    const isMatch = await bcrypt.compare(password, currentUser.password_hash);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mật khẩu không chính xác. Bạn phải nhập đúng mật khẩu để đổi email.',
+      });
+    }
+
+    if (currentUser.email && currentUser.email.toLowerCase() === email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email mới phải khác với email đăng ký hiện tại.',
+      });
+    }
+
+    // Kiểm tra xem email mới đã được tài khoản khác sử dụng chưa
+    const [existing] = await pool.query(
+      'SELECT id FROM users WHERE email = ? AND id != ?',
+      [email, currentUserId]
+    );
+
+    if (existing.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Email này đã được sử dụng bởi tài khoản khác.',
+      });
+    }
+
+    await pool.query('UPDATE users SET email = ? WHERE id = ?', [email, currentUserId]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật email đăng ký thành công!',
+      data: { email },
+    });
+  } catch (error) {
+    console.error('UpdateEmail error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi cập nhật email.',
+    });
+  }
+};
+
+/**
+ * 8. Đổi Mật Khẩu (Yêu cầu nhập đúng email đăng ký)
+ * PUT /api/auth/change-password (protected - cần JWT)
+ * Body: { email, new_password }
+ */
+const changePassword = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    let { email, new_password } = req.body;
+
+    if (!email || !new_password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng nhập email đăng ký và mật khẩu mới.',
+      });
+    }
+
+    email = email.trim().toLowerCase();
+
+    if (new_password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mật khẩu mới phải có ít nhất 6 ký tự.',
+      });
+    }
+
+    // Lấy thông tin user hiện tại
+    const [users] = await pool.query(
+      'SELECT id, email FROM users WHERE id = ?',
+      [currentUserId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng.',
+      });
+    }
+
+    const currentUser = users[0];
+
+    // Xác thực: trong mật khẩu phải nhập đúng email mới cho đổi mật khẩu
+    if (!currentUser.email || currentUser.email.toLowerCase() !== email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email không khớp với email đăng ký của tài khoản này.',
+      });
+    }
+
+    const saltRounds = 12;
+    const password_hash = await bcrypt.hash(new_password, saltRounds);
+
+    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [
+      password_hash,
+      currentUserId,
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Đổi mật khẩu thành công!',
+    });
+  } catch (error) {
+    console.error('ChangePassword error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi đổi mật khẩu.',
+    });
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  getProfile,
+  updateAvatar,
+  forgotPassword,
+  updateUsername,
+  updateEmail,
+  changePassword,
+};
 

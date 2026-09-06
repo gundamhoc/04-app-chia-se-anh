@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,16 @@ import {
   ScrollView,
   Switch,
   Platform,
-  Alert,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
+import { authService } from '../services/authService';
+import { useAuthStore } from '../store/authStore';
 
 const C = Colors.dark;
 
@@ -35,6 +39,7 @@ type DetailModalType =
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { user } = useAuth();
+  const { updateUser } = useAuthStore();
   const { showToast } = useToast();
 
   // Switch states for Display & Content
@@ -49,6 +54,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   // Sub-detail modal
   const [activeDetail, setActiveDetail] = useState<DetailModalType>(null);
 
+  // Tab inside account_detail: 'username' | 'email' | 'password'
+  const [accountTab, setAccountTab] = useState<'username' | 'email' | 'password'>('username');
+
+  // Username form state
+  const [editUsername, setEditUsername] = useState('');
+  const [savingUsername, setSavingUsername] = useState(false);
+
+  // Email form state
+  const [newEmail, setNewEmail] = useState('');
+  const [emailCurrentPassword, setEmailCurrentPassword] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  // Password form state
+  const [registeredEmailForPass, setRegisteredEmailForPass] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setEditUsername(user.username || '');
+    }
+  }, [user, activeDetail]);
+
   // 1. Chia sẻ hồ sơ
   const handleShareProfile = async () => {
     try {
@@ -60,33 +89,297 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     }
   };
 
+  // 2. Lưu Username mới
+  const handleSaveUsername = async () => {
+    const trimmed = editUsername.trim();
+    if (!trimmed) {
+      showToast('error', 'Vui lòng nhập username mới.');
+      return;
+    }
+    if (trimmed === user?.username) {
+      showToast('info', 'Username không có thay đổi.');
+      return;
+    }
+    if (trimmed.length < 3 || trimmed.length > 30) {
+      showToast('error', 'Username phải có từ 3 đến 30 ký tự.');
+      return;
+    }
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(trimmed)) {
+      showToast('error', 'Username chỉ được chứa chữ cái, số và dấu gạch dưới (_).');
+      return;
+    }
+
+    setSavingUsername(true);
+    try {
+      const res = await authService.updateUsername(trimmed);
+      updateUser({ username: res.data?.username || trimmed });
+      showToast('success', res.message || 'Cập nhật username thành công! 🎉');
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || err.message || 'Cập nhật username thất bại.');
+    } finally {
+      setSavingUsername(false);
+    }
+  };
+
+  // 3. Đổi Email đăng ký (Yêu cầu mật khẩu đúng)
+  const handleSaveEmail = async () => {
+    const trimmedEmail = newEmail.trim().toLowerCase();
+    const pass = emailCurrentPassword.trim();
+
+    if (!trimmedEmail) {
+      showToast('error', 'Vui lòng nhập email mới.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      showToast('error', 'Định dạng email mới không hợp lệ.');
+      return;
+    }
+    if (trimmedEmail === user?.email?.toLowerCase()) {
+      showToast('error', 'Email mới phải khác với email hiện tại.');
+      return;
+    }
+    if (!pass) {
+      showToast('error', 'Bạn phải nhập đúng mật khẩu hiện tại để đổi email.');
+      return;
+    }
+
+    setSavingEmail(true);
+    try {
+      const res = await authService.updateEmail(trimmedEmail, pass);
+      updateUser({ email: res.data?.email || trimmedEmail });
+      showToast('success', res.message || 'Cập nhật email đăng ký thành công! 📧');
+      setNewEmail('');
+      setEmailCurrentPassword('');
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || err.message || 'Cập nhật email thất bại.');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
+  // 4. Đổi Mật khẩu (Yêu cầu nhập đúng email đăng ký)
+  const handleChangePassword = async () => {
+    const enteredEmail = registeredEmailForPass.trim().toLowerCase();
+    const newPass = newPassword.trim();
+    const confirmPass = confirmPassword.trim();
+
+    if (!enteredEmail) {
+      showToast('error', 'Vui lòng nhập đúng email đăng ký để xác thực.');
+      return;
+    }
+    if (!newPass || newPass.length < 6) {
+      showToast('error', 'Mật khẩu mới phải có ít nhất 6 ký tự.');
+      return;
+    }
+    if (newPass !== confirmPass) {
+      showToast('error', 'Mật khẩu xác nhận không khớp.');
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      const res = await authService.changePassword(enteredEmail, newPass);
+      showToast('success', res.message || 'Đổi mật khẩu thành công! 🔑');
+      setRegisteredEmailForPass('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || err.message || 'Đổi mật khẩu thất bại.');
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   // Render detail contents
   const renderDetailContent = () => {
     switch (activeDetail) {
       case 'account_detail':
         return (
           <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>👤 Thông tin tài khoản</Text>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Tên hiển thị:</Text>
-              <Text style={styles.detailValue}>{user?.full_name || user?.username}</Text>
+            <Text style={styles.detailTitle}>👤 Quản lý tài khoản</Text>
+
+            {/* Segmented Tab Selector */}
+            <View style={styles.accountTabsRow}>
+              <TouchableOpacity
+                style={[styles.accountTabBtn, accountTab === 'username' && styles.accountTabBtnActive]}
+                onPress={() => setAccountTab('username')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.accountTabText, accountTab === 'username' && styles.accountTabTextActive]}>
+                  👤 Username
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.accountTabBtn, accountTab === 'email' && styles.accountTabBtnActive]}
+                onPress={() => setAccountTab('email')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.accountTabText, accountTab === 'email' && styles.accountTabTextActive]}>
+                  📧 Email
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.accountTabBtn, accountTab === 'password' && styles.accountTabBtnActive]}
+                onPress={() => setAccountTab('password')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.accountTabText, accountTab === 'password' && styles.accountTabTextActive]}>
+                  🔑 Mật khẩu
+                </Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Tên người dùng:</Text>
-              <Text style={styles.detailValue}>@{user?.username}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Email đăng ký:</Text>
-              <Text style={styles.detailValue}>{user?.email || '-'}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>ID tài khoản:</Text>
-              <Text style={styles.detailValue}>#{user?.id}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Trạng thái:</Text>
-              <Text style={[styles.detailValue, { color: '#34C759' }]}>Đang hoạt động ✓</Text>
-            </View>
+
+            {/* TAB 1: CHỈNH SỬA USERNAME */}
+            {accountTab === 'username' && (
+              <View style={styles.tabContentBox}>
+                <View style={styles.currentValRow}>
+                  <Text style={styles.currentValLabel}>Username hiện tại:</Text>
+                  <Text style={styles.currentValText}>@{user?.username}</Text>
+                </View>
+
+                <Text style={styles.inputLabel}>Nhập username mới:</Text>
+                <TextInput
+                  style={styles.textInputStyle}
+                  placeholder="Ví dụ: nam_tran99"
+                  placeholderTextColor={C.textMuted}
+                  value={editUsername}
+                  onChangeText={setEditUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  maxLength={30}
+                />
+                <Text style={styles.fieldHint}>
+                  Chỉ gồm chữ cái, số và dấu gạch dưới (_), độ dài từ 3 đến 30 ký tự.
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.submitActionBtn, savingUsername && styles.submitActionBtnDisabled]}
+                  onPress={handleSaveUsername}
+                  disabled={savingUsername}
+                  activeOpacity={0.8}
+                >
+                  {savingUsername ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.submitActionBtnText}>Lưu thay đổi Username</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* TAB 2: EMAIL ĐĂNG KÝ (CẦN MẬT KHẨU ĐÚNG) */}
+            {accountTab === 'email' && (
+              <View style={styles.tabContentBox}>
+                <View style={styles.infoNoticeBadge}>
+                  <Text style={styles.infoNoticeText}>
+                    🔒 Để đổi email đăng ký, bạn phải nhập đúng mật khẩu hiện tại để xác thực an toàn.
+                  </Text>
+                </View>
+
+                <View style={styles.currentValRow}>
+                  <Text style={styles.currentValLabel}>Email hiện tại:</Text>
+                  <Text style={styles.currentValText}>{user?.email || '-'}</Text>
+                </View>
+
+                <Text style={styles.inputLabel}>Email đăng ký mới:</Text>
+                <TextInput
+                  style={styles.textInputStyle}
+                  placeholder="name@example.com"
+                  placeholderTextColor={C.textMuted}
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoCorrect={false}
+                />
+
+                <Text style={styles.inputLabel}>Mật khẩu hiện tại của bạn:</Text>
+                <TextInput
+                  style={styles.textInputStyle}
+                  placeholder="Nhập mật khẩu hiện tại..."
+                  placeholderTextColor={C.textMuted}
+                  value={emailCurrentPassword}
+                  onChangeText={setEmailCurrentPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+
+                <TouchableOpacity
+                  style={[styles.submitActionBtn, savingEmail && styles.submitActionBtnDisabled]}
+                  onPress={handleSaveEmail}
+                  disabled={savingEmail}
+                  activeOpacity={0.8}
+                >
+                  {savingEmail ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.submitActionBtnText}>Xác nhận đổi Email</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* TAB 3: ĐỔI MẬT KHẨU (CẦN EMAIL ĐĂNG KÝ ĐÚNG) */}
+            {accountTab === 'password' && (
+              <View style={styles.tabContentBox}>
+                <View style={styles.infoNoticeBadge}>
+                  <Text style={styles.infoNoticeText}>
+                    🛡️ Để đổi mật khẩu, bạn phải nhập chính xác địa chỉ email đã đăng ký tài khoản này.
+                  </Text>
+                </View>
+
+                <Text style={styles.inputLabel}>Email đăng ký để xác nhận:</Text>
+                <TextInput
+                  style={styles.textInputStyle}
+                  placeholder="Nhập email đăng ký của bạn..."
+                  placeholderTextColor={C.textMuted}
+                  value={registeredEmailForPass}
+                  onChangeText={setRegisteredEmailForPass}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoCorrect={false}
+                />
+
+                <Text style={styles.inputLabel}>Mật khẩu mới (tối thiểu 6 ký tự):</Text>
+                <TextInput
+                  style={styles.textInputStyle}
+                  placeholder="Nhập mật khẩu mới..."
+                  placeholderTextColor={C.textMuted}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+
+                <Text style={styles.inputLabel}>Xác nhận mật khẩu mới:</Text>
+                <TextInput
+                  style={styles.textInputStyle}
+                  placeholder="Nhập lại mật khẩu mới..."
+                  placeholderTextColor={C.textMuted}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+
+                <TouchableOpacity
+                  style={[styles.submitActionBtn, savingPassword && styles.submitActionBtnDisabled]}
+                  onPress={handleChangePassword}
+                  disabled={savingPassword}
+                  activeOpacity={0.8}
+                >
+                  {savingPassword ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.submitActionBtnText}>Xác nhận đổi Mật khẩu</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         );
 
@@ -125,10 +418,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             <Text style={styles.detailDesc}>
               Bảo vệ thông tin tài khoản và kiểm soát các quyền truy cập trên thiết bị di động.
             </Text>
-            <View style={styles.securityItem}>
-              <Text style={styles.securityItemTitle}>🔑 Mật khẩu tài khoản</Text>
-              <Text style={styles.securityItemDesc}>Mật khẩu được mã hóa an toàn bcrypt 10 rounds.</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.securityActionCard}
+              onPress={() => {
+                setAccountTab('password');
+                setActiveDetail('account_detail');
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.securityItemTitle}>🔑 Đổi mật khẩu tài khoản</Text>
+                <Text style={styles.securityItemDesc}>Đổi mật khẩu với xác thực email đăng ký.</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+
             <View style={styles.securityItem}>
               <Text style={styles.securityItemTitle}>📷 Quyền Máy ảnh & Bộ nhớ ảnh</Text>
               <Text style={styles.securityItemDesc}>
@@ -276,7 +580,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             {/* 1. Tài khoản */}
             <TouchableOpacity
               style={styles.itemRow}
-              onPress={() => setActiveDetail('account_detail')}
+              onPress={() => {
+                setAccountTab('username');
+                setActiveDetail('account_detail');
+              }}
               activeOpacity={0.7}
             >
               <View style={[styles.itemIconBox, { backgroundColor: 'rgba(108, 99, 255, 0.15)' }]}>
@@ -284,7 +591,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               </View>
               <View style={styles.itemTextBox}>
                 <Text style={styles.itemTitle}>Tài khoản</Text>
-                <Text style={styles.itemSub}>@{user?.username} • ID: #{user?.id}</Text>
+                <Text style={styles.itemSub}>Chỉnh sửa username, email & mật khẩu</Text>
               </View>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
@@ -513,14 +820,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
           <View style={{ height: 40 }} />
         </ScrollView>
 
-        {/* Detail Bottom Modal */}
+        {/* Detail Bottom Modal with KeyboardAvoidingView */}
         <Modal
           visible={!!activeDetail}
           transparent
           animationType="fade"
           onRequestClose={() => setActiveDetail(null)}
         >
-          <View style={styles.detailOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.detailOverlay}
+          >
             <TouchableOpacity
               style={styles.detailBackdrop}
               activeOpacity={1}
@@ -528,7 +838,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             />
             <View style={styles.detailModalBox}>
               <View style={styles.detailDragBar} />
-              {renderDetailContent()}
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+                {renderDetailContent()}
+              </ScrollView>
               <TouchableOpacity
                 style={styles.detailCloseBtn}
                 onPress={() => setActiveDetail(null)}
@@ -537,7 +849,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.detailCloseBtnText}>Đóng</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
       </View>
     </Modal>
@@ -672,6 +984,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     color: '#34C759',
   },
+
   // Sub-detail modal
   detailOverlay: {
     flex: 1,
@@ -690,6 +1003,7 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    maxHeight: '85%',
   },
   detailDragBar: {
     width: 36,
@@ -700,7 +1014,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   detailCard: {
-    marginBottom: 16,
+    marginBottom: 10,
   },
   detailTitle: {
     fontSize: 18,
@@ -715,22 +1029,116 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 14,
   },
-  detailRow: {
+
+  // Account Tabs and Forms
+  accountTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  accountTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  accountTabBtnActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primaryLight,
+  },
+  accountTabText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: C.textMuted,
+  },
+  accountTabTextActive: {
+    color: '#FFFFFF',
+  },
+  tabContentBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+  },
+  infoNoticeBadge: {
+    backgroundColor: 'rgba(108, 99, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: `${C.primary}35`,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+  },
+  infoNoticeText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: C.primaryLight,
+    lineHeight: 18,
+  },
+  currentValRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    alignItems: 'center',
+    paddingBottom: 10,
+    marginBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
-  detailLabel: {
-    fontSize: 13,
+  currentValLabel: {
+    fontSize: 12,
     color: C.textMuted,
+    fontFamily: 'Inter_400Regular',
   },
-  detailValue: {
+  currentValText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontFamily: 'Inter_600SemiBold',
+  },
+  inputLabel: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: C.text,
+    color: '#FFFFFF',
+    marginBottom: 6,
+    marginTop: 8,
   },
+  textInputStyle: {
+    height: 44,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+  },
+  fieldHint: {
+    fontSize: 11,
+    color: C.textMuted,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  submitActionBtn: {
+    backgroundColor: C.primary,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  submitActionBtnDisabled: {
+    opacity: 0.6,
+  },
+  submitActionBtnText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
+  },
+
+  // Privacy & Security Details
   privacyOption: {
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     padding: 12,
@@ -749,6 +1157,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: C.textMuted,
     lineHeight: 18,
+  },
+  securityActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(108, 99, 255, 0.1)',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: `${C.primary}35`,
   },
   securityItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
@@ -769,6 +1187,8 @@ const styles = StyleSheet.create({
     color: C.textMuted,
     lineHeight: 18,
   },
+
+  // Other Details
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -856,7 +1276,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   detailCloseBtn: {
-    marginTop: 4,
+    marginTop: 8,
     paddingVertical: 12,
     borderRadius: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
