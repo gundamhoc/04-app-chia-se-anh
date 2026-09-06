@@ -18,6 +18,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../store/authStore';
+import { UserPrivacySettings } from '../types';
 
 const C = Colors.dark;
 
@@ -92,6 +93,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+
+  // Privacy Settings states
+  const [privacySettings, setPrivacySettings] = useState<UserPrivacySettings>({
+    is_private_account: false,
+    allow_suggest_account: true,
+    searchable_by_name: true,
+    searchable_by_username: true,
+    searchable_by_email: true,
+  });
+  const [loadingPrivacy, setLoadingPrivacy] = useState(false);
+  const [updatingPrivacyKey, setUpdatingPrivacyKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (visible || activeDetail === 'privacy_detail') {
+      fetchPrivacySettings();
+    }
+  }, [visible, activeDetail]);
+
+  const fetchPrivacySettings = async () => {
+    try {
+      setLoadingPrivacy(true);
+      const res = await authService.getPrivacySettings();
+      if (res && res.success && res.data) {
+        setPrivacySettings(res.data);
+      }
+    } catch (err) {
+      console.warn('Lỗi tải cài đặt riêng tư:', err);
+    } finally {
+      setLoadingPrivacy(false);
+    }
+  };
+
+  const handleTogglePrivacy = async (key: keyof UserPrivacySettings, value: boolean) => {
+    const previous = { ...privacySettings };
+    setPrivacySettings((prev) => ({ ...prev, [key]: value }));
+    setUpdatingPrivacyKey(key);
+    try {
+      const res = await authService.updatePrivacySettings({ [key]: value });
+      if (res && res.success && res.data) {
+        setPrivacySettings(res.data);
+        showToast('success', res.message || 'Đã cập nhật quyền riêng tư! 🔒');
+      }
+    } catch (err: any) {
+      setPrivacySettings(previous);
+      showToast('error', err.response?.data?.message || 'Không thể cập nhật quyền riêng tư.');
+    } finally {
+      setUpdatingPrivacyKey(null);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -407,27 +457,115 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       case 'privacy_detail':
         return (
           <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>🔒 Cài đặt quyền riêng tư</Text>
+            <View style={styles.privacyHeaderRow}>
+              <Text style={styles.detailTitle}>🔒 Cài đặt quyền riêng tư</Text>
+              {loadingPrivacy && <ActivityIndicator size="small" color={C.primary} />}
+            </View>
             <Text style={styles.detailDesc}>
-              Quản lý phạm vi hiển thị các khoảnh khắc và bài đăng của bạn trên Masita.
+              Kiểm soát phạm vi hiển thị tài khoản, tính năng đề xuất và cách người lạ có thể tìm kiếm bạn.
             </Text>
-            <View style={styles.privacyOption}>
-              <Text style={styles.privacyOptionTitle}>🌐 Chế độ Công khai</Text>
-              <Text style={styles.privacyOptionDesc}>
-                Cho phép tất cả người dùng trong hệ thống (kể cả chưa kết bạn) xem bài đăng trong mục Khám phá.
-              </Text>
+
+            {/* 1. Chế độ tài khoản */}
+            <View style={styles.privacySectionGroup}>
+              <Text style={styles.privacySectionTitle}>👤 CHẾ ĐỘ TÀI KHOẢN</Text>
+              <View style={styles.privacySwitchRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.privacySwitchLabel}>
+                    {privacySettings.is_private_account ? '🔒 Tài khoản riêng tư' : '🌐 Tài khoản công khai'}
+                  </Text>
+                  <Text style={styles.privacySwitchDesc}>
+                    {privacySettings.is_private_account
+                      ? 'Chỉ những người bạn chấp nhận mới xem được bài đăng của bạn. Các bài đăng công khai sẽ không hiển thị cho người lạ trên bảng tin khám phá.'
+                      : 'Bất kỳ ai cũng có thể xem hồ sơ và các bài viết công khai của bạn trong mục Khám phá.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={privacySettings.is_private_account}
+                  onValueChange={(val) => handleTogglePrivacy('is_private_account', val)}
+                  trackColor={{ false: '#2D3748', true: '#FFB800' }}
+                  thumbColor="#FFFFFF"
+                  disabled={updatingPrivacyKey === 'is_private_account'}
+                />
+              </View>
             </View>
-            <View style={styles.privacyOption}>
-              <Text style={styles.privacyOptionTitle}>👥 Chế độ Bạn bè (Mặc định)</Text>
-              <Text style={styles.privacyOptionDesc}>
-                Chỉ những bạn bè đã được chấp nhận kết bạn mới thấy khoảnh khắc của bạn trên Bảng tin.
-              </Text>
+
+            {/* 2. Đề xuất tài khoản */}
+            <View style={styles.privacySectionGroup}>
+              <Text style={styles.privacySectionTitle}>✨ ĐỀ XUẤT TÀI KHOẢN</Text>
+              <View style={styles.privacySwitchRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.privacySwitchLabel}>Gợi ý tài khoản cho người khác</Text>
+                  <Text style={styles.privacySwitchDesc}>
+                    Cho phép hệ thống đề xuất tài khoản của bạn trong danh sách "Gợi ý kết bạn" cho những người dùng khác.
+                  </Text>
+                </View>
+                <Switch
+                  value={privacySettings.allow_suggest_account}
+                  onValueChange={(val) => handleTogglePrivacy('allow_suggest_account', val)}
+                  trackColor={{ false: '#2D3748', true: C.primary }}
+                  thumbColor="#FFFFFF"
+                  disabled={updatingPrivacyKey === 'allow_suggest_account'}
+                />
+              </View>
             </View>
-            <View style={styles.privacyOption}>
-              <Text style={styles.privacyOptionTitle}>🔒 Chế độ Riêng tư</Text>
-              <Text style={styles.privacyOptionDesc}>
-                Chỉ duy nhất một mình bạn có thể xem lại bài viết này, bạn bè và người lạ không thể xem.
+
+            {/* 3. Người lạ tìm thấy bạn */}
+            <View style={styles.privacySectionGroup}>
+              <Text style={styles.privacySectionTitle}>🔍 NGƯỜI LẠ TÌM THẤY BẠN</Text>
+              <Text style={styles.privacyGroupSubdesc}>
+                Thiết lập xem người lạ (chưa kết bạn) có thể tìm kiếm ra bạn thông qua các thông tin nào:
               </Text>
+
+              {/* Tên hiển thị */}
+              <View style={styles.privacySwitchRowSub}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.privacySwitchLabel}>Bằng Tên hiển thị (Họ và tên)</Text>
+                  <Text style={styles.privacySwitchDesc}>
+                    Người lạ có thể gõ tên hiển thị ({user?.full_name || 'Họ và tên'}) để tìm thấy tài khoản của bạn.
+                  </Text>
+                </View>
+                <Switch
+                  value={privacySettings.searchable_by_name}
+                  onValueChange={(val) => handleTogglePrivacy('searchable_by_name', val)}
+                  trackColor={{ false: '#2D3748', true: C.primary }}
+                  thumbColor="#FFFFFF"
+                  disabled={updatingPrivacyKey === 'searchable_by_name'}
+                />
+              </View>
+
+              {/* Username */}
+              <View style={styles.privacySwitchRowSub}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.privacySwitchLabel}>Bằng Tên người dùng (Username)</Text>
+                  <Text style={styles.privacySwitchDesc}>
+                    Người lạ có thể gõ username (@{user?.username || 'username'}) để tìm kiếm tài khoản của bạn.
+                  </Text>
+                </View>
+                <Switch
+                  value={privacySettings.searchable_by_username}
+                  onValueChange={(val) => handleTogglePrivacy('searchable_by_username', val)}
+                  trackColor={{ false: '#2D3748', true: C.primary }}
+                  thumbColor="#FFFFFF"
+                  disabled={updatingPrivacyKey === 'searchable_by_username'}
+                />
+              </View>
+
+              {/* Email */}
+              <View style={styles.privacySwitchRowSub}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.privacySwitchLabel}>Bằng Địa chỉ Email</Text>
+                  <Text style={styles.privacySwitchDesc}>
+                    Người lạ có thể tìm kiếm bạn bằng địa chỉ email ({maskEmail(user?.email)}).
+                  </Text>
+                </View>
+                <Switch
+                  value={privacySettings.searchable_by_email}
+                  onValueChange={(val) => handleTogglePrivacy('searchable_by_email', val)}
+                  trackColor={{ false: '#2D3748', true: C.primary }}
+                  thumbColor="#FFFFFF"
+                  disabled={updatingPrivacyKey === 'searchable_by_email'}
+                />
+              </View>
             </View>
           </View>
         );
@@ -630,7 +768,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               </View>
               <View style={styles.itemTextBox}>
                 <Text style={styles.itemTitle}>Quyền riêng tư</Text>
-                <Text style={styles.itemSub}>Công khai, bạn bè, riêng tư</Text>
+                <Text style={styles.itemSub}>
+                  {privacySettings.is_private_account ? 'Tài khoản riêng tư' : 'Tài khoản công khai'} • Đề xuất & Tìm kiếm
+                </Text>
               </View>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
@@ -1160,24 +1300,57 @@ const styles = StyleSheet.create({
   },
 
   // Privacy & Security Details
-  privacyOption: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+  privacyHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
-  privacyOptionTitle: {
+  privacySectionGroup: {
+    marginTop: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+  },
+  privacySectionTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
+    color: C.primaryLight,
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  privacyGroupSubdesc: {
+    fontSize: 12,
+    color: C.textSecondary,
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  privacySwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
+  privacySwitchRowSub: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  privacySwitchLabel: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
     color: '#FFFFFF',
-    marginBottom: 4,
+    marginBottom: 3,
   },
-  privacyOptionDesc: {
+  privacySwitchDesc: {
     fontSize: 12,
     color: C.textMuted,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   securityActionCard: {
     flexDirection: 'row',

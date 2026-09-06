@@ -529,6 +529,125 @@ const changePassword = async (req, res) => {
   }
 };
 
+/**
+ * 9. Lấy cài đặt quyền riêng tư
+ * GET /api/auth/privacy-settings (protected - cần JWT)
+ */
+const getPrivacySettings = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    const [rows] = await pool.query(
+      `SELECT is_private_account, allow_suggest_account, searchable_by_name, searchable_by_username, searchable_by_email 
+       FROM users WHERE id = ?`,
+      [currentUserId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng.',
+      });
+    }
+
+    const row = rows[0];
+    return res.status(200).json({
+      success: true,
+      data: {
+        is_private_account: Boolean(row.is_private_account),
+        allow_suggest_account: Boolean(row.allow_suggest_account),
+        searchable_by_name: Boolean(row.searchable_by_name),
+        searchable_by_username: Boolean(row.searchable_by_username),
+        searchable_by_email: Boolean(row.searchable_by_email),
+      },
+    });
+  } catch (error) {
+    console.error('GetPrivacySettings error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy cài đặt quyền riêng tư.',
+    });
+  }
+};
+
+/**
+ * 10. Cập nhật cài đặt quyền riêng tư
+ * PUT /api/auth/privacy-settings (protected - cần JWT)
+ * Body: { is_private_account?, allow_suggest_account?, searchable_by_name?, searchable_by_username?, searchable_by_email? }
+ */
+const updatePrivacySettings = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const {
+      is_private_account,
+      allow_suggest_account,
+      searchable_by_name,
+      searchable_by_username,
+      searchable_by_email,
+    } = req.body;
+
+    const updates = [];
+    const values = [];
+
+    if (typeof is_private_account === 'boolean') {
+      updates.push('is_private_account = ?');
+      values.push(is_private_account ? 1 : 0);
+    }
+    if (typeof allow_suggest_account === 'boolean') {
+      updates.push('allow_suggest_account = ?');
+      values.push(allow_suggest_account ? 1 : 0);
+    }
+    if (typeof searchable_by_name === 'boolean') {
+      updates.push('searchable_by_name = ?');
+      values.push(searchable_by_name ? 1 : 0);
+    }
+    if (typeof searchable_by_username === 'boolean') {
+      updates.push('searchable_by_username = ?');
+      values.push(searchable_by_username ? 1 : 0);
+    }
+    if (typeof searchable_by_email === 'boolean') {
+      updates.push('searchable_by_email = ?');
+      values.push(searchable_by_email ? 1 : 0);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không có trường cài đặt quyền riêng tư nào được cập nhật.',
+      });
+    }
+
+    values.push(currentUserId);
+    await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
+
+    // Lấy lại cài đặt đã cập nhật
+    const [rows] = await pool.query(
+      `SELECT is_private_account, allow_suggest_account, searchable_by_name, searchable_by_username, searchable_by_email 
+       FROM users WHERE id = ?`,
+      [currentUserId]
+    );
+    const row = rows[0];
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật cài đặt quyền riêng tư thành công!',
+      data: {
+        is_private_account: Boolean(row.is_private_account),
+        allow_suggest_account: Boolean(row.allow_suggest_account),
+        searchable_by_name: Boolean(row.searchable_by_name),
+        searchable_by_username: Boolean(row.searchable_by_username),
+        searchable_by_email: Boolean(row.searchable_by_email),
+      },
+    });
+  } catch (error) {
+    console.error('UpdatePrivacySettings error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi cập nhật cài đặt quyền riêng tư.',
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -538,5 +657,7 @@ module.exports = {
   updateUsername,
   updateEmail,
   changePassword,
+  getPrivacySettings,
+  updatePrivacySettings,
 };
 

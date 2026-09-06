@@ -173,8 +173,9 @@ const getPhotoFeed = async (req, res) => {
     let queryParams = [currentUserId, currentUserId];
 
     if (scope === 'public') {
-      // Phạm vi công khai / khám phá: CHỈ bài đăng được cài đặt 'public' của bất kỳ ai trong hệ thống (kể cả người lạ)
-      querySql += ` WHERE (p.privacy = 'public' AND p.recipient_id IS NULL)`;
+      // Phạm vi công khai / khám phá: CHỈ bài đăng được cài đặt 'public' của người dùng công khai hoặc bạn bè đã kết bạn
+      querySql += ` WHERE (p.privacy = 'public' AND p.recipient_id IS NULL AND (u.is_private_account IS NULL OR u.is_private_account = 0 OR p.user_id = ? OR f.status = 'accepted'))`;
+      queryParams.push(currentUserId);
     } else {
       // Phạm vi bạn bè:
       // 1. Bài của chính bản thân (p.user_id = currentUserId): luôn thấy kể cả riêng tư

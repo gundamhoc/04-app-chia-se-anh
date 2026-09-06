@@ -1,4 +1,5 @@
 import api from './api';
+import { UserPrivacySettings } from '../types';
 
 export interface ForgotPasswordResponse {
   success: boolean;
@@ -28,6 +29,12 @@ export interface UpdateEmailResponse {
 export interface ChangePasswordResponse {
   success: boolean;
   message: string;
+}
+
+export interface PrivacySettingsResponse {
+  success: boolean;
+  message?: string;
+  data: UserPrivacySettings;
 }
 
 export const authService = {
@@ -67,6 +74,26 @@ export const authService = {
       email,
       new_password,
     });
+    return res.data;
+  },
+
+  /**
+   * Lấy cài đặt quyền riêng tư
+   * GET /api/auth/privacy-settings
+   */
+  getPrivacySettings: async (): Promise<PrivacySettingsResponse> => {
+    const res = await api.get<PrivacySettingsResponse>('/auth/privacy-settings');
+    return res.data;
+  },
+
+  /**
+   * Cập nhật cài đặt quyền riêng tư
+   * PUT /api/auth/privacy-settings
+   */
+  updatePrivacySettings: async (
+    payload: Partial<UserPrivacySettings>
+  ): Promise<PrivacySettingsResponse> => {
+    const res = await api.put<PrivacySettingsResponse>('/auth/privacy-settings', payload);
     return res.data;
   },
 };

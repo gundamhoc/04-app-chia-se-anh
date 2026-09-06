@@ -23,7 +23,8 @@ const searchUsers = async (req, res) => {
       });
     }
 
-    const searchTerm = `%${query}%`;
+    const escapedQuery = query.replace(/([%_\\])/g, '\\$1');
+    const searchTerm = `%${escapedQuery}%`;
 
     // Query người dùng (trừ bản thân) kèm thông tin friendship giữa currentUserId và user đó
     const [rows] = await pool.query(
@@ -45,7 +46,13 @@ const searchUsers = async (req, res) => {
          OR (f.receiver_id = ? AND f.requester_id = u.id))
       WHERE u.id != ? 
         AND u.is_active = 1
-        AND (u.username LIKE ? OR u.full_name LIKE ? OR u.email LIKE ?)
+        AND (
+          (u.username LIKE ? AND (COALESCE(f.status, '') = 'accepted' OR u.searchable_by_username = 1))
+          OR
+          (u.full_name LIKE ? AND (COALESCE(f.status, '') = 'accepted' OR u.searchable_by_name = 1))
+          OR
+          (u.email LIKE ? AND (COALESCE(f.status, '') = 'accepted' OR u.searchable_by_email = 1))
+        )
       ORDER BY u.full_name ASC, u.username ASC
       LIMIT 30
       `,
@@ -453,6 +460,7 @@ const getSuggestions = async (req, res) => {
          OR (f.receiver_id = ? AND f.requester_id = u.id))
       WHERE u.id != ? 
         AND u.is_active = 1
+        AND (u.allow_suggest_account IS NULL OR u.allow_suggest_account = 1)
         AND (f.id IS NULL OR f.status NOT IN ('accepted', 'pending'))
       ORDER BY u.created_at DESC
       LIMIT 30

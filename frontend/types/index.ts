@@ -221,3 +221,11 @@ export interface GroupDetail {
   members: GroupMember[];
 }
 
+export interface UserPrivacySettings {
+  is_private_account: boolean;
+  allow_suggest_account: boolean;
+  searchable_by_name: boolean;
+  searchable_by_username: boolean;
+  searchable_by_email: boolean;
+}
+

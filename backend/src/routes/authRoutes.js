@@ -9,6 +9,8 @@ const {
   updateUsername,
   updateEmail,
   changePassword,
+  getPrivacySettings,
+  updatePrivacySettings,
 } = require('../controllers/authController');
 const { authMiddleware } = require('../middlewares/auth');
 const { handleUploadSingle } = require('../middlewares/upload');
@@ -24,5 +26,7 @@ router.put('/avatar', authMiddleware, handleUploadSingle, updateAvatar);
 router.put('/username', authMiddleware, updateUsername);
 router.put('/email', authMiddleware, updateEmail);
 router.put('/change-password', authMiddleware, changePassword);
+router.get('/privacy-settings', authMiddleware, getPrivacySettings);
+router.put('/privacy-settings', authMiddleware, updatePrivacySettings);
 
 module.exports = router;
