@@ -16,6 +16,7 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../hooks/useAuth';
 import { BASE_URL } from '../../services/api';
+import { SettingsModal } from '../../components/SettingsModal';
 
 const C = Colors.dark;
 
@@ -30,6 +31,7 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   const handleLogout = () => {
     if (Platform.OS === 'web') {
@@ -65,8 +67,18 @@ export default function ProfileScreen() {
       <StatusBar style="light" />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* Header */}
-        <Text style={styles.pageTitle}>Hồ sơ</Text>
+        {/* Header với Tiêu đề & Nút Bánh Răng Cài Đặt */}
+        <View style={styles.headerRow}>
+          <Text style={styles.pageTitle}>Hồ sơ</Text>
+          <TouchableOpacity
+            style={styles.settingsGearBtn}
+            onPress={() => setShowSettingsModal(true)}
+            activeOpacity={0.7}
+            accessibilityLabel="settings-gear-button"
+          >
+            <Text style={styles.settingsGearIcon}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Avatar + Info */}
         <View style={styles.profileCard}>
@@ -154,6 +166,11 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+      {/* Settings Modal (Cài đặt) */}
+      <SettingsModal
+        visible={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+      />
     </View>
   );
 }
@@ -174,12 +191,35 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.background },
   scrollView: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
   pageTitle: {
     fontSize: 26,
     fontFamily: 'Inter_700Bold',
     color: C.text,
-    paddingVertical: 16,
-    marginBottom: 8,
+  },
+  settingsGearBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: C.card,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: C.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  settingsGearIcon: {
+    fontSize: 20,
   },
   profileCard: {
     backgroundColor: C.card,
