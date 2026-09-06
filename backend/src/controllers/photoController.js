@@ -145,10 +145,9 @@ const uploadPhoto = async (req, res) => {
 const getPhotoFeed = async (req, res) => {
   try {
     const currentUserId = req.user.id;
+    const queryTerm = req.query.q ? req.query.q.trim() : '';
 
-    // Query các bức ảnh của bản thân HOẶC của bạn bè đã accepted
-    const [rows] = await pool.query(
-      `
+    let querySql = `
       SELECT DISTINCT
         p.id,
         p.user_id,
@@ -166,13 +165,21 @@ const getPhotoFeed = async (req, res) => {
       LEFT JOIN friendships f 
         ON ((f.requester_id = ? AND f.receiver_id = p.user_id) 
          OR (f.receiver_id = ? AND f.requester_id = p.user_id))
-      WHERE p.user_id = ? 
-         OR (f.status = 'accepted' AND (p.recipient_id IS NULL OR p.recipient_id = ?))
-      ORDER BY p.created_at DESC
-      LIMIT 50
-      `,
-      [currentUserId, currentUserId, currentUserId, currentUserId]
-    );
+      WHERE (p.user_id = ? 
+         OR (f.status = 'accepted' AND (p.recipient_id IS NULL OR p.recipient_id = ?)))
+    `;
+    const queryParams = [currentUserId, currentUserId, currentUserId, currentUserId];
+
+    if (queryTerm) {
+      querySql += ` AND (p.caption LIKE ? OR u.full_name LIKE ? OR u.username LIKE ?)`;
+      const termPattern = `%${queryTerm}%`;
+      queryParams.push(termPattern, termPattern, termPattern);
+    }
+
+    querySql += ` ORDER BY p.created_at DESC LIMIT 50`;
+
+    // Query các bức ảnh của bản thân HOẶC của bạn bè đã accepted (có lọc theo từ khóa nếu có)
+    const [rows] = await pool.query(querySql, queryParams);
 
     const protocol = req.protocol;
     const host = req.get('host');

@@ -4,9 +4,11 @@ import { ApiResponse, Photo, PhotoReaction } from '../types';
 import { compressImage } from '../utils/imageCompressor';
 
 export const photoService = {
-  // Lấy danh sách bài viết Locket Feed
-  async getPhotoFeed(): Promise<Photo[]> {
-    const res = await api.get<ApiResponse<Photo[]>>('/photos/feed');
+  // Lấy danh sách bài viết Locket Feed (hỗ trợ tìm kiếm theo caption, tác giả)
+  async getPhotoFeed(query?: string): Promise<Photo[]> {
+    const res = await api.get<ApiResponse<Photo[]>>('/photos/feed', {
+      params: query ? { q: query } : undefined,
+    });
     return res.data.data || [];
   },
 

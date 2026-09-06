@@ -1,10 +1,12 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   Image,
   ActivityIndicator,
   RefreshControl,
@@ -13,12 +15,12 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/Colors';
 import { friendService } from '../../services/friendService';
-import { Friend, FriendRequest } from '../../types';
+import { Friend, FriendRequest, UserSearchResult, FriendshipStatus } from '../../types';
 import { useToast } from '../../hooks/useToast';
 
 const C = Colors.dark;
 
-type TabType = 'friends' | 'requests';
+type TabType = 'friends' | 'suggestions' | 'requests';
 
 export default function FriendsScreen() {
   const router = useRouter();
@@ -27,20 +29,28 @@ export default function FriendsScreen() {
 
   const [activeTab, setActiveTab] = useState<TabType>('friends');
   const [friends, setFriends] = useState<Friend[]>([]);
+  const [suggestions, setSuggestions] = useState<UserSearchResult[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
+  // Search kết hợp: tìm bạn bè đã kết bạn & tìm kết bạn mới
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
   const fetchData = useCallback(async () => {
     try {
-      const [friendsData, requestsData] = await Promise.all([
+      const [friendsData, requestsData, suggestionsData] = await Promise.all([
         friendService.getFriendsList(),
         friendService.getPendingRequests(),
+        friendService.getSuggestions(),
       ]);
       setFriends(friendsData);
       setRequests(requestsData);
-    } catch (error: any) {
+      setSuggestions(suggestionsData);
+    } catch (error: unknown) {
       console.warn('Fetch friends error:', error);
       showToast('error', 'Không thể tải dữ liệu bạn bè.');
     } finally {
@@ -60,13 +70,64 @@ export default function FriendsScreen() {
     fetchData();
   };
 
-  // Chấp nhận lời mời kết bạn
-  const handleAcceptRequest = async (request: FriendRequest) => {
-    setActionLoadingId(request.requester_id);
+  // Debounced search khi người dùng nhập từ khóa tìm kiếm
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await friendService.searchUsers(searchQuery.trim());
+        setSearchResults(data);
+      } catch (err: unknown) {
+        console.warn('Friends search error:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Nhắn tin với bạn bè
+  const handleChat = (friendId: number) => {
+    router.push(`/chat/${friendId}`);
+  };
+
+  // Gửi lời mời kết bạn (dùng cho gợi ý hoặc tìm kiếm)
+  const handleSendRequest = async (user: UserSearchResult) => {
+    setActionLoadingId(user.id);
     try {
-      const msg = await friendService.acceptFriendRequest(request.requester_id);
+      const msg = await friendService.sendFriendRequest(user.id);
       showToast('success', msg);
-      // Reload danh sách
+
+      // Cập nhật trạng thái trong suggestions
+      setSuggestions((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, friendship_status: 'pending_sent' } : u))
+      );
+
+      // Cập nhật trạng thái trong searchResults
+      setSearchResults((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, friendship_status: 'pending_sent' } : u))
+      );
+    } catch (error: any) {
+      showToast('error', error.response?.data?.message || 'Gửi lời mời thất bại.');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Chấp nhận lời mời kết bạn
+  const handleAcceptRequest = async (requesterId: number) => {
+    setActionLoadingId(requesterId);
+    try {
+      const msg = await friendService.acceptFriendRequest(requesterId);
+      showToast('success', msg);
+      // Tải lại dữ liệu sau khi chấp nhận
       fetchData();
     } catch (error: any) {
       showToast('error', error.response?.data?.message || 'Chấp nhận lời mời thất bại.');
@@ -76,12 +137,12 @@ export default function FriendsScreen() {
   };
 
   // Từ chối lời mời
-  const handleRejectRequest = async (request: FriendRequest) => {
-    setActionLoadingId(request.requester_id);
+  const handleRejectRequest = async (requesterId: number) => {
+    setActionLoadingId(requesterId);
     try {
-      const msg = await friendService.rejectOrCancelRequest(request.requester_id);
+      await friendService.rejectOrCancelRequest(requesterId);
       showToast('info', 'Đã từ chối lời mời kết bạn.');
-      setRequests((prev) => prev.filter((r) => r.requester_id !== request.requester_id));
+      setRequests((prev) => prev.filter((r) => r.requester_id !== requesterId));
     } catch (error: any) {
       showToast('error', error.response?.data?.message || 'Thao tác thất bại.');
     } finally {
@@ -90,12 +151,15 @@ export default function FriendsScreen() {
   };
 
   // Hủy kết bạn
-  const handleUnfriend = async (friend: Friend) => {
-    setActionLoadingId(friend.id);
+  const handleUnfriend = async (friendId: number, friendName: string) => {
+    setActionLoadingId(friendId);
     try {
-      await friendService.rejectOrCancelRequest(friend.id);
-      showToast('info', `Đã hủy kết bạn với ${friend.full_name || friend.username}.`);
-      setFriends((prev) => prev.filter((f) => f.id !== friend.id));
+      await friendService.rejectOrCancelRequest(friendId);
+      showToast('info', `Đã hủy kết bạn với ${friendName}.`);
+      setFriends((prev) => prev.filter((f) => f.id !== friendId));
+      setSearchResults((prev) =>
+        prev.map((u) => (u.id === friendId ? { ...u, friendship_status: 'none' } : u))
+      );
     } catch (error: any) {
       showToast('error', error.response?.data?.message || 'Hủy kết bạn thất bại.');
     } finally {
@@ -103,20 +167,110 @@ export default function FriendsScreen() {
     }
   };
 
-  // Render từng item bạn bè
-  const renderFriendItem = ({ item }: { item: Friend }) => {
+  // Phân loại kết quả tìm kiếm thành:
+  // 1. Bạn bè của bạn (đã kết bạn)
+  // 2. Tìm kết bạn mới (chưa kết bạn, đã gửi/nhận lời mời)
+  const { matchedFriends, matchedNewUsers } = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return { matchedFriends: [], matchedNewUsers: [] };
+    }
+    const q = searchQuery.toLowerCase().trim();
+
+    // Bạn bè trong state khớp từ khóa
+    const localMatchedFriends = friends.filter(
+      (f) =>
+        (f.full_name && f.full_name.toLowerCase().includes(q)) ||
+        (f.username && f.username.toLowerCase().includes(q)) ||
+        (f.email && f.email.toLowerCase().includes(q))
+    );
+
+    // Người dùng từ API search
+    const apiAcceptedFriends = searchResults.filter((u) => u.friendship_status === 'accepted');
+    const apiNewUsers = searchResults.filter((u) => u.friendship_status !== 'accepted');
+
+    // Hợp nhất danh sách bạn bè đã kết bạn (tránh trùng id)
+    const friendMap = new Map<number, Friend | UserSearchResult>();
+    localMatchedFriends.forEach((f) => friendMap.set(f.id, f));
+    apiAcceptedFriends.forEach((f) => friendMap.set(f.id, f));
+
+    return {
+      matchedFriends: Array.from(friendMap.values()),
+      matchedNewUsers: apiNewUsers,
+    };
+  }, [searchQuery, friends, searchResults]);
+
+  // Render 1 item bạn bè đã kết bạn
+  const renderFriendCard = (item: Friend | UserSearchResult) => {
     const avatarUri = item.avatar_url
       ? { uri: item.avatar_url }
       : require('../../assets/splash-icon.png');
 
     const isBusy = actionLoadingId === item.id;
+    const displayName = item.full_name || item.username;
 
     return (
-      <View style={styles.card}>
+      <View key={`friend-${item.id}`} style={styles.card}>
+        <Image source={avatarUri} style={styles.avatar} />
+        <View style={styles.info}>
+          <View style={styles.nameRow}>
+            <Text style={styles.fullName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <View style={styles.badgeFriend}>
+              <Text style={styles.badgeFriendText}>Bạn bè</Text>
+            </View>
+          </View>
+          <Text style={styles.username} numberOfLines={1}>
+            @{item.username}
+          </Text>
+          {item.bio ? (
+            <Text style={styles.bio} numberOfLines={1}>
+              {item.bio}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.friendActions}>
+          <TouchableOpacity
+            style={styles.btnChat}
+            onPress={() => handleChat(item.id)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.btnChatText}>💬 Nhắn</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.btnUnfriend}
+            onPress={() => handleUnfriend(item.id, displayName)}
+            disabled={isBusy}
+            activeOpacity={0.7}
+          >
+            {isBusy ? (
+              <ActivityIndicator size="small" color={C.textMuted} />
+            ) : (
+              <Text style={styles.btnUnfriendText}>Hủy</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  // Render 1 item gợi ý kết bạn hoặc kết quả tìm kiếm người chưa kết bạn
+  const renderSuggestionCard = (item: UserSearchResult) => {
+    const avatarUri = item.avatar_url
+      ? { uri: item.avatar_url }
+      : require('../../assets/splash-icon.png');
+
+    const isBusy = actionLoadingId === item.id;
+    const displayName = item.full_name || item.username;
+
+    return (
+      <View key={`suggest-${item.id}`} style={styles.card}>
         <Image source={avatarUri} style={styles.avatar} />
         <View style={styles.info}>
           <Text style={styles.fullName} numberOfLines={1}>
-            {item.full_name || item.username}
+            {displayName}
           </Text>
           <Text style={styles.username} numberOfLines={1}>
             @{item.username}
@@ -127,35 +281,53 @@ export default function FriendsScreen() {
             </Text>
           ) : null}
         </View>
-        <TouchableOpacity
-          style={styles.btnUnfriend}
-          onPress={() => handleUnfriend(item)}
-          disabled={isBusy}
-        >
-          {isBusy ? (
-            <ActivityIndicator size="small" color={C.textMuted} />
-          ) : (
-            <Text style={styles.btnUnfriendText}>Hủy kết bạn</Text>
-          )}
-        </TouchableOpacity>
+
+        {isBusy ? (
+          <ActivityIndicator size="small" color={C.primary} style={{ marginHorizontal: 16 }} />
+        ) : item.friendship_status === 'none' ? (
+          <TouchableOpacity
+            style={styles.btnAddFriend}
+            onPress={() => handleSendRequest(item)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.btnAddFriendText}>+ Kết bạn</Text>
+          </TouchableOpacity>
+        ) : item.friendship_status === 'pending_sent' ? (
+          <View style={styles.badgeSent}>
+            <Text style={styles.badgeSentText}>Đã gửi ✓</Text>
+          </View>
+        ) : item.friendship_status === 'pending_received' ? (
+          <TouchableOpacity
+            style={styles.btnAccept}
+            onPress={() => handleAcceptRequest(item.id)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.btnAcceptText}>Chấp nhận</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.badgeFriend}>
+            <Text style={styles.badgeFriendText}>Bạn bè</Text>
+          </View>
+        )}
       </View>
     );
   };
 
-  // Render từng item lời mời kết bạn
-  const renderRequestItem = ({ item }: { item: FriendRequest }) => {
+  // Render 1 item lời mời kết bạn nhận được
+  const renderRequestCard = ({ item }: { item: FriendRequest }) => {
     const avatarUri = item.avatar_url
       ? { uri: item.avatar_url }
       : require('../../assets/splash-icon.png');
 
     const isBusy = actionLoadingId === item.requester_id;
+    const displayName = item.full_name || item.username;
 
     return (
       <View style={styles.card}>
         <Image source={avatarUri} style={styles.avatar} />
         <View style={styles.info}>
           <Text style={styles.fullName} numberOfLines={1}>
-            {item.full_name || item.username}
+            {displayName}
           </Text>
           <Text style={styles.username} numberOfLines={1}>
             @{item.username}
@@ -170,13 +342,13 @@ export default function FriendsScreen() {
           <View style={styles.requestActions}>
             <TouchableOpacity
               style={styles.btnAccept}
-              onPress={() => handleAcceptRequest(item)}
+              onPress={() => handleAcceptRequest(item.requester_id)}
             >
               <Text style={styles.btnAcceptText}>Chấp nhận</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.btnReject}
-              onPress={() => handleRejectRequest(item)}
+              onPress={() => handleRejectRequest(item.requester_id)}
             >
               <Text style={styles.btnRejectText}>Xóa</Text>
             </TouchableOpacity>
@@ -187,93 +359,193 @@ export default function FriendsScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Bạn bè 👥</Text>
-        <TouchableOpacity
-          style={styles.searchIconBtn}
-          onPress={() => router.push('/search')}
-        >
-          <Text style={styles.searchIconText}>🔍 Tìm bạn</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Sub-Tabs Switcher */}
-      <View style={styles.tabSwitcher}>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'friends' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('friends')}
-        >
-          <Text
-            style={[styles.tabText, activeTab === 'friends' && styles.tabTextActive]}
-          >
-            Bạn bè ({friends.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'requests' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('requests')}
-        >
-          <Text
-            style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}
-          >
-            Lời mời {requests.length > 0 ? `(${requests.length})` : ''}
-          </Text>
-          {requests.length > 0 && <View style={styles.badgeDot} />}
-        </TouchableOpacity>
-      </View>
-
-      {/* Tab Content */}
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={C.primary} />
+      {/* Thanh Tìm Kiếm Bạn Bè: Tìm kết bạn & người bạn đã kết bạn */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm bạn bè hoặc tìm kết bạn mới..."
+            placeholderTextColor={C.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {isSearching ? (
+            <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 6 }} />
+          ) : searchQuery.length > 0 ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
+              <Text style={styles.clearSearchText}>✕</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
-      ) : activeTab === 'friends' ? (
-        friends.length === 0 ? (
-          <View style={styles.center}>
-            <Text style={styles.emptyIcon}>👥</Text>
-            <Text style={styles.emptyTitle}>Chưa có bạn bè nào</Text>
-            <Text style={styles.emptySub}>
-              Hãy bấm "Tìm bạn" ở góc trên để tìm kiếm và kết nối với bạn bè mới.
-            </Text>
+      </View>
+
+      {/* Nếu đang tìm kiếm: Hiển thị kết quả phân tách Bạn bè của bạn & Tìm kết bạn mới */}
+      {searchQuery.trim().length > 0 ? (
+        <ScrollView
+          contentContainerStyle={styles.searchResultContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {matchedFriends.length === 0 && matchedNewUsers.length === 0 && !isSearching ? (
+            <View style={styles.center}>
+              <Text style={styles.emptyIcon}>🤷</Text>
+              <Text style={styles.emptyTitle}>Không tìm thấy kết quả</Text>
+              <Text style={styles.emptySub}>
+                Không có người bạn hoặc người dùng nào khớp với "{searchQuery}".
+              </Text>
+              <TouchableOpacity
+                style={styles.btnResetSearch}
+                onPress={() => setSearchQuery('')}
+              >
+                <Text style={styles.btnResetSearchText}>✕ Xóa từ khóa</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {/* PHẦN 1: Người bạn đã kết bạn */}
+              {matchedFriends.length > 0 && (
+                <View style={styles.searchSection}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionTitle}>
+                      👥 Bạn bè của bạn ({matchedFriends.length})
+                    </Text>
+                  </View>
+                  {matchedFriends.map((f) => renderFriendCard(f))}
+                </View>
+              )}
+
+              {/* PHẦN 2: Tìm kết bạn (người dùng mới) */}
+              {matchedNewUsers.length > 0 && (
+                <View style={styles.searchSection}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionTitle}>
+                      ➕ Tìm kết bạn mới ({matchedNewUsers.length})
+                    </Text>
+                  </View>
+                  {matchedNewUsers.map((u) => renderSuggestionCard(u))}
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
+      ) : (
+        /* Khi không tìm kiếm: Hiển thị 3 Sub-Tabs: Bạn bè, Gợi ý kết bạn, Lời mời */
+        <>
+          <View style={styles.tabSwitcher}>
             <TouchableOpacity
-              style={styles.btnGoSearch}
-              onPress={() => router.push('/search')}
+              style={[styles.tabBtn, activeTab === 'friends' && styles.tabBtnActive]}
+              onPress={() => setActiveTab('friends')}
             >
-              <Text style={styles.btnGoSearchText}>🔍 Tìm bạn bè ngay</Text>
+              <Text
+                style={[styles.tabText, activeTab === 'friends' && styles.tabTextActive]}
+              >
+                Bạn bè ({friends.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === 'suggestions' && styles.tabBtnActive]}
+              onPress={() => setActiveTab('suggestions')}
+            >
+              <Text
+                style={[styles.tabText, activeTab === 'suggestions' && styles.tabTextActive]}
+              >
+                Gợi ý kết bạn ({suggestions.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === 'requests' && styles.tabBtnActive]}
+              onPress={() => setActiveTab('requests')}
+            >
+              <Text
+                style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}
+              >
+                Lời mời {requests.length > 0 ? `(${requests.length})` : ''}
+              </Text>
+              {requests.length > 0 && <View style={styles.badgeDot} />}
             </TouchableOpacity>
           </View>
-        ) : (
-          <FlatList
-            data={friends}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={renderFriendItem}
-            contentContainerStyle={styles.listContainer}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />
-            }
-          />
-        )
-      ) : requests.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyIcon}>📩</Text>
-          <Text style={styles.emptyTitle}>Không có lời mời kết bạn nào</Text>
-          <Text style={styles.emptySub}>
-            Các lời mời kết bạn mới gửi đến bạn sẽ hiển thị tại đây.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={requests}
-          keyExtractor={(item) => item.friendship_id.toString()}
-          renderItem={renderRequestItem}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />
-          }
-        />
+
+          {/* Nội dung tương ứng theo từng Tab */}
+          {loading ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color={C.primary} />
+            </View>
+          ) : activeTab === 'friends' ? (
+            friends.length === 0 ? (
+              <View style={styles.center}>
+                <Text style={styles.emptyIcon}>👥</Text>
+                <Text style={styles.emptyTitle}>Chưa có bạn bè nào</Text>
+                <Text style={styles.emptySub}>
+                  Hãy khám phá tab "Gợi ý kết bạn" hoặc tìm kiếm để kết nối với những người bạn mới.
+                </Text>
+                <TouchableOpacity
+                  style={styles.btnGoSuggestions}
+                  onPress={() => setActiveTab('suggestions')}
+                >
+                  <Text style={styles.btnGoSuggestionsText}>✨ Xem gợi ý kết bạn</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <FlatList
+                data={friends}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => renderFriendCard(item)}
+                contentContainerStyle={styles.listContainer}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />
+                }
+              />
+            )
+          ) : activeTab === 'suggestions' ? (
+            suggestions.length === 0 ? (
+              <View style={styles.center}>
+                <Text style={styles.emptyIcon}>✨</Text>
+                <Text style={styles.emptyTitle}>Chưa có gợi ý mới</Text>
+                <Text style={styles.emptySub}>
+                  Hiện tại không có đề xuất nào mới. Bạn có thể sử dụng thanh tìm kiếm phía trên để tìm bạn bè!
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={suggestions}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => renderSuggestionCard(item)}
+                contentContainerStyle={styles.listContainer}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />
+                }
+              />
+            )
+          ) : requests.length === 0 ? (
+            <View style={styles.center}>
+              <Text style={styles.emptyIcon}>📩</Text>
+              <Text style={styles.emptyTitle}>Không có lời mời kết bạn nào</Text>
+              <Text style={styles.emptySub}>
+                Các lời mời kết bạn mới gửi đến bạn sẽ hiển thị tại đây.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={requests}
+              keyExtractor={(item) => item.friendship_id.toString()}
+              renderItem={renderRequestCard}
+              contentContainerStyle={styles.listContainer}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />
+              }
+            />
+          )}
+        </>
       )}
     </View>
   );
@@ -289,25 +561,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingTop: 8,
+    paddingBottom: 6,
   },
   headerTitle: {
     fontSize: 22,
     fontFamily: 'Inter_700Bold',
     color: C.text,
   },
-  searchIconBtn: {
-    backgroundColor: `${C.primary}20`,
-    paddingHorizontal: 14,
+  searchContainer: {
+    paddingHorizontal: 20,
     paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: C.primary,
   },
-  searchIconText: {
-    color: C.primaryLight,
-    fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 22,
+    paddingHorizontal: 14,
+    height: 42,
+    borderWidth: 1,
+    borderColor: `${C.primary}40`,
+  },
+  searchIcon: {
+    fontSize: 15,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: C.text,
+    paddingVertical: 0,
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  clearSearchText: {
+    fontSize: 14,
+    color: C.textMuted,
+  },
+  searchResultContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 40,
+  },
+  searchSection: {
+    marginBottom: 20,
+  },
+  sectionHeaderRow: {
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold',
+    color: C.primaryLight || C.primary,
   },
   tabSwitcher: {
     flexDirection: 'row',
@@ -318,7 +627,7 @@ const styles = StyleSheet.create({
   },
   tabBtn: {
     paddingVertical: 10,
-    marginRight: 24,
+    marginRight: 20,
     position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
@@ -328,7 +637,7 @@ const styles = StyleSheet.create({
     borderBottomColor: C.primary,
   },
   tabText: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
     color: C.textMuted,
   },
@@ -343,22 +652,24 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   listContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 60,
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: C.card,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: C.border,
   },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: C.separator,
   },
   info: {
@@ -366,13 +677,29 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     marginRight: 8,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   fullName: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
     color: C.text,
   },
+  badgeFriend: {
+    backgroundColor: `${C.success}20`,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  badgeFriendText: {
+    color: C.success,
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+  },
   username: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter_400Regular',
     color: C.textMuted,
     marginTop: 2,
@@ -389,16 +716,58 @@ const styles = StyleSheet.create({
     color: C.textMuted,
     marginTop: 4,
   },
-  btnUnfriend: {
-    paddingHorizontal: 12,
+  friendActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  btnChat: {
+    backgroundColor: `${C.primary}25`,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: `${C.border}50`,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: `${C.primary}60`,
+  },
+  btnChatText: {
+    color: C.primary,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  btnUnfriend: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: `${C.border}60`,
   },
   btnUnfriendText: {
     color: C.textMuted,
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
+  },
+  btnAddFriend: {
+    backgroundColor: C.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
+  btnAddFriendText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  badgeSent: {
+    backgroundColor: `${C.primary}20`,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: `${C.primary}50`,
+  },
+  badgeSentText: {
+    color: C.primaryLight || C.primary,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
   },
   requestActions: {
     flexDirection: 'row',
@@ -406,25 +775,25 @@ const styles = StyleSheet.create({
   },
   btnAccept: {
     backgroundColor: C.success,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
-    marginRight: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 16,
+    marginRight: 6,
   },
   btnAcceptText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
   },
   btnReject: {
     backgroundColor: C.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 16,
   },
   btnRejectText: {
     color: C.textMuted,
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
   },
   center: {
@@ -432,35 +801,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+    paddingVertical: 40,
   },
   emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
+    fontSize: 46,
+    marginBottom: 14,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: 'Inter_600SemiBold',
     color: C.text,
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Inter_400Regular',
     color: C.textMuted,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 19,
+    marginBottom: 18,
   },
-  btnGoSearch: {
+  btnGoSuggestions: {
     backgroundColor: C.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 22,
   },
-  btnGoSearchText: {
+  btnGoSuggestionsText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
+  },
+  btnResetSearch: {
+    backgroundColor: `${C.border}60`,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
+  btnResetSearchText: {
+    color: C.text,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
   },
 });

@@ -8,6 +8,7 @@ const {
   rejectOrCancelRequest,
   getFriendsList,
   getPendingRequests,
+  getSuggestions,
 } = require('../controllers/friendController');
 
 // Tất cả các route kết bạn đều yêu cầu JWT auth
@@ -22,13 +23,16 @@ router.get('/list', getFriendsList);
 // 3. Lấy danh sách lời mời kết bạn đang chờ nhận được
 router.get('/requests', getPendingRequests);
 
-// 4. Gửi lời mời kết bạn
+// 4. Lấy danh sách gợi ý kết bạn
+router.get('/suggestions', getSuggestions);
+
+// 5. Gửi lời mời kết bạn
 router.post('/request', sendFriendRequest);
 
-// 5. Chấp nhận lời mời kết bạn
+// 6. Chấp nhận lời mời kết bạn
 router.post('/accept', acceptFriendRequest);
 
-// 6. Từ chối lời mời / Hủy lời mời đã gửi / Hủy kết bạn
+// 7. Từ chối lời mời / Hủy lời mời đã gửi / Hủy kết bạn
 router.post('/reject', rejectOrCancelRequest);
 
 module.exports = router;

@@ -429,6 +429,70 @@ const getPendingRequests = async (req, res) => {
   }
 };
 
+/**
+ * 7. Lấy danh sách gợi ý kết bạn (những người chưa kết bạn và không có pending request)
+ * GET /api/friends/suggestions
+ */
+const getSuggestions = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    // Tìm những người dùng đang hoạt động, khác bản thân, và không có mối quan hệ bạn bè (hoặc bị từ chối/hủy)
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        u.id, 
+        u.username, 
+        u.email, 
+        u.full_name, 
+        u.avatar_url, 
+        u.bio
+      FROM users u
+      LEFT JOIN friendships f 
+        ON ((f.requester_id = ? AND f.receiver_id = u.id) 
+         OR (f.receiver_id = ? AND f.requester_id = u.id))
+      WHERE u.id != ? 
+        AND u.is_active = 1
+        AND (f.id IS NULL OR f.status NOT IN ('accepted', 'pending'))
+      ORDER BY u.created_at DESC
+      LIMIT 30
+      `,
+      [currentUserId, currentUserId, currentUserId]
+    );
+
+    const protocol = req.protocol;
+    const host = req.get('host');
+
+    const formattedSuggestions = rows.map((u) => {
+      let avatar_url = u.avatar_url;
+      if (avatar_url && !avatar_url.startsWith('http://') && !avatar_url.startsWith('https://')) {
+        avatar_url = `${protocol}://${host}${avatar_url.startsWith('/') ? '' : '/'}${avatar_url}`;
+      }
+      return {
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        full_name: u.full_name,
+        avatar_url,
+        bio: u.bio,
+        friendship_status: 'none',
+      };
+    });
+
+    return res.json({
+      success: true,
+      message: 'Lấy danh sách gợi ý kết bạn thành công.',
+      data: formattedSuggestions,
+    });
+  } catch (error) {
+    console.error('Get suggestions error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy danh sách gợi ý kết bạn.',
+    });
+  }
+};
+
 module.exports = {
   searchUsers,
   sendFriendRequest,
@@ -436,4 +500,5 @@ module.exports = {
   rejectOrCancelRequest,
   getFriendsList,
   getPendingRequests,
+  getSuggestions,
 };

@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   Image,
   ActivityIndicator,
 } from 'react-native';
@@ -125,9 +126,18 @@ export default function SearchScreen() {
         );
       case 'accepted':
         return (
-          <TouchableOpacity style={styles.btnAccepted} onPress={() => handleAction(user)}>
-            <Text style={styles.btnAcceptedText}>Bạn bè ✓</Text>
-          </TouchableOpacity>
+          <View style={styles.acceptedRow}>
+            <TouchableOpacity
+              style={styles.btnChatSmall}
+              onPress={() => router.push(`/chat/${user.id}`)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.btnChatSmallText}>💬 Nhắn</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnAccepted} onPress={() => handleAction(user)}>
+              <Text style={styles.btnAcceptedText}>Bạn bè ✓</Text>
+            </TouchableOpacity>
+          </View>
         );
       default:
         return null;
@@ -208,13 +218,39 @@ export default function SearchScreen() {
           <Text style={styles.hintSub}>Không có người dùng nào khớp với "{query}".</Text>
         </View>
       ) : (
-        <FlatList
-          data={results}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderUserItem}
+        <ScrollView
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
-        />
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Nhóm 1: Người bạn đã kết bạn */}
+          {results.filter((u) => u.friendship_status === 'accepted').length > 0 && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>
+                👥 Bạn bè của bạn ({results.filter((u) => u.friendship_status === 'accepted').length})
+              </Text>
+              {results
+                .filter((u) => u.friendship_status === 'accepted')
+                .map((item) => (
+                  <View key={`friend-${item.id}`}>{renderUserItem({ item })}</View>
+                ))}
+            </View>
+          )}
+
+          {/* Nhóm 2: Tìm kết bạn mới */}
+          {results.filter((u) => u.friendship_status !== 'accepted').length > 0 && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>
+                ➕ Tìm kết bạn mới ({results.filter((u) => u.friendship_status !== 'accepted').length})
+              </Text>
+              {results
+                .filter((u) => u.friendship_status !== 'accepted')
+                .map((item) => (
+                  <View key={`new-${item.id}`}>{renderUserItem({ item })}</View>
+                ))}
+            </View>
+          )}
+        </ScrollView>
       )}
     </View>
   );
@@ -399,5 +435,33 @@ const styles = StyleSheet.create({
     color: C.textMuted,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  sectionContainer: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold',
+    color: C.primaryLight || C.primary,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  acceptedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  btnChatSmall: {
+    backgroundColor: `${C.primary}25`,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: `${C.primary}60`,
+  },
+  btnChatSmallText: {
+    color: C.primary,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

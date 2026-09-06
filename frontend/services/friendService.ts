@@ -34,6 +34,12 @@ export const friendService = {
     return res.data.message;
   },
 
+  // Lấy danh sách gợi ý kết bạn
+  async getSuggestions(): Promise<UserSearchResult[]> {
+    const res = await api.get<ApiResponse<UserSearchResult[]>>('/friends/suggestions');
+    return res.data.data || [];
+  },
+
   // Từ chối / Hủy kết bạn
   async rejectOrCancelRequest(targetId: number): Promise<string> {
     const res = await api.post<ApiResponse>('/friends/reject', { target_id: targetId });

@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   FlatList,
@@ -49,9 +50,14 @@ export default function HomeScreen() {
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
   const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<Photo | null>(null);
 
-  const fetchFeed = useCallback(async () => {
+  // Search bài viết / bài đăng
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchingBackend, setIsSearchingBackend] = useState(false);
+
+  const fetchFeed = useCallback(async (query?: string) => {
     try {
-      const data = await photoService.getPhotoFeed();
+      const data = await photoService.getPhotoFeed(query);
       setPhotos(data);
     } catch (error: unknown) {
       console.warn('Fetch feed error:', error);
@@ -59,8 +65,30 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setIsSearchingBackend(false);
     }
   }, []);
+
+  const handleSearchBackend = async (q: string) => {
+    if (!q.trim()) {
+      fetchFeed();
+      return;
+    }
+    setIsSearchingBackend(true);
+    fetchFeed(q.trim());
+  };
+
+  // Lọc bài viết realtime trên client theo caption và tên/username người đăng
+  const filteredPhotos = useMemo(() => {
+    if (!searchQuery.trim()) return photos;
+    const q = searchQuery.toLowerCase().trim();
+    return photos.filter((p) => {
+      const captionMatch = p.caption ? p.caption.toLowerCase().includes(q) : false;
+      const authorMatch = p.author_name ? p.author_name.toLowerCase().includes(q) : false;
+      const usernameMatch = p.author_username ? p.author_username.toLowerCase().includes(q) : false;
+      return captionMatch || authorMatch || usernameMatch;
+    });
+  }, [photos, searchQuery]);
 
   useFocusEffect(
     useCallback(() => {
@@ -393,31 +421,90 @@ export default function HomeScreen() {
     <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
       <StatusBar style="light" />
 
-      {/* App Bar */}
-      <View style={styles.appBar}>
-        <Text style={styles.appName}>Masita 📸</Text>
-
-        <View style={styles.appBarRight}>
-          <View style={[styles.socketBadge, isConnected ? styles.socketOn : styles.socketOff]}>
-            <View style={[styles.socketDot, isConnected ? styles.dotOn : styles.dotOff]} />
-            <Text style={styles.socketText}>{isConnected ? 'Online' : 'Offline'}</Text>
+      {/* App Bar hoặc Search Bar bài viết */}
+      {isSearchVisible ? (
+        <View style={styles.searchBarWrapper}>
+          <View style={styles.searchBarBox}>
+            <Text style={styles.searchBarIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchBarInput}
+              placeholder="Tìm bài viết, caption, tác giả..."
+              placeholderTextColor={C.textMuted}
+              value={searchQuery}
+              onChangeText={(text) => setSearchQuery(text)}
+              autoFocus
+              returnKeyType="search"
+              onSubmitEditing={() => handleSearchBackend(searchQuery)}
+            />
+            {isSearchingBackend ? (
+              <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 6 }} />
+            ) : searchQuery.length > 0 ? (
+              <TouchableOpacity
+                onPress={() => {
+                  setSearchQuery('');
+                  fetchFeed();
+                }}
+                style={styles.clearSearchBtn}
+              >
+                <Text style={styles.clearSearchText}>✕</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
-
           <TouchableOpacity
-            style={styles.btnHeaderCamera}
-            onPress={() => router.push('/add-photo')}
+            style={styles.closeSearchBtn}
+            onPress={() => {
+              setIsSearchVisible(false);
+              setSearchQuery('');
+              fetchFeed();
+            }}
           >
-            <Text style={styles.btnHeaderCameraText}>+ Khoảnh khắc</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.searchBtn}
-            onPress={() => router.push('/search')}
-          >
-            <Text style={styles.searchBtnText}>🔍</Text>
+            <Text style={styles.closeSearchText}>Đóng</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      ) : (
+        <View style={styles.appBar}>
+          <Text style={styles.appName}>Masita 📸</Text>
+
+          <View style={styles.appBarRight}>
+            <View style={[styles.socketBadge, isConnected ? styles.socketOn : styles.socketOff]}>
+              <View style={[styles.socketDot, isConnected ? styles.dotOn : styles.dotOff]} />
+              <Text style={styles.socketText}>{isConnected ? 'Online' : 'Offline'}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.btnHeaderCamera}
+              onPress={() => router.push('/add-photo')}
+            >
+              <Text style={styles.btnHeaderCameraText}>+ Khoảnh khắc</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.searchBtn}
+              onPress={() => setIsSearchVisible(true)}
+              accessibilityLabel="Tìm kiếm bài viết"
+            >
+              <Text style={styles.searchBtnText}>🔍</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Banner thông báo kết quả tìm kiếm bài viết */}
+      {isSearchVisible && searchQuery.trim().length > 0 && (
+        <View style={styles.searchBanner}>
+          <Text style={styles.searchBannerText} numberOfLines={1}>
+            📝 Kết quả tìm bài viết: "{searchQuery.trim()}" ({filteredPhotos.length} bài)
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setSearchQuery('');
+              fetchFeed();
+            }}
+          >
+            <Text style={styles.searchBannerReset}>Bỏ lọc</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Feed Stream */}
       {loading ? (
@@ -425,23 +512,44 @@ export default function HomeScreen() {
           <ActivityIndicator size="large" color={C.primary} />
           <Text style={styles.loadingText}>Đang tải khoảnh khắc Locket...</Text>
         </View>
-      ) : photos.length === 0 ? (
+      ) : filteredPhotos.length === 0 ? (
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyEmoji}>📸</Text>
-          <Text style={styles.emptyTitle}>Chưa có khoảnh khắc nào</Text>
-          <Text style={styles.emptySub}>
-            Hãy đăng khoảnh khắc đầu tiên của bạn hoặc kết bạn thêm để ngắm nhìn ảnh từ bạn bè!
-          </Text>
-          <TouchableOpacity
-            style={styles.btnCreateFirst}
-            onPress={() => router.push('/add-photo')}
-          >
-            <Text style={styles.btnCreateFirstText}>📷 Chia sẻ khoảnh khắc ngay</Text>
-          </TouchableOpacity>
+          {searchQuery.trim().length > 0 ? (
+            <>
+              <Text style={styles.emptyEmoji}>🔎</Text>
+              <Text style={styles.emptyTitle}>Không tìm thấy bài viết</Text>
+              <Text style={styles.emptySub}>
+                Không có bài viết hoặc bài đăng nào khớp với từ khóa "{searchQuery}". Hãy thử tìm kiếm với nội dung caption hoặc tên tác giả khác!
+              </Text>
+              <TouchableOpacity
+                style={styles.btnCreateFirst}
+                onPress={() => {
+                  setSearchQuery('');
+                  fetchFeed();
+                }}
+              >
+                <Text style={styles.btnCreateFirstText}>✕ Xóa từ khóa tìm kiếm</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyEmoji}>📸</Text>
+              <Text style={styles.emptyTitle}>Chưa có khoảnh khắc nào</Text>
+              <Text style={styles.emptySub}>
+                Hãy đăng khoảnh khắc đầu tiên của bạn hoặc kết bạn thêm để ngắm nhìn ảnh từ bạn bè!
+              </Text>
+              <TouchableOpacity
+                style={styles.btnCreateFirst}
+                onPress={() => router.push('/add-photo')}
+              >
+                <Text style={styles.btnCreateFirstText}>📷 Chia sẻ khoảnh khắc ngay</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       ) : (
         <FlatList
-          data={photos}
+          data={filteredPhotos}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderPhotoCard}
           contentContainerStyle={styles.feedContent}
@@ -854,5 +962,75 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
+  },
+  searchBarWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    backgroundColor: C.card,
+    gap: 10,
+  },
+  searchBarBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    height: 40,
+    borderWidth: 1,
+    borderColor: `${C.primary}40`,
+  },
+  searchBarIcon: {
+    fontSize: 15,
+    marginRight: 8,
+  },
+  searchBarInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: C.text,
+    paddingVertical: 0,
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  clearSearchText: {
+    fontSize: 14,
+    color: C.textMuted,
+  },
+  closeSearchBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  closeSearchText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: C.primary,
+  },
+  searchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: `${C.primary}15`,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: `${C.primary}30`,
+  },
+  searchBannerText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: C.primaryLight || C.primary,
+    flex: 1,
+  },
+  searchBannerReset: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: C.textMuted,
+    marginLeft: 8,
   },
 });
