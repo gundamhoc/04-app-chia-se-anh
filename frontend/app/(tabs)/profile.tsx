@@ -16,7 +16,7 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../hooks/useAuth';
 import { BASE_URL } from '../../services/api';
-import { SettingsModal } from '../../components/SettingsModal';
+import { SettingsModal, maskEmail } from '../../components/SettingsModal';
 
 const C = Colors.dark;
 
@@ -104,7 +104,7 @@ export default function ProfileScreen() {
 
         {/* Info rows */}
         <View style={styles.infoCard}>
-          <InfoRow icon="📧" label="Email" value={user?.email || '-'} />
+          <InfoRow icon="📧" label="Email" value={maskEmail(user?.email)} />
           <View style={styles.separator} />
           <InfoRow icon="👤" label="Username" value={`@${user?.username}`} />
         </View>

@@ -37,6 +37,27 @@ type DetailModalType =
   | 'app_version'
   | null;
 
+/**
+ * Hàm mã hóa / che giấu email: chỉ hiện 2 chữ đầu, @ và đuôi domain (.com, .ru, .vn...)
+ * Ví dụ: gundamhoc20@gmail.com -> gu***@***.com
+ */
+export const maskEmail = (email?: string | null): string => {
+  if (!email || !email.includes('@')) return email || '-';
+  const parts = email.trim().split('@');
+  if (parts.length !== 2) return email;
+
+  const [username, domain] = parts;
+  const userPrefix = username.slice(0, 2);
+
+  const dotIndex = domain.lastIndexOf('.');
+  if (dotIndex !== -1) {
+    const ext = domain.slice(dotIndex); // .com, .ru, .vn...
+    return `${userPrefix}***@***${ext}`;
+  }
+
+  return `${userPrefix}***@***.com`;
+};
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { user } = useAuth();
   const { updateUser } = useAuthStore();
@@ -282,7 +303,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
                 <View style={styles.currentValRow}>
                   <Text style={styles.currentValLabel}>Email hiện tại:</Text>
-                  <Text style={styles.currentValText}>{user?.email || '-'}</Text>
+                  <Text style={styles.currentValText}>{maskEmail(user?.email)}</Text>
                 </View>
 
                 <Text style={styles.inputLabel}>Email đăng ký mới:</Text>
