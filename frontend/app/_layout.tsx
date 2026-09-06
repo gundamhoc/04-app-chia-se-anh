@@ -7,6 +7,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { ToastProvider } from '../context/ToastContext';
 
+import { Platform } from 'react-native';
+
 // Giữ splash screen cho đến khi sẵn sàng
 SplashScreen.preventAutoHideAsync();
 
@@ -24,6 +26,18 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    // Đảm bảo trên Web browser, thêm meta referrer no-referrer để load ảnh ngoại bộ an toàn
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      let meta = document.querySelector('meta[name="referrer"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'referrer');
+        meta.setAttribute('content', 'no-referrer');
+        document.head.appendChild(meta);
+      } else {
+        meta.setAttribute('content', 'no-referrer');
+      }
+    }
     loadStoredAuth();
   }, []);
 

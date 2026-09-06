@@ -34,6 +34,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="friends"
+        options={{
+          title: 'Bạn bè',
+          tabBarIcon: ({ focused }) => <TabIcon icon="👥" label="Friends" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Hồ sơ',

@@ -9,6 +9,8 @@ const path = require('path');
 const { testConnection } = require('./src/config/db');
 const { initSocketHandler } = require('./src/sockets/socketHandler');
 const authRoutes = require('./src/routes/authRoutes');
+const friendRoutes = require('./src/routes/friendRoutes');
+const photoRoutes = require('./src/routes/photoRoutes');
 
 // ============================================================
 // Khởi tạo Express App
@@ -25,8 +27,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '35mb' }));
+app.use(express.urlencoded({ extended: true, limit: '35mb' }));
 
 // Logging chỉ ở development
 if (process.env.NODE_ENV === 'development') {
@@ -36,10 +38,18 @@ if (process.env.NODE_ENV === 'development') {
 // Serve static files (ảnh upload)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Attach io to req
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
 // ============================================================
 // Routes
 // ============================================================
 app.use('/api/auth', authRoutes);
+app.use('/api/friends', friendRoutes);
+app.use('/api/photos', photoRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

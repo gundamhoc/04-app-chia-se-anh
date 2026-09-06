@@ -56,4 +56,33 @@ const getSocketId = (userId) => connectedUsers.get(userId);
 // Helper: Lấy danh sách userId đang online
 const getOnlineUsers = () => Array.from(connectedUsers.keys());
 
-module.exports = { initSocketHandler, getSocketId, getOnlineUsers };
+/**
+ * Gửi thông báo tới 1 user cụ thể nếu họ đang online
+ */
+const sendNotificationToUser = (io, targetUserId, eventName, payload) => {
+  const targetSocketId = connectedUsers.get(parseInt(targetUserId, 10)) || connectedUsers.get(String(targetUserId));
+  if (targetSocketId && io) {
+    io.to(targetSocketId).emit(eventName, payload);
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Gửi thông báo tới nhiều users cùng lúc
+ */
+const broadcastToUsers = (io, targetUserIds, eventName, payload) => {
+  if (!Array.isArray(targetUserIds) || !io) return;
+  targetUserIds.forEach((uId) => {
+    sendNotificationToUser(io, uId, eventName, payload);
+  });
+};
+
+module.exports = {
+  initSocketHandler,
+  getSocketId,
+  getOnlineUsers,
+  sendNotificationToUser,
+  broadcastToUsers,
+};
+

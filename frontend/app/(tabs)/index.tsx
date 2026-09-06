@@ -1,106 +1,503 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  Image,
+  ActivityIndicator,
+  RefreshControl,
+  Share,
+  Platform,
+  Alert,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
+import { useToast } from '../../hooks/useToast';
+import { photoService } from '../../services/photoService';
+import { Photo, PhotoReaction } from '../../types';
+import { CommentModal } from '../../components/CommentModal';
+import { ShareModal } from '../../components/ShareModal';
+import { PostOptionsModal } from '../../components/PostOptionsModal';
+import { EditPostModal } from '../../components/EditPostModal';
 
 const C = Colors.dark;
+const EMOJIS = ['❤️', '🔥', '😂', '😮', '😢'];
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { user } = useAuth();
-  const { isConnected } = useSocket();
+  const { isConnected, socket } = useSocket();
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
+
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [reactingPhotoId, setReactingPhotoId] = useState<number | null>(null);
+  const [activeCommentPhoto, setActiveCommentPhoto] = useState<Photo | null>(null);
+  const [activeEmojiPopoverPhotoId, setActiveEmojiPopoverPhotoId] = useState<number | null>(null);
+  const [activeSharePhoto, setActiveSharePhoto] = useState<Photo | null>(null);
+  const [activeOptionsPhoto, setActiveOptionsPhoto] = useState<Photo | null>(null);
+  const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
+
+  const fetchFeed = useCallback(async () => {
+    try {
+      const data = await photoService.getPhotoFeed();
+      setPhotos(data);
+    } catch (error: unknown) {
+      console.warn('Fetch feed error:', error);
+      showToast('error', 'Không thể tải bảng tin Locket.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchFeed();
+    }, [fetchFeed])
+  );
+
+  // Socket event listener thời gian thực cho Feed bài viết & reactions
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReactionUpdate = (data: { photo_id: number; reactions: PhotoReaction[] }) => {
+      setPhotos((prevPhotos) =>
+        prevPhotos.map((p) => {
+          if (p.id === data.photo_id) {
+            return { ...p, reactions: data.reactions };
+          }
+          return p;
+        })
+      );
+    };
+
+    const handleNewPhotoPosted = (data: { photo: Photo }) => {
+      if (data.photo && data.photo.id) {
+        setPhotos((prev) => {
+          if (prev.some((p) => p.id === data.photo.id)) return prev;
+          return [data.photo, ...prev];
+        });
+      }
+    };
+
+    const handleNewComment = (data: { photo_id: number }) => {
+      setPhotos((prevPhotos) =>
+        prevPhotos.map((p) => {
+          if (p.id === data.photo_id) {
+            return { ...p, comment_count: (p.comment_count || 0) + 1 };
+          }
+          return p;
+        })
+      );
+    };
+
+    socket.on('photo_reaction_updated', handleReactionUpdate);
+    socket.on('new_photo_posted', handleNewPhotoPosted);
+    socket.on('new_comment', handleNewComment);
+
+    return () => {
+      socket.off('photo_reaction_updated', handleReactionUpdate);
+      socket.off('new_photo_posted', handleNewPhotoPosted);
+      socket.off('new_comment', handleNewComment);
+    };
+  }, [socket]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchFeed();
+  };
+
+  const confirmDeletePhoto = (photo: Photo) => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm('Bạn có chắc chắn muốn xóa bài đăng này không?')) {
+        handleDeletePhoto(photo.id);
+      }
+    } else {
+      Alert.alert(
+        'Xóa bài đăng',
+        'Bạn có chắc chắn muốn xóa bài đăng khoảnh khắc này không?',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          {
+            text: 'Xóa',
+            style: 'destructive',
+            onPress: () => handleDeletePhoto(photo.id),
+          },
+        ]
+      );
+    }
+  };
+
+  const handleDeletePhoto = async (photoId: number) => {
+    setDeletingId(photoId);
+    try {
+      const msg = await photoService.deletePhoto(photoId);
+      showToast('info', msg);
+      setPhotos((prev) => prev.filter((p) => p.id !== photoId));
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : 'Xóa ảnh thất bại.';
+      showToast('error', errMsg);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleToggleReaction = async (photoId: number, emoji: string) => {
+    setReactingPhotoId(photoId);
+    try {
+      const res = await photoService.toggleReaction(photoId, emoji);
+      setPhotos((prev) =>
+        prev.map((p) => {
+          if (p.id === photoId) {
+            return { ...p, reactions: res.reactions };
+          }
+          return p;
+        })
+      );
+    } catch (error: any) {
+      showToast('error', error.message || 'Lỗi thả cảm xúc.');
+    } finally {
+      setReactingPhotoId(null);
+    }
+  };
+
+  const handleSharePhoto = async (item: Photo) => {
+    try {
+      const message = `${item.author_name} chia sẻ khoảnh khắc trên Masita: ${item.caption || ''}\n${item.image_url}`;
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(item.image_url);
+          showToast('success', 'Đã sao chép liên kết ảnh vào bộ nhớ tạm! 📋');
+        } else {
+          showToast('info', 'Liên kết: ' + item.image_url);
+        }
+      } else {
+        await Share.share({
+          title: 'Khoảnh khắc Masita 📸',
+          message,
+          url: item.image_url,
+        });
+      }
+    } catch (e: any) {
+      console.warn('Share error:', e);
+    }
+  };
+
+  // Format relative date (vd: "Vừa xong", "10 phút trước", "15:30 06/09")
+  const formatTime = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+
+      if (diffMins < 1) return 'Vừa xong';
+      if (diffMins < 60) return `${diffMins} phút trước`;
+      if (diffHours < 24) return `${diffHours} giờ trước`;
+      return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const renderPhotoCard = ({ item }: { item: Photo }) => {
+    const isOwner = user?.id === item.user_id;
+    const authorAvatarUri = item.author_avatar
+      ? { uri: item.author_avatar }
+      : require('../../assets/splash-icon.png');
+
+    const reactions = item.reactions || [];
+    // Tính toán Top 2 Emoji có lượt thả nhiều nhất (giới hạn tối đa đúng 2 emoji)
+    const validReactions = reactions.filter((r) => r.count > 0);
+    const sortedReactions = [...validReactions].sort((a, b) => b.count - a.count);
+    const top2Reactions = sortedReactions.slice(0, 2);
+    const totalReactionsCount = validReactions.reduce((acc, r) => acc + r.count, 0);
+
+    const userReaction = reactions.find((r) => r.user_reacted);
+    const hasUserReacted = !!userReaction;
+
+    return (
+      <View style={styles.photoCard}>
+        {/* Card Header */}
+        <View style={styles.cardHeader}>
+          <Image source={authorAvatarUri} style={styles.authorAvatar} />
+          <View style={styles.authorInfo}>
+            <View style={styles.authorRow}>
+              <Text style={styles.authorName} numberOfLines={1}>
+                {item.author_name}
+              </Text>
+              {item.recipient_name ? (
+                <Text style={styles.recipientTag} numberOfLines={1}>
+                  {' '}➔ {item.recipient_name}
+                </Text>
+              ) : null}
+            </View>
+            <Text style={styles.timeText}>{formatTime(item.created_at)}</Text>
+          </View>
+
+          {isOwner && (
+            <TouchableOpacity
+              style={styles.moreBtn}
+              onPress={() => setActiveOptionsPhoto(item)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.moreBtnText}>•••</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Photo Image */}
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: item.image_url }}
+            style={styles.photoImage}
+            resizeMode="cover"
+            {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
+          />
+
+          {/* Biểu tượng góc bên phải: hiện số lượt thẻ emoji nhiều nhất và giới hạn 2 emoji */}
+          {top2Reactions.length > 0 && (
+            <View style={styles.topEmojiFloatBadge}>
+              <Text style={styles.topEmojiFloatIcons}>
+                {top2Reactions.map((r) => r.emoji).join(' ')}
+              </Text>
+              <Text style={styles.topEmojiFloatCount}>
+                {totalReactionsCount}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Caption */}
+        {item.caption ? (
+          <View style={styles.captionContainer}>
+            <Text style={styles.captionText}>{item.caption}</Text>
+          </View>
+        ) : null}
+
+        {/* Social Metrics Bar: Lượt thích và Số bình luận */}
+        {(totalReactionsCount > 0 || (item.comment_count && item.comment_count > 0)) ? (
+          <View style={styles.metricsBar}>
+            {top2Reactions.length > 0 ? (
+              <View style={styles.metricsReactionTag}>
+                <Text style={styles.metricsEmojiIcons}>
+                  {top2Reactions.map((r) => r.emoji).join('')}
+                </Text>
+                <Text style={styles.metricsReactionCount}>
+                  {totalReactionsCount} lượt tương tác
+                </Text>
+              </View>
+            ) : <View />}
+
+            {item.comment_count && item.comment_count > 0 ? (
+              <TouchableOpacity onPress={() => setActiveCommentPhoto(item)}>
+                <Text style={styles.metricsCommentText}>
+                  {item.comment_count} bình luận
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Action Bar: 3 Nút Thích, Bình luận, Chia sẻ */}
+        <View style={styles.mainActionBar}>
+          {/* Floating Emoji Dock khi ấn giữ nút Thích */}
+          {activeEmojiPopoverPhotoId === item.id && (
+            <View style={styles.floatingEmojiDock}>
+              {EMOJIS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={styles.floatingEmojiItem}
+                  onPress={() => {
+                    setActiveEmojiPopoverPhotoId(null);
+                    handleToggleReaction(item.id, emoji);
+                  }}
+                  activeOpacity={0.6}
+                >
+                  <Text style={styles.floatingEmojiText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.mainActionBtn, hasUserReacted && styles.mainActionBtnActive]}
+            onPress={() => {
+              if (activeEmojiPopoverPhotoId === item.id) {
+                setActiveEmojiPopoverPhotoId(null);
+              } else {
+                handleToggleReaction(item.id, userReaction ? userReaction.emoji : '❤️');
+              }
+            }}
+            onLongPress={() => {
+              setActiveEmojiPopoverPhotoId(item.id);
+            }}
+            delayLongPress={220}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.mainActionIcon}>{hasUserReacted ? userReaction.emoji : '🤍'}</Text>
+            <Text style={[styles.mainActionText, hasUserReacted && styles.mainActionTextActive]}>
+              {hasUserReacted ? 'Đã thích' : 'Thích'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.mainActionBtn}
+            onPress={() => {
+              setActiveEmojiPopoverPhotoId(null);
+              setActiveCommentPhoto(item);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.mainActionIcon}>💬</Text>
+            <Text style={styles.mainActionText}>
+              Bình luận {item.comment_count && item.comment_count > 0 ? `(${item.comment_count})` : ''}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.mainActionBtn}
+            onPress={() => {
+              setActiveEmojiPopoverPhotoId(null);
+              setActiveSharePhoto(item);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.mainActionIcon}>↗️</Text>
+            <Text style={styles.mainActionText}>Chia sẻ</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
       <StatusBar style="light" />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* App Bar */}
-        <View style={styles.appBar}>
-          <Text style={styles.appName}>Masita</Text>
+      {/* App Bar */}
+      <View style={styles.appBar}>
+        <Text style={styles.appName}>Masita 📸</Text>
+
+        <View style={styles.appBarRight}>
           <View style={[styles.socketBadge, isConnected ? styles.socketOn : styles.socketOff]}>
             <View style={[styles.socketDot, isConnected ? styles.dotOn : styles.dotOff]} />
             <Text style={styles.socketText}>{isConnected ? 'Online' : 'Offline'}</Text>
           </View>
-        </View>
 
-        {/* Welcome Card */}
-        <View style={styles.welcomeCard}>
-          <View style={styles.welcomeInner}>
-            <Text style={styles.welcomeEmoji}>👋</Text>
-            <Text style={styles.welcomeTitle}>
-              Xin chào, {user?.full_name || user?.username}!
-            </Text>
-            <Text style={styles.welcomeSubtitle}>
-              Nền tảng đã sẵn sàng. Tính năng sẽ sớm được thêm vào.
-            </Text>
-          </View>
-        </View>
+          <TouchableOpacity
+            style={styles.btnHeaderCamera}
+            onPress={() => router.push('/add-photo')}
+          >
+            <Text style={styles.btnHeaderCameraText}>+ Khoảnh khắc</Text>
+          </TouchableOpacity>
 
-        {/* Status Cards */}
-        <Text style={styles.sectionTitle}>Trạng thái hệ thống</Text>
-        <View style={styles.statusGrid}>
-          <StatusCard
-            icon="⚡"
-            label="API Backend"
-            value="Kết nối"
-            color={C.success}
-          />
-          <StatusCard
-            icon="🔌"
-            label="WebSocket"
-            value={isConnected ? 'Online' : 'Offline'}
-            color={isConnected ? C.success : C.error}
-          />
-          <StatusCard
-            icon="🗄️"
-            label="Database"
-            value="MySQL"
-            color={C.primary}
-          />
-          <StatusCard
-            icon="📦"
-            label="Storage"
-            value="Multer"
-            color={C.primaryLight}
-          />
+          <TouchableOpacity
+            style={styles.searchBtn}
+            onPress={() => router.push('/search')}
+          >
+            <Text style={styles.searchBtnText}>🔍</Text>
+          </TouchableOpacity>
         </View>
+      </View>
 
-        {/* Placeholder */}
-        <View style={styles.placeholder}>
-          <Text style={styles.placeholderIcon}>🚀</Text>
-          <Text style={styles.placeholderText}>
-            Tính năng đang được phát triển...
+      {/* Feed Stream */}
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={C.primary} />
+          <Text style={styles.loadingText}>Đang tải khoảnh khắc Locket...</Text>
+        </View>
+      ) : photos.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyEmoji}>📸</Text>
+          <Text style={styles.emptyTitle}>Chưa có khoảnh khắc nào</Text>
+          <Text style={styles.emptySub}>
+            Hãy đăng khoảnh khắc đầu tiên của bạn hoặc kết bạn thêm để ngắm nhìn ảnh từ bạn bè!
           </Text>
-          <Text style={styles.placeholderSub}>
-            Posts · Comments · Likes · Follow · Chat
-          </Text>
+          <TouchableOpacity
+            style={styles.btnCreateFirst}
+            onPress={() => router.push('/add-photo')}
+          >
+            <Text style={styles.btnCreateFirstText}>📷 Chia sẻ khoảnh khắc ngay</Text>
+          </TouchableOpacity>
         </View>
+      ) : (
+        <FlatList
+          data={photos}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderPhotoCard}
+          contentContainerStyle={styles.feedContent}
+          showsVerticalScrollIndicator={false}
+          onScrollBeginDrag={() => {
+            if (activeEmojiPopoverPhotoId) {
+              setActiveEmojiPopoverPhotoId(null);
+            }
+          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={C.primary}
+            />
+          }
+        />
+      )}
 
-      </ScrollView>
-    </View>
-  );
-}
+      {/* Comment Modal */}
+      <CommentModal
+        visible={!!activeCommentPhoto}
+        photoId={activeCommentPhoto ? activeCommentPhoto.id : null}
+        onClose={() => setActiveCommentPhoto(null)}
+        onCommentCountChange={(pId, newCount) => {
+          setPhotos((prev) =>
+            prev.map((p) => (p.id === pId ? { ...p, comment_count: newCount } : p))
+          );
+        }}
+      />
 
-function StatusCard({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <View style={styles.statusCard}>
-      <Text style={styles.statusIcon}>{icon}</Text>
-      <Text style={styles.statusLabel}>{label}</Text>
-      <Text style={[styles.statusValue, { color }]}>{value}</Text>
+      {/* Share Modal */}
+      <ShareModal
+        visible={!!activeSharePhoto}
+        photo={activeSharePhoto}
+        onClose={() => setActiveSharePhoto(null)}
+      />
+
+      {/* Post Options Modal (Nút 3 chấm) */}
+      <PostOptionsModal
+        visible={!!activeOptionsPhoto}
+        photo={activeOptionsPhoto}
+        onClose={() => setActiveOptionsPhoto(null)}
+        onEdit={(photo) => {
+          setEditingPhoto(photo);
+        }}
+        onDelete={(photo) => {
+          confirmDeletePhoto(photo);
+        }}
+      />
+
+      {/* Edit Post Modal (Chỉnh sửa bài đăng) */}
+      <EditPostModal
+        visible={!!editingPhoto}
+        photo={editingPhoto}
+        onClose={() => setEditingPhoto(null)}
+        onSuccess={(updated) => {
+          setPhotos((prev) =>
+            prev.map((p) => (p.id === updated.id ? { ...p, caption: updated.caption } : p))
+          );
+        }}
+      />
     </View>
   );
 }
@@ -110,133 +507,339 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: C.background,
   },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 32,
-  },
   appBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    marginBottom: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
   },
   appName: {
-    fontSize: 26,
+    fontSize: 22,
     fontFamily: 'Inter_700Bold',
     color: C.primary,
-    letterSpacing: 0.5,
+  },
+  appBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   socketBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+    gap: 4,
   },
   socketOn: { backgroundColor: `${C.success}20` },
   socketOff: { backgroundColor: `${C.error}20` },
   socketDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   dotOn: { backgroundColor: C.success },
   dotOff: { backgroundColor: C.error },
   socketText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Inter_500Medium',
     color: C.textSecondary,
   },
-  welcomeCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginBottom: 28,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: `${C.primary}30`,
+  btnHeaderCamera: {
+    backgroundColor: C.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
-  welcomeInner: {
-    padding: 24,
+  btnHeaderCameraText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  searchBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: `${C.primary}20`,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: `${C.primary}50`,
+  },
+  searchBtnText: {
+    fontSize: 14,
+  },
+  feedContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 80,
+  },
+  photoCard: {
+    backgroundColor: C.card,
+    borderRadius: 24,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: 'hidden',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+  },
+  authorAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: C.separator,
+  },
+  authorInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  authorRow: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  welcomeEmoji: {
-    fontSize: 40,
-    marginBottom: 12,
+  authorName: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: C.text,
   },
-  welcomeTitle: {
+  recipientTag: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: C.primaryLight,
+  },
+  timeText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: C.textMuted,
+    marginTop: 2,
+  },
+  moreBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  moreBtnText: {
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
+    color: C.textMuted,
+    letterSpacing: 2,
+  },
+  imageContainer: {
+    width: '100%',
+    height: 380,
+    backgroundColor: '#000000',
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  captionContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    backgroundColor: C.card,
+  },
+  captionText: {
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
+    color: C.text,
+    lineHeight: 22,
+  },
+  topEmojiFloatBadge: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 14, 23, 0.78)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  topEmojiFloatIcons: {
+    fontSize: 15,
+    marginRight: 4,
+  },
+  topEmojiFloatCount: {
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF',
+  },
+  metricsBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  metricsReactionTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metricsEmojiIcons: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  metricsReactionCount: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: C.textMuted,
+  },
+  metricsCommentText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: C.textMuted,
+  },
+  mainActionBar: {
+    position: 'relative',
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: `${C.border}50`,
+    marginTop: 6,
+    zIndex: 10,
+  },
+  floatingEmojiDock: {
+    position: 'absolute',
+    bottom: 46,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E2F',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+    elevation: 20,
+    zIndex: 9999,
+    gap: 6,
+  },
+  floatingEmojiItem: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  floatingEmojiText: {
+    fontSize: 22,
+  },
+  mainActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  mainActionBtnActive: {
+    backgroundColor: 'rgba(108, 99, 255, 0.15)',
+  },
+  mainActionIcon: {
+    fontSize: 16,
+  },
+  mainActionText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: C.textMuted,
+  },
+  mainActionTextActive: {
+    color: C.primaryLight,
+  },
+  reactionBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: `${C.card}`,
+    borderTopWidth: 1,
+    borderTopColor: `${C.border}30`,
+  },
+  emojiBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+    backgroundColor: `${C.border}40`,
+    gap: 4,
+  },
+  emojiBtnActive: {
+    backgroundColor: `${C.primary}35`,
+    borderWidth: 1,
+    borderColor: C.primary,
+  },
+  emojiText: {
+    fontSize: 16,
+  },
+  emojiCount: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    color: C.textMuted,
+  },
+  emojiCountActive: {
+    color: C.primaryLight,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  loadingText: {
+    color: C.textMuted,
+    fontSize: 14,
+    marginTop: 12,
+    fontFamily: 'Inter_400Regular',
+  },
+  emptyEmoji: {
+    fontSize: 54,
+    marginBottom: 16,
+  },
+  emptyTitle: {
     fontSize: 20,
     fontFamily: 'Inter_700Bold',
     color: C.text,
-    textAlign: 'center',
     marginBottom: 8,
+    textAlign: 'center',
   },
-  welcomeSubtitle: {
+  emptySub: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: C.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
-    color: C.text,
-    marginBottom: 16,
-  },
-  statusGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 28,
-  },
-  statusCard: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: C.card,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: C.border,
-    gap: 4,
-  },
-  statusIcon: { fontSize: 24, marginBottom: 4 },
-  statusLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
     color: C.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
   },
-  statusValue: {
-    fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
+  btnCreateFirst: {
+    backgroundColor: C.primary,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 24,
   },
-  placeholder: {
-    alignItems: 'center',
-    padding: 32,
-    backgroundColor: C.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderStyle: 'dashed',
-  },
-  placeholderIcon: { fontSize: 36, marginBottom: 12 },
-  placeholderText: {
+  btnCreateFirstText: {
+    color: '#FFFFFF',
     fontSize: 15,
-    fontFamily: 'Inter_500Medium',
-    color: C.textSecondary,
-    marginBottom: 6,
-  },
-  placeholderSub: {
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-    color: C.textMuted,
-    textAlign: 'center',
+    fontFamily: 'Inter_600SemiBold',
   },
 });

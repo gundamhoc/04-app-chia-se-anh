@@ -36,3 +36,8 @@ backend/ngrok/
 AI_CONTEXT.md
 PROTOCOL.md
 
+# Credentials & secrets
+google-credentials.json
+**/google-credentials.json
+
+

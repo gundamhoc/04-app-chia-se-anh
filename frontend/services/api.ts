@@ -63,10 +63,7 @@ if (__DEV__) {
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  timeout: 20000,
 });
 
 import { storage } from '../utils/storage';
@@ -77,6 +74,20 @@ api.interceptors.request.use(
     const token = await storage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // Nếu data là FormData, xóa Content-Type để Axios/Browser/React Native tự động sinh header multipart/form-data kèm boundary chuẩn
+    const isFormData =
+      config.data instanceof FormData ||
+      (config.data && typeof (config.data as any).getParts === 'function');
+
+    if (isFormData && config.headers) {
+      if (typeof (config.headers as any).delete === 'function') {
+        (config.headers as any).delete('Content-Type');
+        (config.headers as any).delete('content-type');
+      } else {
+        delete config.headers['Content-Type'];
+        delete config.headers['content-type'];
+      }
     }
     return config;
   },

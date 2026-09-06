@@ -1,6 +1,8 @@
 const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
 const { generateToken } = require('../utils/jwt');
+const { uploadFileToDrive } = require('../utils/googleDrive');
+const fs = require('fs');
 
 // ============================================================
 // REGISTER
@@ -214,7 +216,19 @@ const updateAvatar = async (req, res) => {
   }
 
   try {
-    const avatarUrl = `/uploads/${req.file.filename}`;
+    let avatarUrl = `/uploads/${req.file.filename}`;
+
+    try {
+      const driveResult = await uploadFileToDrive(req.file.path, req.file.mimetype, req.file.filename);
+      if (driveResult && driveResult.directUrl) {
+        avatarUrl = driveResult.directUrl;
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      }
+    } catch (driveErr) {
+      console.warn('⚠️ Gặp sự cố upload Google Drive cho avatar, fallback sang lưu nội bộ:', driveErr.message);
+    }
 
     await pool.query('UPDATE users SET avatar_url = ? WHERE id = ?', [
       avatarUrl,
@@ -223,11 +237,12 @@ const updateAvatar = async (req, res) => {
 
     const protocol = req.protocol;
     const host = req.get('host');
+    const finalAvatarUrl = avatarUrl.startsWith('http') ? avatarUrl : `${protocol}://${host}${avatarUrl}`;
 
     return res.status(200).json({
       success: true,
       message: 'Cập nhật ảnh đại diện thành công!',
-      data: { avatar_url: `${protocol}://${host}${avatarUrl}` },
+      data: { avatar_url: finalAvatarUrl },
     });
   } catch (error) {
     console.error('UpdateAvatar error:', error);
