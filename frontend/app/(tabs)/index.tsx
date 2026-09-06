@@ -276,7 +276,23 @@ export default function HomeScreen() {
                 </Text>
               ) : null}
             </View>
-            <Text style={styles.timeText}>{formatTime(item.created_at)}</Text>
+            <View style={styles.timeAndPrivacyRow}>
+              <Text style={styles.timeText}>{formatTime(item.created_at)}</Text>
+              <Text style={styles.dotSeparator}>•</Text>
+              <View style={[
+                styles.privacyBadge,
+                item.privacy === 'public' && styles.privacyBadgePublic,
+                item.privacy === 'private' && styles.privacyBadgePrivate,
+              ]}>
+                <Text style={styles.privacyBadgeText}>
+                  {item.privacy === 'public'
+                    ? '🌐 Công khai'
+                    : item.privacy === 'private'
+                    ? '🔒 Riêng tư'
+                    : '👥 Bạn bè coi'}
+                </Text>
+              </View>
+            </View>
           </View>
 
           {isOwner && (
@@ -668,7 +684,15 @@ export default function HomeScreen() {
         onClose={() => setEditingPhoto(null)}
         onSuccess={(updated) => {
           setPhotos((prev) =>
-            prev.map((p) => (p.id === updated.id ? { ...p, caption: updated.caption } : p))
+            prev.map((p) =>
+              p.id === updated.id
+                ? {
+                    ...p,
+                    caption: updated.caption,
+                    privacy: updated.privacy || p.privacy,
+                  }
+                : p
+            )
           );
         }}
       />
@@ -795,11 +819,41 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: C.primaryLight,
   },
+  timeAndPrivacyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+  },
   timeText: {
     fontSize: 12,
     fontFamily: 'Inter_400Regular',
     color: C.textMuted,
-    marginTop: 2,
+  },
+  dotSeparator: {
+    fontSize: 11,
+    color: C.textMuted,
+    marginHorizontal: 5,
+  },
+  privacyBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    backgroundColor: `${C.primary}18`,
+    borderWidth: 1,
+    borderColor: `${C.primary}35`,
+  },
+  privacyBadgePublic: {
+    backgroundColor: 'rgba(52, 199, 89, 0.12)',
+    borderColor: 'rgba(52, 199, 89, 0.35)',
+  },
+  privacyBadgePrivate: {
+    backgroundColor: 'rgba(255, 149, 0, 0.12)',
+    borderColor: 'rgba(255, 149, 0, 0.35)',
+  },
+  privacyBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter_500Medium',
+    color: C.textSecondary,
   },
   moreBtn: {
     paddingVertical: 4,

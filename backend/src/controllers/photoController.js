@@ -40,12 +40,13 @@ const uploadPhoto = async (req, res) => {
       });
     }
 
-    const { caption, recipient_id } = req.body;
+    const { caption, recipient_id, privacy } = req.body;
     let recipientId = null;
 
     if (recipient_id && !isNaN(recipient_id)) {
       recipientId = parseInt(recipient_id, 10);
     }
+    const validPrivacy = ['public', 'friends', 'private'].includes(privacy) ? privacy : 'friends';
 
     let finalImageUrl = `/uploads/${req.file.filename}`;
 
@@ -64,8 +65,8 @@ const uploadPhoto = async (req, res) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO photos (user_id, recipient_id, image_url, caption) VALUES (?, ?, ?, ?)`,
-      [currentUserId, recipientId, finalImageUrl, caption ? caption.trim() : null]
+      `INSERT INTO photos (user_id, recipient_id, image_url, caption, privacy) VALUES (?, ?, ?, ?, ?)`,
+      [currentUserId, recipientId, finalImageUrl, caption ? caption.trim() : null, validPrivacy]
     );
 
     const photoId = result.insertId;
@@ -79,6 +80,7 @@ const uploadPhoto = async (req, res) => {
         p.recipient_id,
         p.image_url,
         p.caption,
+        p.privacy,
         p.created_at,
         u.full_name AS author_name,
         u.username AS author_username,
@@ -113,7 +115,7 @@ const uploadPhoto = async (req, res) => {
       );
 
       const friendIds = friends.map((f) => f.friend_id);
-      if (friendIds.length > 0 && req.io) {
+      if (friendIds.length > 0 && req.io && validPrivacy !== 'private') {
         broadcastToUsers(req.io, friendIds, 'new_photo_posted', {
           photo: createdPhoto,
           author_name: createdPhoto.author_name || createdPhoto.author_username,
@@ -155,6 +157,7 @@ const getPhotoFeed = async (req, res) => {
         p.recipient_id,
         p.image_url,
         p.caption,
+        p.privacy,
         p.created_at,
         u.full_name AS author_name,
         u.username AS author_username,
@@ -170,11 +173,13 @@ const getPhotoFeed = async (req, res) => {
     let queryParams = [currentUserId, currentUserId];
 
     if (scope === 'public') {
-      // Phạm vi công khai / khám phá: bài đăng công khai của bất kỳ ai trong hệ thống (kể cả người lạ)
-      querySql += ` WHERE (p.recipient_id IS NULL)`;
+      // Phạm vi công khai / khám phá: CHỈ bài đăng được cài đặt 'public' của bất kỳ ai trong hệ thống (kể cả người lạ)
+      querySql += ` WHERE (p.privacy = 'public' AND p.recipient_id IS NULL)`;
     } else {
-      // Phạm vi bạn bè: bài đăng của chính bản thân HOẶC của bạn bè đã accepted
-      querySql += ` WHERE (p.user_id = ? OR (f.status = 'accepted' AND (p.recipient_id IS NULL OR p.recipient_id = ?)))`;
+      // Phạm vi bạn bè:
+      // 1. Bài của chính bản thân (p.user_id = currentUserId): luôn thấy kể cả riêng tư
+      // 2. Bài của bạn bè: chỉ thấy nếu privacy thuộc 'public' hoặc 'friends' (không thấy bài riêng tư 'private' của bạn bè)
+      querySql += ` WHERE (p.user_id = ? OR (f.status = 'accepted' AND p.privacy IN ('public', 'friends') AND (p.recipient_id IS NULL OR p.recipient_id = ?)))`;
       queryParams.push(currentUserId, currentUserId);
     }
 
@@ -258,6 +263,7 @@ const getPhotoFeed = async (req, res) => {
         recipient_id: p.recipient_id,
         image_url,
         caption: p.caption,
+        privacy: p.privacy || 'friends',
         created_at: p.created_at,
         author_name: p.author_name || p.author_username,
         author_username: p.author_username,
@@ -423,20 +429,21 @@ const deletePhoto = async (req, res) => {
 };
 
 /**
- * 5. Chỉnh sửa bài đăng (Cập nhật caption)
+ * 5. Chỉnh sửa bài đăng (Cập nhật caption và privacy)
  * PUT /api/photos/:id
  */
 const updatePhoto = async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const photoId = req.params.id;
-    const { caption } = req.body;
+    const { caption, privacy } = req.body;
 
     const trimmedCaption = typeof caption === 'string' ? caption.trim() : null;
+    const validPrivacy = ['public', 'friends', 'private'].includes(privacy) ? privacy : null;
 
     const [result] = await pool.query(
-      `UPDATE photos SET caption = ? WHERE id = ? AND user_id = ?`,
-      [trimmedCaption, photoId, currentUserId]
+      `UPDATE photos SET caption = ?, privacy = COALESCE(?, privacy) WHERE id = ? AND user_id = ?`,
+      [trimmedCaption, validPrivacy, photoId, currentUserId]
     );
 
     if (result.affectedRows === 0) {
@@ -446,12 +453,23 @@ const updatePhoto = async (req, res) => {
       });
     }
 
+    const [rows] = await pool.query(
+      `SELECT id, caption, privacy FROM photos WHERE id = ?`,
+      [photoId]
+    );
+    const updatedRecord = rows[0] || {
+      id: parseInt(photoId, 10),
+      caption: trimmedCaption,
+      privacy: validPrivacy || 'friends',
+    };
+
     return res.json({
       success: true,
       message: 'Cập nhật bài đăng thành công.',
       data: {
-        id: parseInt(photoId, 10),
-        caption: trimmedCaption,
+        id: updatedRecord.id,
+        caption: updatedRecord.caption,
+        privacy: updatedRecord.privacy,
       },
     });
   } catch (error) {

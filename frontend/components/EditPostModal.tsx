@@ -13,7 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Colors } from '../constants/Colors';
-import { Photo } from '../types';
+import { Photo, PhotoPrivacy } from '../types';
 import { photoService } from '../services/photoService';
 import { useToast } from '../hooks/useToast';
 
@@ -23,7 +23,7 @@ interface EditPostModalProps {
   visible: boolean;
   photo: Photo | null;
   onClose: () => void;
-  onSuccess: (updatedPhoto: { id: number; caption: string }) => void;
+  onSuccess: (updatedPhoto: { id: number; caption: string; privacy?: PhotoPrivacy }) => void;
 }
 
 export const EditPostModal: React.FC<EditPostModalProps> = ({
@@ -34,11 +34,13 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 }) => {
   const { showToast } = useToast();
   const [caption, setCaption] = useState('');
+  const [privacy, setPrivacy] = useState<PhotoPrivacy>('friends');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (photo) {
       setCaption(photo.caption || '');
+      setPrivacy(photo.privacy || 'friends');
     }
   }, [photo]);
 
@@ -47,7 +49,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   const handleSave = async () => {
     setLoading(true);
     try {
-      const updated = await photoService.updatePhoto(photo.id, caption);
+      const updated = await photoService.updatePhoto(photo.id, caption, privacy);
       showToast('success', 'Đã cập nhật bài đăng thành công! ✨');
       onSuccess(updated);
       onClose();
@@ -113,6 +115,76 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                 autoFocus
               />
               <Text style={styles.charCount}>{caption.length}/300</Text>
+            </View>
+
+            {/* Bộ chọn quyền riêng tư bài viết */}
+            <View style={styles.privacySection}>
+              <Text style={styles.sectionLabel}>Quyền riêng tư bài viết</Text>
+              <View style={styles.privacyRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.privacyOption,
+                    privacy === 'public' && styles.privacyOptionActive,
+                  ]}
+                  onPress={() => setPrivacy('public')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.privacyIcon}>🌐</Text>
+                  <Text
+                    style={[
+                      styles.privacyText,
+                      privacy === 'public' && styles.privacyTextActive,
+                    ]}
+                  >
+                    Công khai
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.privacyOption,
+                    privacy === 'friends' && styles.privacyOptionActive,
+                  ]}
+                  onPress={() => setPrivacy('friends')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.privacyIcon}>👥</Text>
+                  <Text
+                    style={[
+                      styles.privacyText,
+                      privacy === 'friends' && styles.privacyTextActive,
+                    ]}
+                  >
+                    Bạn bè coi
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.privacyOption,
+                    privacy === 'private' && styles.privacyOptionActive,
+                  ]}
+                  onPress={() => setPrivacy('private')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.privacyIcon}>🔒</Text>
+                  <Text
+                    style={[
+                      styles.privacyText,
+                      privacy === 'private' && styles.privacyTextActive,
+                    ]}
+                  >
+                    Riêng tư
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.privacyDesc}>
+                {privacy === 'public'
+                  ? '🌐 Mọi người trên Masita đều có thể xem bài viết này.'
+                  : privacy === 'friends'
+                  ? '👥 Chỉ bạn bè đã kết bạn mới xem được bài viết này.'
+                  : '🔒 Chỉ mình bạn mới xem được bài viết này (ẩn với tất cả).'}
+              </Text>
             </View>
           </ScrollView>
         </View>
@@ -231,5 +303,55 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: C.textMuted,
     marginTop: 6,
+  },
+  privacySection: {
+    marginTop: 18,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  privacyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 6,
+  },
+  privacyOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 14,
+    gap: 6,
+  },
+  privacyOptionActive: {
+    backgroundColor: `${C.primary}25`,
+    borderColor: C.primary,
+  },
+  privacyIcon: {
+    fontSize: 15,
+  },
+  privacyText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: C.textMuted,
+  },
+  privacyTextActive: {
+    color: C.primary,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  privacyDesc: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: C.textMuted,
+    marginTop: 4,
+    lineHeight: 17,
   },
 });

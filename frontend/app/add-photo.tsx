@@ -16,7 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../constants/Colors';
 import { photoService } from '../services/photoService';
 import { friendService } from '../services/friendService';
-import { Friend } from '../types';
+import { Friend, PhotoPrivacy } from '../types';
 import { useToast } from '../hooks/useToast';
 import { WebCameraModal } from '../components/WebCameraModal';
 
@@ -29,6 +29,7 @@ export default function AddPhotoScreen() {
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
+  const [privacy, setPrivacy] = useState<PhotoPrivacy>('friends');
   const [friends, setFriends] = useState<Friend[]>([]);
   const [selectedRecipientId, setSelectedRecipientId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -116,7 +117,7 @@ export default function AddPhotoScreen() {
 
     setSubmitting(true);
     try {
-      await photoService.uploadPhoto(imageUri, caption, selectedRecipientId);
+      await photoService.uploadPhoto(imageUri, caption, selectedRecipientId, privacy);
       showToast('success', 'Đã đăng ảnh khoảnh khắc Locket thành công! 📸');
       setTimeout(() => {
         router.replace('/(tabs)');
@@ -245,9 +246,79 @@ export default function AddPhotoScreen() {
           />
         </View>
 
+        {/* Quyền riêng tư bài viết */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Quyền riêng tư bài viết</Text>
+          <View style={styles.privacyRow}>
+            <TouchableOpacity
+              style={[
+                styles.privacyOption,
+                privacy === 'public' && styles.privacyOptionActive,
+              ]}
+              onPress={() => setPrivacy('public')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.privacyIcon}>🌐</Text>
+              <Text
+                style={[
+                  styles.privacyText,
+                  privacy === 'public' && styles.privacyTextActive,
+                ]}
+              >
+                Công khai
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.privacyOption,
+                privacy === 'friends' && styles.privacyOptionActive,
+              ]}
+              onPress={() => setPrivacy('friends')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.privacyIcon}>👥</Text>
+              <Text
+                style={[
+                  styles.privacyText,
+                  privacy === 'friends' && styles.privacyTextActive,
+                ]}
+              >
+                Bạn bè coi
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.privacyOption,
+                privacy === 'private' && styles.privacyOptionActive,
+              ]}
+              onPress={() => setPrivacy('private')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.privacyIcon}>🔒</Text>
+              <Text
+                style={[
+                  styles.privacyText,
+                  privacy === 'private' && styles.privacyTextActive,
+                ]}
+              >
+                Riêng tư
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.privacyDesc}>
+            {privacy === 'public'
+              ? '🌐 Ai trên Masita cũng có thể xem và khám phá bài viết này.'
+              : privacy === 'friends'
+              ? '👥 Chỉ bạn bè đã kết bạn mới có thể xem bài viết này.'
+              : '🔒 Chỉ mình bạn mới có thể xem bài viết này (ẩn với tất cả).'}
+          </Text>
+        </View>
+
         {/* Audience / Recipient Selector */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Gửi tới bạn bè</Text>
+          <Text style={styles.label}>Gửi riêng tới bạn bè (Tùy chọn)</Text>
           {loadingFriends ? (
             <ActivityIndicator size="small" color={C.primary} style={{ alignSelf: 'flex-start' }} />
           ) : (
@@ -518,5 +589,46 @@ const styles = StyleSheet.create({
   },
   recipientTextActive: {
     color: C.primaryLight,
+  },
+  privacyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 6,
+  },
+  privacyOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    gap: 6,
+  },
+  privacyOptionActive: {
+    backgroundColor: `${C.primary}20`,
+    borderColor: C.primary,
+  },
+  privacyIcon: {
+    fontSize: 15,
+  },
+  privacyText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: C.textMuted,
+  },
+  privacyTextActive: {
+    color: C.primary,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  privacyDesc: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: C.textMuted,
+    marginTop: 4,
+    lineHeight: 17,
   },
 });

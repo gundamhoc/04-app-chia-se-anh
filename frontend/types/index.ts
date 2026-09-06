@@ -76,12 +76,15 @@ export interface PhotoReaction {
   user_reacted: boolean;
 }
 
+export type PhotoPrivacy = 'public' | 'friends' | 'private';
+
 export interface Photo {
   id: number;
   user_id: number;
   recipient_id: number | null;
   image_url: string;
   caption: string | null;
+  privacy?: PhotoPrivacy;
   created_at: string;
   author_name: string;
   author_username: string;

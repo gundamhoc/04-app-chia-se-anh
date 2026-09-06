@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import api from './api';
-import { ApiResponse, Photo, PhotoReaction } from '../types';
+import { ApiResponse, Photo, PhotoReaction, PhotoPrivacy } from '../types';
 import { compressImage } from '../utils/imageCompressor';
 
 export const photoService = {
@@ -19,7 +19,8 @@ export const photoService = {
   async uploadPhoto(
     imageUri: string,
     caption?: string,
-    recipientId?: number | null
+    recipientId?: number | null,
+    privacy: PhotoPrivacy = 'friends'
   ): Promise<Photo> {
     // Tự động nén và tối ưu hóa kích thước ảnh (giảm từ 10MB-30MB xuống ~500KB)
     let processedUri = imageUri;
@@ -88,6 +89,10 @@ export const photoService = {
       formData.append('recipient_id', recipientId.toString());
     }
 
+    if (privacy) {
+      formData.append('privacy', privacy);
+    }
+
     // Gửi multipart form mà không ép header cứng, để Axios & Runtime tự thêm boundary chuẩn
     const res = await api.post<ApiResponse<Photo>>('/photos/upload', formData, {
       timeout: 60000,
@@ -100,10 +105,15 @@ export const photoService = {
     return res.data.data;
   },
 
-  // Chỉnh sửa bài đăng (cập nhật chú thích/caption)
-  async updatePhoto(photoId: number, caption: string): Promise<{ id: number; caption: string }> {
-    const res = await api.put<ApiResponse<{ id: number; caption: string }>>(`/photos/${photoId}`, {
+  // Chỉnh sửa bài đăng (cập nhật chú thích/caption và quyền riêng tư)
+  async updatePhoto(
+    photoId: number,
+    caption: string,
+    privacy?: PhotoPrivacy
+  ): Promise<{ id: number; caption: string; privacy?: PhotoPrivacy }> {
+    const res = await api.put<ApiResponse<{ id: number; caption: string; privacy?: PhotoPrivacy }>>(`/photos/${photoId}`, {
       caption,
+      privacy,
     });
     if (!res.data.data) {
       throw new Error(res.data.message || 'Không thể cập nhật bài đăng.');
