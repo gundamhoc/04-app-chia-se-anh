@@ -114,5 +114,107 @@ export interface CommentItem {
   reactions?: CommentReaction[];
 }
 
+export interface Conversation {
+  friend_id: number;
+  friend_name: string;
+  friend_username: string;
+  friend_avatar: string | null;
+  last_message_id?: number | null;
+  last_message_text?: string | null;
+  last_message_image?: string | null;
+  last_message_file_url?: string | null;
+  last_message_file_name?: string | null;
+  last_message_sender_id?: number | null;
+  last_message_is_read?: boolean;
+  last_message_time?: string | null;
+  unread_count: number;
+  is_pinned?: boolean;
+  is_muted?: boolean;
+}
 
+export interface Message {
+  id: number;
+  sender_id: number;
+  receiver_id?: number | null;
+  group_id?: number | null;
+  message_text: string | null;
+  image_url: string | null;
+  file_url?: string | null;
+  file_name?: string | null;
+  file_size?: number | null;
+  file_type?: string | null;
+  is_read: boolean;
+  created_at: string;
+  sender_name?: string;
+  sender_avatar?: string | null;
+  is_mine: boolean;
+}
+
+export interface FileContentData {
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  content: string;
+}
+
+export interface ChatHistoryResponse {
+  friend: {
+    id: number;
+    full_name: string;
+    username: string;
+    avatar_url: string | null;
+  };
+  background_url?: string | null;
+  is_pinned?: boolean;
+  is_muted?: boolean;
+  messages: Message[];
+}
+
+export interface GroupMember {
+  id: number;
+  user_id: number;
+  role: 'admin' | 'member';
+  joined_at: string;
+  username: string;
+  full_name: string;
+  avatar_url: string | null;
+  is_me?: boolean;
+}
+
+export interface Group {
+  id: number;
+  name: string;
+  avatar_url: string | null;
+  background_url?: string | null;
+  creator_id: number;
+  my_role: 'admin' | 'member';
+  member_count: number;
+  is_pinned?: boolean;
+  is_muted?: boolean;
+  last_message?: {
+    id: number;
+    text: string | null;
+    image_url: string | null;
+    file_name: string | null;
+    file_url: string | null;
+    sender_id: number;
+    sender_name: string;
+    time: string;
+  } | null;
+  created_at: string;
+}
+
+export interface GroupDetail {
+  id: number;
+  name: string;
+  avatar_url: string | null;
+  background_url?: string | null;
+  creator_id: number;
+  created_at: string;
+  my_role: 'admin' | 'member';
+  member_count: number;
+  is_pinned?: boolean;
+  is_muted?: boolean;
+  members: GroupMember[];
+}
 

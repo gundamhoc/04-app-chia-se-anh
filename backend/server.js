@@ -11,6 +11,8 @@ const { initSocketHandler } = require('./src/sockets/socketHandler');
 const authRoutes = require('./src/routes/authRoutes');
 const friendRoutes = require('./src/routes/friendRoutes');
 const photoRoutes = require('./src/routes/photoRoutes');
+const messageRoutes = require('./src/routes/messageRoutes');
+const groupRoutes = require('./src/routes/groupRoutes');
 
 // ============================================================
 // Khởi tạo Express App
@@ -50,6 +52,8 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/friends', friendRoutes);
 app.use('/api/photos', photoRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/groups', groupRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

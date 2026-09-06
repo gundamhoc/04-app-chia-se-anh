@@ -41,6 +41,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="messages"
+        options={{
+          title: 'Trò chuyện',
+          tabBarIcon: ({ focused }) => <TabIcon icon="💬" label="Messages" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Hồ sơ',

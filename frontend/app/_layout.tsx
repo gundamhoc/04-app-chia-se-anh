@@ -61,6 +61,9 @@ export default function RootLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="add-photo" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="search" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
         </Stack>
       </ToastProvider>
     </SafeAreaProvider>

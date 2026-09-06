@@ -25,6 +25,7 @@ import { CommentModal } from '../../components/CommentModal';
 import { ShareModal } from '../../components/ShareModal';
 import { PostOptionsModal } from '../../components/PostOptionsModal';
 import { EditPostModal } from '../../components/EditPostModal';
+import { ImageViewerModal } from '../../components/ImageViewerModal';
 
 const C = Colors.dark;
 const EMOJIS = ['❤️', '🔥', '😂', '😮', '😢'];
@@ -46,6 +47,7 @@ export default function HomeScreen() {
   const [activeSharePhoto, setActiveSharePhoto] = useState<Photo | null>(null);
   const [activeOptionsPhoto, setActiveOptionsPhoto] = useState<Photo | null>(null);
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
+  const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<Photo | null>(null);
 
   const fetchFeed = useCallback(async () => {
     try {
@@ -258,8 +260,12 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Photo Image */}
-        <View style={styles.imageContainer}>
+        {/* Photo Image (Chạm để mở chế độ xem toàn màn hình và phóng to/thu nhỏ) */}
+        <TouchableOpacity
+          style={styles.imageContainer}
+          activeOpacity={0.92}
+          onPress={() => setSelectedViewerPhoto(item)}
+        >
           <Image
             source={{ uri: item.image_url }}
             style={styles.photoImage}
@@ -278,7 +284,7 @@ export default function HomeScreen() {
               </Text>
             </View>
           )}
-        </View>
+        </TouchableOpacity>
 
         {/* Caption */}
         {item.caption ? (
@@ -497,6 +503,13 @@ export default function HomeScreen() {
             prev.map((p) => (p.id === updated.id ? { ...p, caption: updated.caption } : p))
           );
         }}
+      />
+
+      {/* ImageViewerModal (Xem ảnh toàn màn hình & Phóng to / Thu nhỏ) */}
+      <ImageViewerModal
+        visible={!!selectedViewerPhoto}
+        photo={selectedViewerPhoto}
+        onClose={() => setSelectedViewerPhoto(null)}
       />
     </View>
   );

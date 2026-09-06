@@ -253,4 +253,61 @@ const updateAvatar = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getProfile, updateAvatar };
+// ============================================================
+// FORGOT PASSWORD
+// POST /api/auth/forgot-password
+// Body: { email }
+// ============================================================
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || !email.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Vui lòng nhập địa chỉ gmail của bạn.',
+    });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  try {
+    // 1. Kiểm tra email có tồn tại trong database (bảng users) hay không
+    const [users] = await pool.query(
+      'SELECT id, username, email, full_name FROM users WHERE LOWER(email) = ?',
+      [cleanEmail]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gmail đó không có trong hệ thống.',
+      });
+    }
+
+    const user = users[0];
+
+    // 2. Lưu lại thông tin yêu cầu của người dùng
+    await pool.query(
+      'INSERT INTO password_reset_requests (user_id, email, status) VALUES (?, ?, ?)',
+      [user.id, user.email, 'pending']
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Đã lưu lại thông tin, admin sẽ gửi mã cho bạn!',
+      data: {
+        email: user.email,
+        full_name: user.full_name,
+      },
+    });
+  } catch (error) {
+    console.error('ForgotPassword error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi xử lý yêu cầu quên mật khẩu.',
+    });
+  }
+};
+
+module.exports = { register, login, getProfile, updateAvatar, forgotPassword };
+
