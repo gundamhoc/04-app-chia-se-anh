@@ -11,6 +11,13 @@ const {
   changePassword,
   getPrivacySettings,
   updatePrivacySettings,
+  getSecurityStatus,
+  toggleTwoFactor,
+  toggleRememberLogin,
+  getLoginSessions,
+  revokeSession,
+  deleteAccount,
+  generateOtp,
 } = require('../controllers/authController');
 const { authMiddleware } = require('../middlewares/auth');
 const { handleUploadSingle } = require('../middlewares/upload');
@@ -28,5 +35,14 @@ router.put('/email', authMiddleware, updateEmail);
 router.put('/change-password', authMiddleware, changePassword);
 router.get('/privacy-settings', authMiddleware, getPrivacySettings);
 router.put('/privacy-settings', authMiddleware, updatePrivacySettings);
+
+// Security routes
+router.get('/security-status', authMiddleware, getSecurityStatus);
+router.put('/two-factor', authMiddleware, toggleTwoFactor);
+router.put('/remember-login', authMiddleware, toggleRememberLogin);
+router.get('/sessions', authMiddleware, getLoginSessions);
+router.delete('/sessions/:id', authMiddleware, revokeSession);
+router.delete('/account', authMiddleware, deleteAccount);
+router.post('/generate-otp', authMiddleware, generateOtp);
 
 module.exports = router;

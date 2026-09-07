@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,10 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import { Colors } from '../constants/Colors';
+import { ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 import { Photo } from '../types';
-
-const C = Colors.dark;
+import { useI18n } from '../utils/i18n';
 
 interface PostOptionsModalProps {
   visible: boolean;
@@ -27,6 +27,10 @@ export const PostOptionsModal: React.FC<PostOptionsModalProps> = ({
   onEdit,
   onDelete,
 }) => {
+  const { colors: C, isDark } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
+
   if (!photo) return null;
 
   return (
@@ -38,7 +42,7 @@ export const PostOptionsModal: React.FC<PostOptionsModalProps> = ({
           {/* Header Drag Bar & Title */}
           <View style={styles.header}>
             <View style={styles.dragBar} />
-            <Text style={styles.headerTitle}>Tùy chọn bài viết</Text>
+            <Text style={styles.headerTitle}>{t('post_options')}</Text>
           </View>
 
           {/* Options List */}
@@ -56,8 +60,8 @@ export const PostOptionsModal: React.FC<PostOptionsModalProps> = ({
                 <Text style={styles.optionIcon}>✏️</Text>
               </View>
               <View style={styles.optionTextBox}>
-                <Text style={styles.optionTitle}>Chỉnh sửa bài đăng</Text>
-                <Text style={styles.optionSubtitle}>Thay đổi chú thích, mô tả khoảnh khắc</Text>
+                <Text style={styles.optionTitle}>{t('edit_post')}</Text>
+                <Text style={styles.optionSubtitle}>{t('edit_post_desc')}</Text>
               </View>
             </TouchableOpacity>
 
@@ -74,15 +78,15 @@ export const PostOptionsModal: React.FC<PostOptionsModalProps> = ({
                 <Text style={styles.optionIcon}>🗑️</Text>
               </View>
               <View style={styles.optionTextBox}>
-                <Text style={[styles.optionTitle, { color: C.error }]}>Xóa bài đăng</Text>
-                <Text style={styles.optionSubtitle}>Gỡ bức ảnh khoảnh khắc này khỏi bảng tin</Text>
+                <Text style={[styles.optionTitle, { color: C.error }]}>{t('delete_post')}</Text>
+                <Text style={styles.optionSubtitle}>{t('delete_post_desc')}</Text>
               </View>
             </TouchableOpacity>
           </View>
 
           {/* Nút Đóng */}
           <TouchableOpacity style={styles.cancelBtn} onPress={onClose} activeOpacity={0.8}>
-            <Text style={styles.cancelBtnText}>Đóng</Text>
+            <Text style={styles.cancelBtnText}>{t('close')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -90,7 +94,7 @@ export const PostOptionsModal: React.FC<PostOptionsModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.65)',
@@ -100,13 +104,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetCard: {
-    backgroundColor: '#181828',
+    backgroundColor: C.card,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === 'ios' ? 32 : 18,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: C.border,
   },
   header: {
     alignItems: 'center',
@@ -125,7 +129,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   optionsList: {
     paddingVertical: 8,
@@ -155,7 +159,7 @@ const styles = StyleSheet.create({
   optionTitle: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 2,
   },
   optionSubtitle: {
@@ -165,7 +169,9 @@ const styles = StyleSheet.create({
   },
   cancelBtn: {
     marginTop: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     borderRadius: 18,
     paddingVertical: 13,
     alignItems: 'center',
@@ -174,6 +180,6 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -16,20 +16,21 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Colors } from '../../constants/Colors';
+import { ColorScheme } from '../../constants/Colors';
+import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
 import { useToast } from '../../hooks/useToast';
+import { useI18n } from '../../utils/i18n';
 import { groupService } from '../../services/groupService';
 import { friendService } from '../../services/friendService';
 import { messageService } from '../../services/messageService';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { FileViewerModal } from '../../components/FileViewerModal';
 import { Message, GroupDetail, Friend, Photo } from '../../types';
-
-const C = Colors.dark;
 
 const PRESET_THEMES = [
   { id: 'cosmic', name: 'Vũ trụ huyền ảo', url: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000&auto=format&fit=crop' },
@@ -45,6 +46,9 @@ export default function GroupChatScreen() {
   const { user } = useAuth();
   const { socket } = useSocket();
   const { showToast, ToastComponent } = useToast();
+  const { colors: C, isDark } = useTheme();
+  const { t, language } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
   const params = useLocalSearchParams<{ id: string }>();
   const groupId = parseInt(params.id, 10);
 
@@ -671,7 +675,7 @@ export default function GroupChatScreen() {
         >
           {/* Tên người gửi trong nhóm (đối với tin nhắn của người khác) */}
           {!isMine && (
-            <Text style={styles.senderNameTag}>{item.sender_name || 'Thành viên'}</Text>
+            <Text style={styles.senderNameTag}>{item.sender_name || t('group_member')}</Text>
           )}
 
           {/* Trường hợp: Tin nhắn là ảnh */}
@@ -685,7 +689,7 @@ export default function GroupChatScreen() {
               />
               <View style={styles.imageMetaBadge}>
                 <View style={styles.imageMetaLeft}>
-                  <Text style={styles.imageZoomHint}>🔍 Phóng to</Text>
+                  <Text style={styles.imageZoomHint}>🔍 {t('zoom_hint')}</Text>
                   {item.file_size ? <Text style={styles.imageSizeText}>• {formatFileSize(item.file_size)}</Text> : null}
                 </View>
                 {item.file_url && (
@@ -702,23 +706,38 @@ export default function GroupChatScreen() {
 
           {/* Trường hợp: Tin nhắn là tệp tin */}
           {!isImg && hasFile && (
-            <TouchableOpacity style={styles.fileCard} activeOpacity={0.8} onPress={() => handleFilePress(item)}>
-              <View style={styles.fileCardIconBox}>
+            <TouchableOpacity
+              style={[styles.fileCard, isMine ? styles.fileCardMine : styles.fileCardOther]}
+              activeOpacity={0.8}
+              onPress={() => handleFilePress(item)}
+            >
+              <View style={[styles.fileCardIconBox, isMine ? styles.fileCardIconBoxMine : styles.fileCardIconBoxOther]}>
                 <Text style={styles.fileCardEmoji}>{getFileEmoji(item.file_name)}</Text>
               </View>
               <View style={styles.fileCardInfo}>
-                <Text style={styles.fileCardName} numberOfLines={1}>{item.file_name || 'Tệp tin đính kèm'}</Text>
+                <Text
+                  style={[styles.fileCardName, isMine ? styles.fileCardNameMine : styles.fileCardNameOther]}
+                  numberOfLines={1}
+                >
+                  {item.file_name || t('readable_file')}
+                </Text>
                 <View style={styles.fileCardMetaRow}>
-                  {item.file_size ? <Text style={styles.fileCardSize}>{formatFileSize(item.file_size)}</Text> : null}
+                  {item.file_size ? (
+                    <Text style={[styles.fileCardSize, isMine ? styles.fileCardSizeMine : styles.fileCardSizeOther]}>
+                      {formatFileSize(item.file_size)}
+                    </Text>
+                  ) : null}
                   {isReadableTextOrCode(item) && (
-                    <View style={styles.readableBadge}>
-                      <Text style={styles.readableBadgeText}>📖 Có thể đọc</Text>
+                    <View style={[styles.readableBadge, isMine ? styles.readableBadgeMine : styles.readableBadgeOther]}>
+                      <Text style={[styles.readableBadgeText, isMine ? styles.readableBadgeTextMine : styles.readableBadgeTextOther]}>
+                        📖 {t('readable_file')}
+                      </Text>
                     </View>
                   )}
                 </View>
               </View>
               <TouchableOpacity
-                style={styles.fileCardDownloadBtn}
+                style={[styles.fileCardDownloadBtn, isMine ? styles.fileCardDownloadBtnMine : styles.fileCardDownloadBtnOther]}
                 onPress={() => handleDownload(item.file_url!, item.file_name || 'file')}
               >
                 <Text style={styles.downloadEmoji}>⬇️</Text>
@@ -735,7 +754,7 @@ export default function GroupChatScreen() {
 
           {/* Giờ gửi */}
           <Text style={[styles.msgTime, isMine ? styles.msgTimeMine : styles.msgTimeOther]}>
-            {item.created_at ? new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
+            {item.created_at ? new Date(item.created_at).toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' }) : ''}
           </Text>
         </View>
       </View>
@@ -744,6 +763,7 @@ export default function GroupChatScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <ToastComponent />
 
       {/* Header */}
@@ -766,12 +786,12 @@ export default function GroupChatScreen() {
             <View style={styles.headerTitleRow}>
               {isPinned && <Text style={styles.headerPinIcon}>📌</Text>}
               <Text style={styles.groupTitleText} numberOfLines={1}>
-                {group?.name || 'Nhóm trò chuyện'}
+                {group?.name || t('group_chat_section')}
               </Text>
               {isMuted && <Text style={styles.headerMuteIcon}>🔕</Text>}
             </View>
             <Text style={styles.groupSubText}>
-              👥 {group?.member_count || 1} thành viên
+              👥 {group?.member_count || 1} {t('members')}
             </Text>
           </View>
         </TouchableOpacity>
@@ -796,7 +816,7 @@ export default function GroupChatScreen() {
           <Text style={styles.chatSearchIcon}>🔍</Text>
           <TextInput
             style={styles.chatSearchInput}
-            placeholder="Tìm tin nhắn hoặc tệp tin trong nhóm..."
+            placeholder={t('search_in_group')}
             placeholderTextColor={C.textMuted}
             value={searchKeyword}
             onChangeText={handleSearchChange}
@@ -810,7 +830,7 @@ export default function GroupChatScreen() {
             </View>
           ) : searchKeyword.trim().length > 0 ? (
             <View style={styles.searchMatchCounter}>
-              <Text style={[styles.searchMatchText, { color: '#FF7070' }]}>0 kết quả</Text>
+              <Text style={[styles.searchMatchText, { color: '#FF7070' }]}>0 {t('zero_results')}</Text>
             </View>
           ) : null}
           {searchMatches.length > 0 && (
@@ -862,7 +882,7 @@ export default function GroupChatScreen() {
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={C.primary} />
-            <Text style={styles.loadingText}>Đang tải tin nhắn nhóm...</Text>
+            <Text style={styles.loadingText}>{t('loading')}</Text>
           </View>
         ) : (
           <FlatList
@@ -878,8 +898,8 @@ export default function GroupChatScreen() {
             ListEmptyComponent={
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyIcon}>👥✨</Text>
-                <Text style={styles.emptyTitle}>Chào mừng đến nhóm chat!</Text>
-                <Text style={styles.emptyDesc}>Gửi lời chào đầu tiên tới tất cả các thành viên nào.</Text>
+                <Text style={styles.emptyTitle}>{t('welcome_chat_title')}</Text>
+                <Text style={styles.emptyDesc}>{t('welcome_chat_desc')}</Text>
               </View>
             }
           />
@@ -888,7 +908,7 @@ export default function GroupChatScreen() {
         {/* Typing Banner */}
         {Boolean(typingUser) && (
           <View style={styles.typingBanner}>
-            <Text style={styles.typingBannerText}>{typingUser} đang soạn tin... ✍️</Text>
+            <Text style={styles.typingBannerText}>{typingUser} {t('typing_status')}</Text>
           </View>
         )}
 
@@ -919,21 +939,21 @@ export default function GroupChatScreen() {
               <View style={[styles.plusMenuIconBox, { backgroundColor: '#FF6B6B' }]}>
                 <Text style={styles.plusMenuEmoji}>📷</Text>
               </View>
-              <Text style={styles.plusMenuLabel}>Chụp ảnh</Text>
+              <Text style={styles.plusMenuLabel}>{t('take_photo')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.plusMenuItem} onPress={handlePickLibrary}>
               <View style={[styles.plusMenuIconBox, { backgroundColor: '#4ECDC4' }]}>
                 <Text style={styles.plusMenuEmoji}>🖼️</Text>
               </View>
-              <Text style={styles.plusMenuLabel}>Thư viện ảnh</Text>
+              <Text style={styles.plusMenuLabel}>{t('photo_library')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.plusMenuItem} onPress={handlePickDocument}>
               <View style={[styles.plusMenuIconBox, { backgroundColor: '#6C63FF' }]}>
                 <Text style={styles.plusMenuEmoji}>📁</Text>
               </View>
-              <Text style={styles.plusMenuLabel}>Tệp tin</Text>
+              <Text style={styles.plusMenuLabel}>{t('choose_file')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -949,7 +969,7 @@ export default function GroupChatScreen() {
 
           <TextInput
             style={styles.chatInput}
-            placeholder="Nhắn tin trong nhóm..."
+            placeholder={t('type_group_message')}
             placeholderTextColor="#8A8A9E"
             value={inputText}
             onChangeText={handleTyping}
@@ -1003,7 +1023,7 @@ export default function GroupChatScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.infoModalCard}>
             <View style={styles.infoModalHeader}>
-              <Text style={styles.infoModalTitle}>Thông tin nhóm 👥</Text>
+              <Text style={styles.infoModalTitle}>{t('group_info')} 👥</Text>
               <TouchableOpacity onPress={() => setInfoModalVisible(false)}>
                 <Text style={styles.infoModalClose}>✕</Text>
               </TouchableOpacity>
@@ -1033,7 +1053,7 @@ export default function GroupChatScreen() {
                 </TouchableOpacity>
               </View>
               <Text style={styles.groupBannerName}>{group?.name}</Text>
-              <Text style={styles.groupBannerCount}>{group?.member_count} thành viên</Text>
+              <Text style={styles.groupBannerCount}>{group?.member_count} {t('members')}</Text>
             </View>
 
             {/* Quick Controls: Tìm kiếm, Ghim & Thông báo */}
@@ -1049,7 +1069,7 @@ export default function GroupChatScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={styles.groupQuickIcon}>🔍</Text>
-                <Text style={styles.groupQuickText}>Tìm kiếm</Text>
+                <Text style={styles.groupQuickText}>{t('search')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1058,7 +1078,7 @@ export default function GroupChatScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={styles.groupQuickIcon}>📌</Text>
-                <Text style={styles.groupQuickText}>{isPinned ? 'Đã ghim' : 'Ghim nhóm'}</Text>
+                <Text style={styles.groupQuickText}>{isPinned ? t('pinned') : t('pin_group')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1067,17 +1087,17 @@ export default function GroupChatScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={styles.groupQuickIcon}>{isMuted ? '🔕' : '🔔'}</Text>
-                <Text style={styles.groupQuickText}>{isMuted ? 'Đã tắt TB' : 'Bật TB'}</Text>
+                <Text style={styles.groupQuickText}>{isMuted ? t('muted_status') : t('unmuted_status')}</Text>
               </TouchableOpacity>
             </View>
 
             {/* Theme & Hình nền nhóm */}
             <View style={styles.themeSection}>
               <View style={styles.themeSectionHeader}>
-                <Text style={styles.themeSectionTitle}>🎨 Theme & Hình nền nhóm</Text>
+                <Text style={styles.themeSectionTitle}>🎨 {t('theme_and_wallpaper')}</Text>
                 {Boolean(group?.background_url) && (
                   <TouchableOpacity onPress={handleRemoveBackground} disabled={updatingBackground}>
-                    <Text style={styles.themeRemoveBtnText}>Gỡ nền</Text>
+                    <Text style={styles.themeRemoveBtnText}>{t('remove_wallpaper')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1090,7 +1110,7 @@ export default function GroupChatScreen() {
                   disabled={updatingBackground}
                 >
                   <Text style={styles.themeBtnIcon}>📷</Text>
-                  <Text style={styles.themeBtnText}>Chụp ảnh</Text>
+                  <Text style={styles.themeBtnText}>{t('take_photo')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1099,12 +1119,12 @@ export default function GroupChatScreen() {
                   disabled={updatingBackground}
                 >
                   <Text style={styles.themeBtnIcon}>🖼️</Text>
-                  <Text style={styles.themeBtnText}>Thư viện</Text>
+                  <Text style={styles.themeBtnText}>{t('photo_library')}</Text>
                 </TouchableOpacity>
               </View>
 
               {/* Bộ sưu tập Preset Themes */}
-              <Text style={styles.presetLabel}>Gợi ý hình nền nổi bật:</Text>
+              <Text style={styles.presetLabel}>{t('featured_wallpapers')}</Text>
               <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -1134,9 +1154,9 @@ export default function GroupChatScreen() {
             </View>
 
             <View style={styles.membersSectionHeader}>
-              <Text style={styles.membersSectionTitle}>Danh sách thành viên ({group?.members.length})</Text>
+              <Text style={styles.membersSectionTitle}>{t('member_list')} ({group?.members.length})</Text>
               <TouchableOpacity style={styles.addMemberBtn} onPress={openAddMemberModal}>
-                <Text style={styles.addMemberBtnText}>＋ Thêm</Text>
+                <Text style={styles.addMemberBtnText}>{t('add_member')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1157,7 +1177,7 @@ export default function GroupChatScreen() {
                   <View style={styles.memberInfo}>
                     <Text style={styles.memberName}>{item.full_name || item.username}</Text>
                     <Text style={styles.memberRole}>
-                      {item.role === 'admin' ? '👑 Trưởng nhóm' : 'Thành viên'}
+                      {item.role === 'admin' ? t('group_admin') : t('group_member')}
                     </Text>
                   </View>
 
@@ -1167,7 +1187,7 @@ export default function GroupChatScreen() {
                       style={styles.kickMemberBtn}
                       onPress={() => handleRemoveOrLeave(item.user_id, false)}
                     >
-                      <Text style={styles.kickMemberBtnText}>Xóa</Text>
+                      <Text style={styles.kickMemberBtnText}>{t('delete')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -1179,7 +1199,7 @@ export default function GroupChatScreen() {
               style={styles.leaveGroupBtn}
               onPress={() => handleRemoveOrLeave(user?.id || 0, true)}
             >
-              <Text style={styles.leaveGroupBtnText}>🚪 Rời khỏi nhóm</Text>
+              <Text style={styles.leaveGroupBtnText}>{t('leave_group')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1189,7 +1209,7 @@ export default function GroupChatScreen() {
       <Modal visible={avatarActionModalVisible} transparent animationType="fade" onRequestClose={() => setAvatarActionModalVisible(false)}>
         <TouchableOpacity style={styles.actionSheetOverlay} activeOpacity={1} onPress={() => setAvatarActionModalVisible(false)}>
           <View style={styles.actionSheetCard}>
-            <Text style={styles.actionSheetTitle}>Đổi ảnh đại diện nhóm 👥</Text>
+            <Text style={styles.actionSheetTitle}>{t('change_group_avatar')}</Text>
             <TouchableOpacity
               style={styles.actionSheetRow}
               onPress={() => {
@@ -1198,7 +1218,7 @@ export default function GroupChatScreen() {
               }}
             >
               <Text style={styles.actionSheetRowIcon}>📷</Text>
-              <Text style={styles.actionSheetRowText}>Chụp ảnh mới bằng máy ảnh</Text>
+              <Text style={styles.actionSheetRowText}>{t('take_new_photo_camera')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1209,14 +1229,14 @@ export default function GroupChatScreen() {
               }}
             >
               <Text style={styles.actionSheetRowIcon}>🖼️</Text>
-              <Text style={styles.actionSheetRowText}>Chọn ảnh từ thư viện / thư mục</Text>
+              <Text style={styles.actionSheetRowText}>{t('choose_photo_library')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.actionSheetRow, { justifyContent: 'center', borderTopWidth: 1, borderColor: '#2A2A3E', marginTop: 4 }]}
               onPress={() => setAvatarActionModalVisible(false)}
             >
-              <Text style={{ color: '#8A8A9E', fontSize: 14, fontWeight: '600' }}>Hủy bỏ</Text>
+              <Text style={{ color: '#8A8A9E', fontSize: 14, fontWeight: '600' }}>{t('cancel')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -1227,7 +1247,7 @@ export default function GroupChatScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.infoModalCard}>
             <View style={styles.infoModalHeader}>
-              <Text style={styles.infoModalTitle}>Thêm bạn bè vào nhóm</Text>
+              <Text style={styles.infoModalTitle}>{t('add_friends_to_group')}</Text>
               <TouchableOpacity onPress={() => setAddMemberModalVisible(false)}>
                 <Text style={styles.infoModalClose}>✕</Text>
               </TouchableOpacity>
@@ -1239,7 +1259,7 @@ export default function GroupChatScreen() {
               style={{ maxHeight: 280 }}
               ListEmptyComponent={
                 <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: '#8A8A9E' }}>Tất cả bạn bè đã có trong nhóm!</Text>
+                  <Text style={{ color: '#8A8A9E' }}>{t('all_friends_in_group')}</Text>
                 </View>
               }
               renderItem={({ item }) => {
@@ -1278,7 +1298,7 @@ export default function GroupChatScreen() {
               {addingMembers ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                <Text style={styles.confirmAddBtnText}>Thêm ({selectedNewFriendIds.length}) bạn bè</Text>
+                <Text style={styles.confirmAddBtnText}>{t('add_selected_friends')} ({selectedNewFriendIds.length})</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -1288,7 +1308,7 @@ export default function GroupChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
@@ -1298,21 +1318,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 12,
-    backgroundColor: C.surface,
+    backgroundColor: C.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#202030',
+    borderBottomColor: C.border,
   },
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#202030',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
   },
   backBtnText: {
-    color: '#FFF',
+    color: C.text,
     fontSize: 26,
     lineHeight: 28,
   },
@@ -1325,7 +1347,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#2A2A3E',
+    backgroundColor: C.separator,
     marginRight: 10,
   },
   headerTextGroup: {
@@ -1338,20 +1360,22 @@ const styles = StyleSheet.create({
   },
   groupSubText: {
     fontSize: 12,
-    color: '#8A8A9E',
+    color: C.textMuted,
     marginTop: 2,
   },
   infoActionBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#26263A',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   infoActionBtnActive: {
-    backgroundColor: '#302E4A',
+    backgroundColor: `${C.primary}25`,
     borderWidth: 1,
     borderColor: C.primary,
   },
@@ -1443,7 +1467,9 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   bubbleOther: {
-    backgroundColor: '#202030',
+    backgroundColor: isDark ? '#202030' : C.card,
+    borderWidth: isDark ? 0 : 1,
+    borderColor: C.border,
     borderBottomLeftRadius: 4,
   },
   senderNameTag: {
@@ -1514,54 +1540,97 @@ const styles = StyleSheet.create({
   fileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#181826',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 10,
     marginBottom: 6,
+    borderWidth: 1,
+  },
+  fileCardMine: {
+    backgroundColor: 'rgba(0, 0, 0, 0.24)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  fileCardOther: {
+    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.3)' : '#F1F5F9',
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
   },
   fileCardIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#26263A',
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
   },
+  fileCardIconBoxMine: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  fileCardIconBoxOther: {
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+  },
   fileCardEmoji: {
-    fontSize: 18,
+    fontSize: 20,
   },
   fileCardInfo: {
     flex: 1,
+    marginRight: 6,
   },
   fileCardName: {
     fontSize: 13,
-    fontWeight: '600',
-    color: C.text,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 2,
+  },
+  fileCardNameMine: {
+    color: '#FFFFFF',
+  },
+  fileCardNameOther: {
+    color: isDark ? '#FFFFFF' : '#0F172A',
   },
   fileCardMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     marginTop: 2,
   },
   fileCardSize: {
     fontSize: 11,
-    color: '#8A8A9E',
+    fontFamily: 'Inter_400Regular',
+  },
+  fileCardSizeMine: {
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  fileCardSizeOther: {
+    color: isDark ? '#8A8A9E' : '#64748B',
   },
   readableBadge: {
-    backgroundColor: 'rgba(108, 99, 255, 0.2)',
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 1,
     borderRadius: 6,
-    marginLeft: 6,
+  },
+  readableBadgeMine: {
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  readableBadgeOther: {
+    backgroundColor: isDark ? 'rgba(108, 99, 255, 0.2)' : 'rgba(108, 99, 255, 0.12)',
   },
   readableBadgeText: {
     fontSize: 10,
-    color: '#9C95FF',
-    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
+  },
+  readableBadgeTextMine: {
+    color: '#FFFFFF',
+  },
+  readableBadgeTextOther: {
+    color: isDark ? '#B4AFFF' : '#6C63FF',
   },
   fileCardDownloadBtn: {
     padding: 6,
+    borderRadius: 8,
+  },
+  fileCardDownloadBtnMine: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  fileCardDownloadBtnOther: {
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
   },
   downloadEmoji: {
     fontSize: 16,
@@ -1570,10 +1639,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#1C1C2C',
+    paddingVertical: 10,
+    backgroundColor: C.card,
     borderTopWidth: 1,
-    borderTopColor: '#26263A',
+    borderTopColor: C.border,
   },
   previewThumbBox: {
     position: 'relative',
@@ -1608,12 +1677,13 @@ const styles = StyleSheet.create({
   },
   previewName: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
     color: C.text,
   },
   previewSize: {
     fontSize: 11,
-    color: '#8A8A9E',
+    fontFamily: 'Inter_400Regular',
+    color: C.textMuted,
     marginTop: 2,
   },
   plusMenuPopup: {
@@ -1648,15 +1718,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: C.surface,
+    backgroundColor: C.card,
     borderTopWidth: 1,
-    borderTopColor: '#202030',
+    borderTopColor: C.border,
   },
   plusBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#202030',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
@@ -1665,7 +1737,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   plusBtnText: {
-    color: '#A0A0B2',
+    color: C.textMuted,
     fontSize: 22,
     lineHeight: 24,
   },
@@ -1674,11 +1746,13 @@ const styles = StyleSheet.create({
   },
   chatInput: {
     flex: 1,
-    backgroundColor: '#181826',
+    backgroundColor: C.inputBg,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
     color: C.text,
+    borderWidth: 1,
+    borderColor: C.border,
     fontSize: 14,
     maxHeight: 90,
   },
@@ -1704,11 +1778,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   infoModalCard: {
-    backgroundColor: C.surface,
+    backgroundColor: isDark ? '#1A1A2E' : '#F8FAFC',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
     maxHeight: '85%',
+    borderWidth: isDark ? 0 : 1,
+    borderColor: C.border,
   },
   infoModalHeader: {
     flexDirection: 'row',
@@ -1722,7 +1798,7 @@ const styles = StyleSheet.create({
     color: C.text,
   },
   infoModalClose: {
-    color: '#8A8A9E',
+    color: C.textMuted,
     fontSize: 20,
     paddingHorizontal: 8,
   },
@@ -1730,7 +1806,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#202030',
+    borderBottomColor: C.border,
     marginBottom: 14,
   },
   groupBannerAvatar: {
@@ -1746,7 +1822,7 @@ const styles = StyleSheet.create({
   },
   groupBannerCount: {
     fontSize: 13,
-    color: '#8A8A9E',
+    color: C.textMuted,
     marginTop: 2,
   },
   membersSectionHeader: {
@@ -1761,7 +1837,7 @@ const styles = StyleSheet.create({
     color: C.text,
   },
   addMemberBtn: {
-    backgroundColor: 'rgba(108, 99, 255, 0.15)',
+    backgroundColor: isDark ? 'rgba(108, 99, 255, 0.15)' : 'rgba(108, 99, 255, 0.12)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1774,27 +1850,28 @@ const styles = StyleSheet.create({
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A28',
+    borderBottomColor: isDark ? '#26263A' : '#E2E8F0',
   },
   memberAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     marginRight: 10,
+    backgroundColor: C.surface,
   },
   memberInfo: {
     flex: 1,
   },
   memberName: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
     color: C.text,
   },
   memberRole: {
-    fontSize: 11,
-    color: '#8A8A9E',
+    fontSize: 12,
+    color: C.textMuted,
     marginTop: 2,
   },
   kickMemberBtn: {
@@ -1812,11 +1889,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 82, 82, 0.12)',
+    backgroundColor: isDark ? 'rgba(255, 82, 82, 0.12)' : '#FEE2E2',
     alignItems: 'center',
   },
   leaveGroupBtnText: {
-    color: '#FF5252',
+    color: isDark ? '#FF5252' : '#DC2626',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1825,7 +1902,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#4A4A62',
+    borderColor: isDark ? '#4A4A62' : '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1861,18 +1938,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#161622',
+    borderColor: isDark ? '#161622' : '#FFFFFF',
   },
   avatarCameraIcon: {
     fontSize: 12,
   },
   themeSection: {
-    backgroundColor: '#161622',
+    backgroundColor: isDark ? '#161622' : '#FFFFFF',
     borderRadius: 14,
-    padding: 12,
+    padding: 14,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#262638',
+    borderColor: isDark ? '#262638' : '#E2E8F0',
   },
   themeSectionHeader: {
     flexDirection: 'row',
@@ -1883,7 +1960,7 @@ const styles = StyleSheet.create({
   themeSectionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : '#0F172A',
   },
   themeRemoveBtnText: {
     fontSize: 12,
@@ -1900,24 +1977,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#202030',
+    backgroundColor: isDark ? '#202030' : '#F1F5F9',
     paddingVertical: 10,
     borderRadius: 10,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#2E2E42',
+    borderColor: isDark ? '#2E2E42' : '#E2E8F0',
   },
   themeBtnIcon: {
     fontSize: 16,
   },
   themeBtnText: {
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : '#0F172A',
     fontSize: 13,
     fontWeight: '600',
   },
   presetLabel: {
     fontSize: 12,
-    color: '#8A8A9E',
+    color: isDark ? '#8A8A9E' : '#64748B',
     marginBottom: 6,
   },
   presetItem: {
@@ -1927,7 +2004,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: 'transparent',
-    backgroundColor: '#1C1C2A',
+    backgroundColor: isDark ? '#1C1C2A' : '#F1F5F9',
     position: 'relative',
   },
   presetItemActive: {
@@ -1940,7 +2017,7 @@ const styles = StyleSheet.create({
   },
   presetTitle: {
     fontSize: 10,
-    color: '#D0D0E0',
+    color: isDark ? '#D0D0E0' : '#334155',
     textAlign: 'center',
     paddingHorizontal: 2,
     paddingVertical: 4,
@@ -1959,22 +2036,22 @@ const styles = StyleSheet.create({
   },
   actionSheetOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.65)' : 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'flex-end',
     padding: 16,
   },
   actionSheetCard: {
-    backgroundColor: '#1E1E2D',
+    backgroundColor: isDark ? '#1E1E2D' : '#FFFFFF',
     borderRadius: 20,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#2E2E42',
+    borderColor: isDark ? '#2E2E42' : '#E2E8F0',
     gap: 10,
   },
   actionSheetTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : '#0F172A',
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -1983,15 +2060,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 13,
     paddingHorizontal: 16,
-    backgroundColor: '#262638',
+    backgroundColor: isDark ? '#262638' : '#F8FAFC',
     borderRadius: 12,
+    borderWidth: isDark ? 0 : 1,
+    borderColor: isDark ? 'transparent' : '#E2E8F0',
     gap: 12,
   },
   actionSheetRowIcon: {
     fontSize: 20,
   },
   actionSheetRowText: {
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : '#0F172A',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -2004,7 +2083,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#26263A',
+    backgroundColor: isDark ? '#26263A' : '#F1F5F9',
+    borderWidth: isDark ? 0 : 1,
+    borderColor: isDark ? 'transparent' : '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2012,7 +2093,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   headerIconBtnPinned: {
-    backgroundColor: 'rgba(108, 99, 255, 0.35)',
+    backgroundColor: isDark ? 'rgba(108, 99, 255, 0.35)' : 'rgba(108, 99, 255, 0.15)',
     borderWidth: 1,
     borderColor: C.primary,
   },
@@ -2034,11 +2115,11 @@ const styles = StyleSheet.create({
   chatSearchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1E2D',
+    backgroundColor: isDark ? '#1E1E2D' : '#F8FAFC',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#2C2C40',
+    borderBottomColor: isDark ? '#2C2C40' : '#E2E8F0',
     gap: 8,
   },
   chatSearchIcon: {
@@ -2046,20 +2127,20 @@ const styles = StyleSheet.create({
   },
   chatSearchInput: {
     flex: 1,
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : '#0F172A',
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
     paddingVertical: 4,
   },
   searchMatchCounter: {
-    backgroundColor: '#28283E',
+    backgroundColor: isDark ? '#28283E' : '#E2E8F0',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
   },
   searchMatchText: {
     fontSize: 11,
-    color: '#D0D0E0',
+    color: isDark ? '#D0D0E0' : '#475569',
     fontWeight: '600',
   },
   searchNavButtons: {
@@ -2070,20 +2151,20 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#2A2A3E',
+    backgroundColor: isDark ? '#2A2A3E' : '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
   searchNavArrow: {
     fontSize: 11,
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : '#0F172A',
     fontWeight: '700',
   },
   closeSearchBtn: {
     padding: 4,
   },
   closeSearchText: {
-    color: '#8A8A9E',
+    color: C.textMuted,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -2106,26 +2187,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#202030',
+    backgroundColor: isDark ? '#202030' : '#FFFFFF',
     paddingVertical: 10,
     borderRadius: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#2E2E42',
+    borderColor: isDark ? '#2E2E42' : '#E2E8F0',
   },
   groupQuickBtnActive: {
-    backgroundColor: 'rgba(108, 99, 255, 0.25)',
+    backgroundColor: isDark ? 'rgba(108, 99, 255, 0.25)' : 'rgba(108, 99, 255, 0.12)',
     borderColor: C.primary,
   },
   groupQuickBtnMuted: {
-    backgroundColor: 'rgba(255, 82, 82, 0.15)',
-    borderColor: 'rgba(255, 82, 82, 0.3)',
+    backgroundColor: isDark ? 'rgba(255, 82, 82, 0.15)' : '#FEE2E2',
+    borderColor: isDark ? 'rgba(255, 82, 82, 0.3)' : '#FECACA',
   },
   groupQuickIcon: {
     fontSize: 16,
   },
   groupQuickText: {
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : '#0F172A',
     fontSize: 13,
     fontWeight: '600',
   },

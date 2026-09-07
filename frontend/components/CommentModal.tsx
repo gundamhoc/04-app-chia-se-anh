@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,13 +13,14 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { Colors } from '../constants/Colors';
+import { ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 import { CommentItem, CommentReaction } from '../types';
 import { commentService } from '../services/commentService';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
+import { useI18n } from '../utils/i18n';
 
-const C = Colors.dark;
 const VALID_EMOJIS = ['❤️', '🔥', '😂', '😮', '😢'];
 
 interface CommentModalProps {
@@ -37,6 +38,9 @@ export const CommentModal: React.FC<CommentModalProps> = ({
 }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const { colors: C, isDark } = useTheme();
+  const { t, formatTime } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
 
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +73,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       setComments(data);
       onCommentCountChange?.(pId, data.length);
     } catch (e: any) {
-      showToast('error', e.message || 'Không thể tải danh sách bình luận.');
+      showToast('error', e.message || t('load_comments_error'));
     } finally {
       setLoading(false);
     }
@@ -95,7 +99,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       setInputText('');
       setReplyingTo(null);
     } catch (e: any) {
-      showToast('error', e.message || 'Gửi bình luận thất bại.');
+      showToast('error', e.message || t('send_comment_error'));
     } finally {
       setSubmitting(false);
     }
@@ -110,20 +114,20 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         if (photoId) {
           onCommentCountChange?.(photoId, updated.length);
         }
-        showToast('info', 'Đã xóa bình luận.');
+        showToast('info', t('delete_comment_success'));
       } catch (e: any) {
-        showToast('error', e.message || 'Xóa bình luận thất bại.');
+        showToast('error', e.message || t('delete_comment_error'));
       }
     };
 
     if (Platform.OS === 'web') {
-      if (window.confirm('Bạn có chắc muốn xóa bình luận này?')) {
+      if (window.confirm(t('delete_comment_confirm'))) {
         await doDelete();
       }
     } else {
-      Alert.alert('Xóa bình luận', 'Bạn có chắc muốn xóa bình luận này?', [
-        { text: 'Hủy', style: 'cancel' },
-        { text: 'Xóa', style: 'destructive', onPress: doDelete },
+      Alert.alert(t('delete_comment_title'), t('delete_comment_confirm'), [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('delete'), style: 'destructive', onPress: doDelete },
       ]);
     }
   };
@@ -135,24 +139,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         prev.map((c) => (c.id === commentId ? { ...c, reactions: res.reactions } : c))
       );
     } catch (e: any) {
-      showToast('error', e.message || 'Không thể thả cảm xúc.');
-    }
-  };
-
-  const formatTime = (dateStr: string) => {
-    try {
-      const date = new Date(dateStr);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMins / 60);
-
-      if (diffMins < 1) return 'Vừa xong';
-      if (diffMins < 60) return `${diffMins}p trước`;
-      if (diffHours < 24) return `${diffHours}h trước`;
-      return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-    } catch (e) {
-      return '';
+      showToast('error', e.message || t('react_comment_error'));
     }
   };
 
@@ -185,7 +172,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           {/* Reply tag if replying */}
           {item.reply_to_username && (
             <Text style={styles.replyToText}>
-              Trả lời <Text style={styles.replyToHighlight}>@{item.reply_to_username}</Text>
+              {t('reply_to_tag')} <Text style={styles.replyToHighlight}>@{item.reply_to_username}</Text>
             </Text>
           )}
 
@@ -233,7 +220,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
                 {hasUserReacted ? userReaction.emoji : '🤍'}
               </Text>
               <Text style={[styles.commentActionText, hasUserReacted && styles.commentActionTextActive]}>
-                {hasUserReacted ? 'Đã thích' : 'Thích'}
+                {hasUserReacted ? t('liked') : t('like')}
               </Text>
             </TouchableOpacity>
 
@@ -252,7 +239,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
               activeOpacity={0.7}
             >
               <Text style={styles.commentActionIcon}>💬</Text>
-              <Text style={styles.commentActionText}>Trả lời</Text>
+              <Text style={styles.commentActionText}>{t('reply')}</Text>
             </TouchableOpacity>
 
             {/* Badge hiển thị tương tác nếu có */}
@@ -282,7 +269,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.deleteBtnText}>Xóa</Text>
+                <Text style={styles.deleteBtnText}>{t('delete')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -316,7 +303,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>
-              💬 Bình luận {comments.length > 0 ? `(${comments.length})` : ''}
+              💬 {t('comments_title')} {comments.length > 0 ? `(${comments.length})` : ''}
             </Text>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
               <Text style={styles.closeText}>✕</Text>
@@ -327,13 +314,13 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           {loading ? (
             <View style={styles.centerContainer}>
               <ActivityIndicator size="large" color={C.primary} />
-              <Text style={styles.loadingText}>Đang tải bình luận...</Text>
+              <Text style={styles.loadingText}>{t('loading')}</Text>
             </View>
           ) : comments.length === 0 ? (
             <View style={styles.centerContainer}>
               <Text style={styles.emptyIcon}>💬</Text>
-              <Text style={styles.emptyTitle}>Chưa có bình luận nào</Text>
-              <Text style={styles.emptySub}>Hãy là người đầu tiên chia sẻ cảm nghĩ nhé!</Text>
+              <Text style={styles.emptyTitle}>{t('comments_title')}</Text>
+              <Text style={styles.emptySub}>{t('comments_empty')}</Text>
             </View>
           ) : (
             <FlatList
@@ -350,10 +337,10 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           {replyingTo && (
             <View style={styles.replyBanner}>
               <Text style={styles.replyBannerText} numberOfLines={1}>
-                Đang trả lời <Text style={{ fontWeight: 'bold' }}>@{replyingTo.username}</Text>
+                {t('replying_to')} <Text style={{ fontWeight: 'bold' }}>@{replyingTo.username}</Text>
               </Text>
               <TouchableOpacity onPress={() => setReplyingTo(null)}>
-                <Text style={styles.cancelReplyText}>Hủy</Text>
+                <Text style={styles.cancelReplyText}>{t('cancel')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -363,7 +350,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
             <TextInput
               ref={inputRef}
               style={styles.textInput}
-              placeholder={replyingTo ? `Trả lời @${replyingTo.username}...` : 'Viết bình luận...'}
+              placeholder={replyingTo ? `${t('reply')} @${replyingTo.username}...` : t('write_comment')}
               placeholderTextColor={C.textMuted}
               value={inputText}
               onChangeText={setInputText}
@@ -382,7 +369,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
               {submitting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.sendBtnText}>Gửi</Text>
+                <Text style={styles.sendBtnText}>{t('send')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -392,7 +379,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.65)',
@@ -402,7 +389,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalCard: {
-    backgroundColor: '#161622',
+    backgroundColor: C.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '80%',
@@ -430,18 +417,20 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   closeBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: C.surface,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: C.border,
   },
   closeText: {
-    color: '#FFFFFF',
+    color: C.text,
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -463,7 +452,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 4,
   },
   emptySub: {
@@ -489,7 +478,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: C.card,
+    backgroundColor: C.separator,
     marginRight: 10,
   },
   commentBody: {
@@ -504,7 +493,7 @@ const styles = StyleSheet.create({
   commentAuthorName: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
     flex: 1,
   },
   commentTime: {
@@ -524,7 +513,7 @@ const styles = StyleSheet.create({
   commentContent: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: '#E0E0EE',
+    color: C.text,
     lineHeight: 20,
     marginBottom: 6,
   },
@@ -543,10 +532,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 8,
     gap: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
   },
   commentActionBtnActive: {
     backgroundColor: 'rgba(108, 99, 255, 0.18)',
+    borderColor: C.primary,
   },
   commentActionIcon: {
     fontSize: 14,
@@ -562,12 +554,12 @@ const styles = StyleSheet.create({
   commentReactionsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: C.border,
     gap: 3,
   },
   commentReactionsBadgeIcons: {
@@ -576,7 +568,7 @@ const styles = StyleSheet.create({
   commentReactionsBadgeCount: {
     fontSize: 10,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   floatingEmojiDock: {
     position: 'absolute',
@@ -584,15 +576,15 @@ const styles = StyleSheet.create({
     left: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1E2F',
+    backgroundColor: C.card,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
+    shadowOpacity: isDark ? 0.5 : 0.15,
     shadowRadius: 8,
     elevation: 20,
     zIndex: 9999,
@@ -619,7 +611,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1E1E2F',
+    backgroundColor: C.surface,
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderTopWidth: 1,
@@ -643,18 +635,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: C.border,
-    backgroundColor: '#12121D',
+    backgroundColor: C.card,
   },
   textInput: {
     flex: 1,
     minHeight: 40,
     maxHeight: 90,
-    backgroundColor: '#1C1C2A',
+    backgroundColor: C.inputBg,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
     fontSize: 14,
-    color: '#FFFFFF',
+    color: C.text,
+    borderWidth: 1,
+    borderColor: C.border,
     fontFamily: 'Inter_400Regular',
     marginRight: 10,
   },

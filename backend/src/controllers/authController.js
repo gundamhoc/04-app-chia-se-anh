@@ -648,6 +648,268 @@ const updatePrivacySettings = async (req, res) => {
   }
 };
 
+// ============================================================
+// GET SECURITY STATUS
+// GET /api/auth/security-status (protected)
+// ============================================================
+const getSecurityStatus = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    const [rows] = await pool.query(
+      `SELECT created_at, last_password_changed, two_factor_enabled, remember_login FROM users WHERE id = ?`,
+      [currentUserId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng.' });
+    }
+
+    const user = rows[0];
+
+    // Đếm số phiên đang hoạt động
+    const [sessionRows] = await pool.query(
+      `SELECT COUNT(*) as count FROM login_sessions WHERE user_id = ? AND is_active = 1`,
+      [currentUserId]
+    );
+
+    const activeSessionCount = sessionRows[0].count;
+
+    return res.json({
+      success: true,
+      data: {
+        created_at: user.created_at,
+        last_password_changed: user.last_password_changed,
+        two_factor_enabled: Boolean(user.two_factor_enabled),
+        remember_login: Boolean(user.remember_login),
+        active_session_count: activeSessionCount,
+      },
+    });
+  } catch (error) {
+    console.error('GetSecurityStatus error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi lấy trạng thái bảo mật.' });
+  }
+};
+
+// ============================================================
+// TOGGLE TWO FACTOR
+// PUT /api/auth/two-factor (protected)
+// Body: { enabled: boolean }
+// ============================================================
+const toggleTwoFactor = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Giá trị enabled phải là boolean.' });
+    }
+
+    await pool.query(`UPDATE users SET two_factor_enabled = ? WHERE id = ?`, [enabled ? 1 : 0, currentUserId]);
+
+    return res.json({
+      success: true,
+      message: enabled ? 'Đã bật xác minh 2 bước! 🔐' : 'Đã tắt xác minh 2 bước.',
+      data: { two_factor_enabled: enabled },
+    });
+  } catch (error) {
+    console.error('ToggleTwoFactor error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi cập nhật 2FA.' });
+  }
+};
+
+// ============================================================
+// TOGGLE REMEMBER LOGIN
+// PUT /api/auth/remember-login (protected)
+// Body: { enabled: boolean }
+// ============================================================
+const toggleRememberLogin = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Giá trị enabled phải là boolean.' });
+    }
+
+    await pool.query(`UPDATE users SET remember_login = ? WHERE id = ?`, [enabled ? 1 : 0, currentUserId]);
+
+    return res.json({
+      success: true,
+      message: enabled ? 'Đã bật lưu thông tin đăng nhập.' : 'Đã tắt lưu thông tin đăng nhập.',
+      data: { remember_login: enabled },
+    });
+  } catch (error) {
+    console.error('ToggleRememberLogin error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi cập nhật cài đặt đăng nhập.' });
+  }
+};
+
+// ============================================================
+// GET LOGIN SESSIONS
+// GET /api/auth/sessions (protected)
+// ============================================================
+const getLoginSessions = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    const [rows] = await pool.query(
+      `SELECT id, device_name, ip_address, last_active, created_at, is_active
+       FROM login_sessions
+       WHERE user_id = ? AND is_active = 1
+       ORDER BY last_active DESC
+       LIMIT 20`,
+      [currentUserId]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Lấy danh sách phiên đăng nhập thành công.',
+      data: rows,
+    });
+  } catch (error) {
+    console.error('GetLoginSessions error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi lấy danh sách phiên đăng nhập.' });
+  }
+};
+
+// ============================================================
+// REVOKE SESSION
+// DELETE /api/auth/sessions/:id (protected)
+// ============================================================
+const revokeSession = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const sessionId = parseInt(req.params.id, 10);
+
+    if (!sessionId || isNaN(sessionId)) {
+      return res.status(400).json({ success: false, message: 'ID phiên không hợp lệ.' });
+    }
+
+    // Kiểm tra phiên thuộc về user hiện tại
+    const [rows] = await pool.query(
+      `SELECT id FROM login_sessions WHERE id = ? AND user_id = ? AND is_active = 1`,
+      [sessionId, currentUserId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy phiên đăng nhập này.' });
+    }
+
+    await pool.query(`UPDATE login_sessions SET is_active = 0 WHERE id = ?`, [sessionId]);
+
+    return res.json({
+      success: true,
+      message: 'Đã đăng xuất thiết bị này thành công.',
+    });
+  } catch (error) {
+    console.error('RevokeSession error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi thu hồi phiên đăng nhập.' });
+  }
+};
+
+// ============================================================
+// DELETE ACCOUNT
+// DELETE /api/auth/account (protected)
+// Body: { email, password }
+// ============================================================
+const deleteAccount = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng nhập email và mật khẩu để xác nhận xóa tài khoản.',
+      });
+    }
+
+    // Lấy thông tin user để xác minh
+    const [rows] = await pool.query(
+      'SELECT id, email, password_hash FROM users WHERE id = ? AND is_active = 1',
+      [currentUserId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy tài khoản.' });
+    }
+
+    const user = rows[0];
+
+    // Kiểm tra email khớp
+    if (user.email.toLowerCase() !== email.trim().toLowerCase()) {
+      return res.status(401).json({
+        success: false,
+        message: 'Email xác nhận không khớp với tài khoản này.',
+      });
+    }
+
+    // Kiểm tra mật khẩu
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Mật khẩu xác nhận không đúng.',
+      });
+    }
+
+    // Soft delete: set is_active = 0
+    await pool.query(`UPDATE users SET is_active = 0, updated_at = NOW() WHERE id = ?`, [currentUserId]);
+
+    // Thu hồi tất cả phiên đăng nhập
+    await pool.query(`UPDATE login_sessions SET is_active = 0 WHERE user_id = ?`, [currentUserId]);
+
+    return res.json({
+      success: true,
+      message: 'Tài khoản của bạn đã được xóa thành công. Tạm biệt! 👋',
+    });
+  } catch (error) {
+    console.error('DeleteAccount error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi xóa tài khoản.' });
+  }
+};
+
+// ============================================================
+// GENERATE OTP (Giả lập 2FA — OTP trả về ngay trong response)
+// POST /api/auth/generate-otp (protected)
+// ============================================================
+const generateOtp = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    // Kiểm tra user có bật 2FA không
+    const [rows] = await pool.query(
+      'SELECT two_factor_enabled, email FROM users WHERE id = ? AND is_active = 1',
+      [currentUserId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy tài khoản.' });
+    }
+
+    // Tạo OTP 6 chữ số ngẫu nhiên
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Lưu OTP vào DB với thời hạn 5 phút (dùng một trường tạm)
+    // Vì là giả lập, ta trả về OTP thẳng trong response
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    return res.json({
+      success: true,
+      message: `Mã OTP đã được tạo (Demo: ${otp}). Hiệu lực 5 phút.`,
+      data: {
+        otp, // Giả lập: trả về thẳng trong app thay vì gửi email
+        expires_at: expiresAt,
+        email: rows[0].email,
+      },
+    });
+  } catch (error) {
+    console.error('GenerateOTP error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi tạo OTP.' });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -659,5 +921,11 @@ module.exports = {
   changePassword,
   getPrivacySettings,
   updatePrivacySettings,
+  getSecurityStatus,
+  toggleTwoFactor,
+  toggleRememberLogin,
+  getLoginSessions,
+  revokeSession,
+  deleteAccount,
+  generateOtp,
 };
-

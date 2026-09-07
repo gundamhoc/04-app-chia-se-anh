@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -15,20 +15,24 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/Colors';
+import { StatusBar } from 'expo-status-bar';
+import { ColorScheme } from '../../constants/Colors';
+import { useTheme } from '../../context/ThemeContext';
 import { useSocket } from '../../hooks/useSocket';
+import { useI18n } from '../../utils/i18n';
 import { messageService } from '../../services/messageService';
 import { friendService } from '../../services/friendService';
 import { groupService } from '../../services/groupService';
 import { Conversation, Friend, Group } from '../../types';
 import { CreateGroupModal } from '../../components/CreateGroupModal';
 
-const C = Colors.dark;
-
 export default function MessagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isConnected, socket } = useSocket();
+  const { colors: C, isDark } = useTheme();
+  const { t, formatTime: formatTimeI18n } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -174,21 +178,7 @@ export default function MessagesScreen() {
 
   // Format thời gian hiển thị tương đối
   const formatTime = (dateString?: string | null) => {
-    if (!dateString) return '';
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMins / 60);
-
-      if (diffMins < 1) return 'Vừa xong';
-      if (diffMins < 60) return `${diffMins}p`;
-      if (diffHours < 24) return `${diffHours}h`;
-      return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-    } catch {
-      return '';
-    }
+    return formatTimeI18n(dateString, true);
   };
 
   // Lọc danh sách hội thoại cá nhân
@@ -241,7 +231,7 @@ export default function MessagesScreen() {
           item.is_pinned && styles.convItemPinned,
         ]}
         activeOpacity={0.7}
-        onPress={() => openChat(item.friend_id, item.friend_name, item.friend_avatar)}
+        onPress={() => openChat(item.friend_id, item.friend_name || item.friend_username, item.friend_avatar)}
         onLongPress={() =>
           setActionTarget({
             type: 'direct',
@@ -370,10 +360,11 @@ export default function MessagesScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* App Bar */}
       <View style={styles.appBar}>
         <View style={styles.appBarTitleBox}>
-          <Text style={styles.appName}>Trò chuyện 💬</Text>
+          <Text style={styles.appName}>{t('chat_title')}</Text>
         </View>
 
         <View style={styles.appBarRightBox}>
@@ -382,12 +373,12 @@ export default function MessagesScreen() {
             onPress={() => setShowCreateGroupModal(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.createGroupBtnText}>👥＋ Tạo nhóm</Text>
+            <Text style={styles.createGroupBtnText}>{t('create_group_btn')}</Text>
           </TouchableOpacity>
 
           <View style={[styles.socketBadge, isConnected ? styles.socketOn : styles.socketOff]}>
             <View style={[styles.socketDot, isConnected ? styles.dotOn : styles.dotOff]} />
-            <Text style={styles.socketText}>{isConnected ? 'Trực tuyến' : 'Ngoại tuyến'}</Text>
+            <Text style={styles.socketText}>{isConnected ? t('online') : t('offline')}</Text>
           </View>
         </View>
       </View>
@@ -397,7 +388,7 @@ export default function MessagesScreen() {
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
           style={styles.searchInput}
-          placeholder="Tìm kiếm bạn bè, nhóm hoặc tin nhắn..."
+          placeholder={t('search_messages_placeholder')}
           placeholderTextColor={C.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -416,7 +407,7 @@ export default function MessagesScreen() {
           onPress={() => setActiveTab('all')}
         >
           <Text style={[styles.tabFilterText, activeTab === 'all' && styles.tabFilterTextActive]}>
-            Tất cả
+            {t('all_tab')}
           </Text>
         </TouchableOpacity>
 
@@ -425,7 +416,7 @@ export default function MessagesScreen() {
           onPress={() => setActiveTab('direct')}
         >
           <Text style={[styles.tabFilterText, activeTab === 'direct' && styles.tabFilterTextActive]}>
-            Cá nhân ({filteredConversations.length})
+            {t('direct_tab')} ({filteredConversations.length})
           </Text>
         </TouchableOpacity>
 
@@ -434,7 +425,7 @@ export default function MessagesScreen() {
           onPress={() => setActiveTab('groups')}
         >
           <Text style={[styles.tabFilterText, activeTab === 'groups' && styles.tabFilterTextActive]}>
-            Nhóm ({filteredGroups.length})
+            {t('groups_tab')} ({filteredGroups.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -442,7 +433,7 @@ export default function MessagesScreen() {
       {/* Thanh bạn bè lướt ngang để nhắn tin nhanh */}
       {friends.length > 0 && activeTab !== 'groups' && (
         <View style={styles.quickFriendsSection}>
-          <Text style={styles.sectionHeader}>Bạn bè</Text>
+          <Text style={styles.sectionHeader}>{t('friends')}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -481,7 +472,7 @@ export default function MessagesScreen() {
       {loading ? (
         <View style={styles.centerBox}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={styles.loadingText}>Đang tải tin nhắn...</Text>
+          <Text style={styles.loadingText}>{t('loading')}</Text>
         </View>
       ) : activeTab === 'groups' ? (
         <FlatList
@@ -495,8 +486,8 @@ export default function MessagesScreen() {
           ListEmptyComponent={
             <View style={styles.emptyBox}>
               <Text style={styles.emptyIcon}>👥✨</Text>
-              <Text style={styles.emptyTitle}>Chưa tham gia nhóm nào</Text>
-              <Text style={styles.emptyDesc}>Bấm nút "Tạo nhóm" ở trên để tạo phòng chat chung với bạn bè!</Text>
+              <Text style={styles.emptyTitle}>{t('no_groups')}</Text>
+              <Text style={styles.emptyDesc}>{t('start_group_hint')}</Text>
             </View>
           }
         />
@@ -512,8 +503,8 @@ export default function MessagesScreen() {
           ListEmptyComponent={
             <View style={styles.emptyBox}>
               <Text style={styles.emptyIcon}>💬✨</Text>
-              <Text style={styles.emptyTitle}>Chưa có cuộc trò chuyện nào</Text>
-              <Text style={styles.emptyDesc}>Chọn bạn bè ở trên để bắt đầu trò chuyện nhé!</Text>
+              <Text style={styles.emptyTitle}>{t('no_conversations')}</Text>
+              <Text style={styles.emptyDesc}>{t('start_chat_hint')}</Text>
             </View>
           }
         />
@@ -529,7 +520,7 @@ export default function MessagesScreen() {
           {sortedGroups.length > 0 && (
             <View style={styles.groupSectionBlock}>
               <View style={styles.sectionTitleRow}>
-                <Text style={styles.sectionBlockTitle}>Nhóm trò chuyện 👥</Text>
+                <Text style={styles.sectionBlockTitle}>{t('group_chat_section')}</Text>
                 <Text style={styles.sectionBlockCount}>{sortedGroups.length}</Text>
               </View>
               {sortedGroups.map((g) => (
@@ -543,7 +534,7 @@ export default function MessagesScreen() {
           {sortedConversations.length > 0 && (
             <View style={styles.groupSectionBlock}>
               <View style={styles.sectionTitleRow}>
-                <Text style={styles.sectionBlockTitle}>Cá nhân (1-1) 💬</Text>
+                <Text style={styles.sectionBlockTitle}>{t('direct_1_1')}</Text>
                 <Text style={styles.sectionBlockCount}>{sortedConversations.length}</Text>
               </View>
               {sortedConversations.map((c) => (
@@ -557,8 +548,8 @@ export default function MessagesScreen() {
           {sortedGroups.length === 0 && sortedConversations.length === 0 && (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyIcon}>💬✨</Text>
-              <Text style={styles.emptyTitle}>Chưa có cuộc trò chuyện nào</Text>
-              <Text style={styles.emptyDesc}>Bắt đầu trò chuyện với bạn bè hoặc tạo nhóm mới ngay!</Text>
+              <Text style={styles.emptyTitle}>{t('no_chat_yet')}</Text>
+              <Text style={styles.emptyDesc}>{t('no_chat_desc')}</Text>
             </View>
           )}
         </ScrollView>
@@ -600,7 +591,7 @@ export default function MessagesScreen() {
             >
               <Text style={styles.actionModalRowIcon}>📌</Text>
               <Text style={styles.actionModalRowText}>
-                {actionTarget?.is_pinned ? 'Bỏ ghim cuộc trò chuyện' : 'Ghim lên đầu danh sách'}
+                {actionTarget?.is_pinned ? t('unpin_conversation') : t('pin_to_top')}
               </Text>
             </TouchableOpacity>
 
@@ -615,7 +606,7 @@ export default function MessagesScreen() {
                 {actionTarget?.is_muted ? '🔔' : '🔕'}
               </Text>
               <Text style={styles.actionModalRowText}>
-                {actionTarget?.is_muted ? 'Bật thông báo' : 'Tắt thông báo'}
+                {actionTarget?.is_muted ? t('unmute_notifications') : t('mute_notifications')}
               </Text>
             </TouchableOpacity>
 
@@ -635,7 +626,7 @@ export default function MessagesScreen() {
               activeOpacity={0.7}
             >
               <Text style={styles.actionModalRowIcon}>💬</Text>
-              <Text style={styles.actionModalRowText}>Mở cuộc trò chuyện</Text>
+              <Text style={styles.actionModalRowText}>{t('open_conversation')}</Text>
             </TouchableOpacity>
 
             {/* Nút Hủy */}
@@ -643,7 +634,7 @@ export default function MessagesScreen() {
               style={styles.actionModalCancelBtn}
               onPress={() => setActionTarget(null)}
             >
-              <Text style={styles.actionModalCancelText}>Hủy bỏ</Text>
+              <Text style={styles.actionModalCancelText}>{t('cancel')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -652,7 +643,7 @@ export default function MessagesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
@@ -664,7 +655,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#202030',
+    borderBottomColor: C.border,
   },
   appBarTitleBox: {
     flexDirection: 'row',
@@ -673,7 +664,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 20,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   appBarRightBox: {
     flexDirection: 'row',
@@ -681,7 +672,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   createGroupBtn: {
-    backgroundColor: 'rgba(108, 99, 255, 0.2)',
+    backgroundColor: `${C.primary}20`,
     borderWidth: 1,
     borderColor: C.primary,
     paddingHorizontal: 10,
@@ -689,7 +680,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   createGroupBtnText: {
-    color: '#B0A8FF',
+    color: C.primaryLight || C.primary,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -701,10 +692,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   socketOn: {
-    backgroundColor: 'rgba(0, 230, 118, 0.15)',
+    backgroundColor: `${C.success}20`,
   },
   socketOff: {
-    backgroundColor: 'rgba(255, 82, 82, 0.15)',
+    backgroundColor: `${C.error}20`,
   },
   socketDot: {
     width: 6,
@@ -713,25 +704,27 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   dotOn: {
-    backgroundColor: '#00E676',
+    backgroundColor: C.success,
   },
   dotOff: {
-    backgroundColor: '#FF5252',
+    backgroundColor: C.error,
   },
   socketText: {
     fontSize: 11,
     fontFamily: 'Inter_500Medium',
-    color: '#C0C0D0',
+    color: C.textSecondary,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1E2D',
+    backgroundColor: C.inputBg,
     borderRadius: 12,
     marginHorizontal: 16,
     marginTop: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: C.border,
   },
   searchIcon: {
     fontSize: 14,
@@ -761,15 +754,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 14,
-    backgroundColor: '#1E1E2D',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
   },
   tabFilterItemActive: {
     backgroundColor: C.primary,
+    borderColor: C.primary,
   },
   tabFilterText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#8A8A9E',
+    color: C.textMuted,
   },
   tabFilterTextActive: {
     color: '#FFFFFF',
@@ -778,7 +774,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A28',
+    borderBottomColor: C.border,
   },
   sectionHeader: {
     fontSize: 13,
@@ -814,7 +810,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#00E676',
+    backgroundColor: C.success,
     borderWidth: 2,
     borderColor: C.background,
   },
@@ -838,29 +834,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E1E2D',
+    borderBottomColor: C.border,
     marginBottom: 6,
   },
   sectionBlockTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#9C95FF',
+    color: C.primaryLight || C.primary,
     textTransform: 'uppercase',
   },
   sectionBlockCount: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#8A8A9E',
+    color: C.textMuted,
   },
   convItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#181826',
+    borderBottomColor: C.border,
   },
   convItemUnread: {
-    backgroundColor: 'rgba(108, 99, 255, 0.06)',
+    backgroundColor: `${C.primary}12`,
   },
   avatarWrapper: {
     position: 'relative',
@@ -870,7 +866,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#2A2A3E',
+    backgroundColor: C.separator,
   },
   onlineBadge: {
     position: 'absolute',
@@ -879,7 +875,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#00E676',
+    backgroundColor: C.success,
     borderWidth: 2,
     borderColor: C.background,
   },
@@ -915,7 +911,7 @@ const styles = StyleSheet.create({
   },
   friendNameBold: {
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   timeText: {
     fontSize: 12,
@@ -953,13 +949,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
   },
   memberCountBadge: {
-    backgroundColor: '#252538',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
   },
   memberCountText: {
-    color: '#A0A0B2',
+    color: C.textSecondary,
     fontSize: 10,
     fontWeight: '600',
   },
@@ -985,7 +983,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 17,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 6,
   },
   emptyDesc: {
@@ -996,7 +994,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   convItemPinned: {
-    backgroundColor: 'rgba(108, 99, 255, 0.08)',
+    backgroundColor: `${C.primary}15`,
     borderLeftWidth: 3,
     borderLeftColor: C.primary,
   },
@@ -1020,17 +1018,17 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   actionModalCard: {
-    backgroundColor: '#1E1E2D',
+    backgroundColor: C.card,
     borderRadius: 20,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#2E2E42',
+    borderColor: C.border,
     gap: 8,
   },
   actionModalTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 8,
     paddingHorizontal: 4,
   },
@@ -1040,7 +1038,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: '#262638',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     gap: 12,
   },
   actionModalRowIcon: {
@@ -1048,7 +1048,7 @@ const styles = StyleSheet.create({
   },
   actionModalRowText: {
     fontSize: 14,
-    color: '#FFFFFF',
+    color: C.text,
     fontWeight: '600',
   },
   actionModalCancelBtn: {
@@ -1058,7 +1058,7 @@ const styles = StyleSheet.create({
   },
   actionModalCancelText: {
     fontSize: 14,
-    color: '#8A8A9E',
+    color: C.textMuted,
     fontWeight: '600',
   },
 });

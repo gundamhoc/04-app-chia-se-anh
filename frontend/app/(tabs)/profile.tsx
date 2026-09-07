@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,12 +13,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
-import { Colors } from '../../constants/Colors';
+import { ColorScheme } from '../../constants/Colors';
 import { useAuth } from '../../hooks/useAuth';
 import { BASE_URL } from '../../services/api';
 import { SettingsModal, maskEmail } from '../../components/SettingsModal';
-
-const C = Colors.dark;
+import { useTheme } from '../../context/ThemeContext';
+import { useI18n } from '../../utils/i18n';
 
 const getAvatarUrl = (avatarUrl?: string | null): string | null => {
   if (!avatarUrl) return null;
@@ -30,21 +30,24 @@ const getAvatarUrl = (avatarUrl?: string | null): string | null => {
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
+  const { colors: C, isDark } = useTheme();
+  const { t } = useI18n();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
+
   const handleLogout = () => {
     if (Platform.OS === 'web') {
-      // Web không hỗ trợ Alert.alert — dùng Modal tự custom
       setShowLogoutModal(true);
     } else {
       Alert.alert(
-        'Đăng xuất',
-        'Bạn có chắc chắn muốn đăng xuất?',
+        t('logout'),
+        t('logout_confirm_msg'),
         [
-          { text: 'Hủy', style: 'cancel' },
+          { text: t('cancel'), style: 'cancel' },
           {
-            text: 'Đăng xuất',
+            text: t('logout'),
             style: 'destructive',
             onPress: async () => {
               await logout();
@@ -64,12 +67,12 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
-      <StatusBar style="light" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
         {/* Header với Tiêu đề & Nút Bánh Răng Cài Đặt */}
         <View style={styles.headerRow}>
-          <Text style={styles.pageTitle}>Hồ sơ</Text>
+          <Text style={styles.pageTitle}>{t('profile')}</Text>
           <TouchableOpacity
             style={styles.settingsGearBtn}
             onPress={() => setShowSettingsModal(true)}
@@ -104,26 +107,32 @@ export default function ProfileScreen() {
 
         {/* Info rows */}
         <View style={styles.infoCard}>
-          <InfoRow icon="📧" label="Email" value={maskEmail(user?.email)} />
+          <InfoRow
+            icon="📧"
+            label={t('email_field')}
+            value={maskEmail(user?.email)}
+            styles={styles}
+          />
           <View style={styles.separator} />
-          <InfoRow icon="👤" label="Username" value={`@${user?.username}`} />
+          <InfoRow
+            icon="👤"
+            label={t('username_field')}
+            value={`@${user?.username}`}
+            styles={styles}
+          />
         </View>
 
         {/* Actions */}
         <View style={styles.actionsCard}>
-          <Text style={styles.sectionTitle}>Tài khoản</Text>
+          <Text style={styles.sectionTitle}>{t('account')}</Text>
 
-          <TouchableOpacity style={styles.actionItem} disabled>
-            <Text style={styles.actionIcon}>✏️</Text>
-            <Text style={styles.actionLabel}>Chỉnh sửa hồ sơ</Text>
-            <Text style={styles.actionChevron}>›</Text>
-          </TouchableOpacity>
-
-          <View style={styles.separator} />
-
-          <TouchableOpacity style={styles.actionItem} disabled>
-            <Text style={styles.actionIcon}>🔒</Text>
-            <Text style={styles.actionLabel}>Đổi mật khẩu</Text>
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={() => setShowSettingsModal(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.actionIcon}>⚙️</Text>
+            <Text style={styles.actionLabel}>{t('settings')}</Text>
             <Text style={styles.actionChevron}>›</Text>
           </TouchableOpacity>
         </View>
@@ -134,7 +143,7 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           accessibilityLabel="logout-button"
         >
-          <Text style={styles.logoutText}>Đăng xuất</Text>
+          <Text style={styles.logoutText}>{t('logout')}</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -147,25 +156,28 @@ export default function ProfileScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Đăng xuất</Text>
-            <Text style={styles.modalMessage}>Bạn có chắc chắn muốn đăng xuất?</Text>
+            <Text style={styles.modalTitle}>{t('logout')}</Text>
+            <Text style={styles.modalMessage}>
+              {t('logout_confirm_msg')}
+            </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnCancel]}
                 onPress={() => setShowLogoutModal(false)}
               >
-                <Text style={styles.modalBtnCancelText}>Hủy</Text>
+                <Text style={styles.modalBtnCancelText}>{t('cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnConfirm]}
                 onPress={doLogout}
               >
-                <Text style={styles.modalBtnConfirmText}>Đăng xuất</Text>
+                <Text style={styles.modalBtnConfirmText}>{t('logout')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
       {/* Settings Modal (Cài đặt) */}
       <SettingsModal
         visible={showSettingsModal}
@@ -175,7 +187,17 @@ export default function ProfileScreen() {
   );
 }
 
-function InfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+function InfoRow({
+  icon,
+  label,
+  value,
+  styles,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoIcon}>{icon}</Text>
@@ -187,7 +209,7 @@ function InfoRow({ icon, label, value }: { icon: string; label: string; value: s
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: C.background },
   scrollView: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
@@ -214,7 +236,7 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: isDark ? 0.25 : 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -314,7 +336,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     gap: 12,
-    opacity: 0.6,
+    opacity: 0.85,
   },
   actionIcon: { fontSize: 20 },
   actionLabel: {

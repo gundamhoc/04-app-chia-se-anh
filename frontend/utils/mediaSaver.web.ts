@@ -7,7 +7,9 @@ export const savePhotoToDevice = async (
   filename?: string
 ): Promise<{ success: boolean; message: string }> => {
   try {
-    const response = await fetch(imageUrl);
+    const response = await fetch(imageUrl, {
+      headers: { 'ngrok-skip-browser-warning': '69420' },
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

@@ -6,14 +6,38 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { ToastProvider } from '../context/ToastContext';
+import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { useAppSettings } from '../store/appSettingsStore';
 
 import { Platform } from 'react-native';
 
 // Giữ splash screen cho đến khi sẵn sàng
 SplashScreen.preventAutoHideAsync();
 
+// Inner layout component — dùng theme context để set statusbar
+function InnerLayout() {
+  const { isDark, colors } = useTheme();
+
+  return (
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
+      <ToastProvider>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="add-photo" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="search" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
+        </Stack>
+      </ToastProvider>
+    </SafeAreaProvider>
+  );
+}
+
 export default function RootLayout() {
   const loadStoredAuth = useAuthStore((s) => s.loadStoredAuth);
+  const loadSettings = useAppSettings((s) => s.loadSettings);
   // isInitializing = true CHỈ khi app mới mở, đang check storage lần đầu
   // KHÔNG bị ảnh hưởng bởi login/register (tránh white-screen)
   const isInitializing = useAuthStore((s) => s.isInitializing);
@@ -39,6 +63,7 @@ export default function RootLayout() {
       }
     }
     loadStoredAuth();
+    loadSettings(); // Load app display settings (theme, language, etc.)
   }, []);
 
   useEffect(() => {
@@ -54,18 +79,8 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#0F0F1A' }}>
-      <ToastProvider>
-        <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0F0F1A' } }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="add-photo" options={{ animation: 'slide_from_bottom' }} />
-          <Stack.Screen name="search" options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
-        </Stack>
-      </ToastProvider>
-    </SafeAreaProvider>
+    <ThemeProvider>
+      <InnerLayout />
+    </ThemeProvider>
   );
 }

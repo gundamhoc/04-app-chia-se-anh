@@ -28,18 +28,28 @@ const getHostIp = (): string | null => {
 };
 
 const getBaseUrl = (): string => {
+  // 1. Trình duyệt Web trên máy local (Chrome / Edge localhost) -> Luôn dùng trực tiếp localhost:5000 để tối đa tốc độ và ổn định Socket
+  if (
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ) {
+    return 'http://localhost:5000/api';
+  }
+
+  // 2. Thiết bị di động hoặc môi trường cần tunnel ngrok (EXPO_PUBLIC_API_URL trong .env)
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   if (envUrl && envUrl.trim().length > 0) {
     const trimmed = envUrl.trim().replace(/\/+$/, '');
     return `${trimmed}/api`;
   }
 
-  // 1. Trình duyệt Web (Chrome DevTools / Web browser) -> Dùng localhost:5000
+  // 3. Fallback cho Web
   if (Platform.OS === 'web') {
     return 'http://localhost:5000/api';
   }
 
-  // 2. Thiết bị thật (Expo Go trên Mobile) -> Tự động phát hiện IP LAN từ Expo Bundler
+  // 4. Thiết bị thật (Expo Go trên Mobile) -> Tự động phát hiện IP LAN từ Expo Bundler
   const hostIp = getHostIp();
   if (hostIp) {
     return `http://${hostIp}:5000/api`;
@@ -64,6 +74,9 @@ if (__DEV__) {
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 20000,
+  headers: {
+    'ngrok-skip-browser-warning': '69420',
+  },
 });
 
 import { storage } from '../utils/storage';
@@ -71,6 +84,7 @@ import { storage } from '../utils/storage';
 // Request interceptor: tự động gắn JWT token
 api.interceptors.request.use(
   async (config) => {
+    config.headers['ngrok-skip-browser-warning'] = '69420';
     const token = await storage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

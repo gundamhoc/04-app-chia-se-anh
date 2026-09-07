@@ -13,20 +13,42 @@ const friendRoutes = require('./src/routes/friendRoutes');
 const photoRoutes = require('./src/routes/photoRoutes');
 const messageRoutes = require('./src/routes/messageRoutes');
 const groupRoutes = require('./src/routes/groupRoutes');
+const systemRoutes = require('./src/routes/systemRoutes');
 
 // ============================================================
 // Khởi tạo Express App
 // ============================================================
 const app = express();
+app.set('trust proxy', true);
+// Vô hiệu hóa ETag mặc định để tránh HTTP 304 Not Modified cache trên các API động
+app.disable('etag');
 const PORT = process.env.PORT || 5000;
 
 // ============================================================
 // Middleware
 // ============================================================
+// Chống cache cho toàn bộ API động (luôn trả về 200 OK với dữ liệu mới nhất)
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
 app.use(cors({
   origin: process.env.CLIENT_ORIGIN || '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'ngrok-skip-browser-warning',
+    'bypass-tunnel-reminder',
+    'x-requested-with',
+    'Cache-Control',
+    'Pragma',
+    'cache-control',
+    'pragma',
+  ],
 }));
 
 app.use(express.json({ limit: '35mb' }));
@@ -54,6 +76,7 @@ app.use('/api/friends', friendRoutes);
 app.use('/api/photos', photoRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/system', systemRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

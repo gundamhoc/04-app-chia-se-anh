@@ -44,8 +44,17 @@ npx expo start
 | POST | `/api/auth/forgot-password` | ❌ | Gửi yêu cầu quên mật khẩu / cấp lại mã |
 | GET | `/api/auth/profile` | ✅ JWT | Lấy thông tin hồ sơ |
 | PUT | `/api/auth/avatar` | ✅ JWT | Cập nhật ảnh đại diện |
+| GET | `/api/auth/privacy-settings` | ✅ JWT | Lấy cài đặt quyền riêng tư tài khoản |
+| PUT | `/api/auth/privacy-settings` | ✅ JWT | Cập nhật quyền riêng tư (riêng tư/công khai, đề xuất, tìm kiếm) |
+| GET | `/api/auth/security-status` | ✅ JWT | Lấy trạng thái bảo mật (2FA, lưu đăng nhập, lần đổi MK) |
+| PUT | `/api/auth/two-factor` | ✅ JWT | Bật / tắt xác thực hai bước (2FA) |
+| PUT | `/api/auth/remember-login` | ✅ JWT | Bật / tắt ghi nhớ đăng nhập |
+| GET | `/api/auth/sessions` | ✅ JWT | Lấy danh sách các phiên thiết bị đăng nhập |
+| DELETE | `/api/auth/sessions/:id` | ✅ JWT | Thu hồi / đăng xuất thiết bị từ xa |
+| DELETE | `/api/auth/account` | ✅ JWT | Xóa tài khoản vĩnh viễn (xác thực email + mật khẩu) |
+| POST | `/api/auth/generate-otp` | ✅ JWT | Tạo mã OTP xác thực 2FA |
 | GET | `/api/photos/feed` | ✅ JWT | Lấy bảng tin khoảnh khắc (Locket Feed) |
-| POST | `/api/photos/upload` | ✅ JWT | Đăng ảnh khoảnh khắc mới |
+| POST | `/api/photos/upload` | ✅ JWT | Đăng ảnh khoảnh khắc mới (Google Drive) |
 | PUT | `/api/photos/:id` | ✅ JWT | Chỉnh sửa chú thích bài đăng |
 | DELETE | `/api/photos/:id` | ✅ JWT | Xóa ảnh bài đăng |
 | POST | `/api/photos/:id/react` | ✅ JWT | Thả / bỏ thả emoji bài viết |
@@ -85,13 +94,27 @@ npx expo start
 | PUT | `/api/messages/:friendId/pin` | ✅ JWT | Ghim / Bỏ ghim cuộc trò chuyện 1-1 |
 | PUT | `/api/messages/:friendId/mute` | ✅ JWT | Bật / Tắt thông báo cuộc trò chuyện 1-1 |
 | GET | `/api/messages/:friendId/search` | ✅ JWT | Tìm kiếm tin nhắn cuộc trò chuyện 1-1 |
-| GET | `/api/health` | ❌ | Health check |
+| GET | `/api/system/ota-check` | ❌ | Kiểm tra bản cập nhật Over-The-Air (OTA) và Changelog |
+| GET | `/api/health` | ❌ | Health check server |
+
+## Các lệnh quản trị & tiện ích Database
+
+```bash
+cd backend
+
+# Tự động sao lưu toàn bộ cấu trúc & dữ liệu database ra file .sql
+npm run db:backup
+
+# Khôi phục toàn bộ database từ bản backup gần nhất (latest_backup.sql)
+npm run db:restore
+```
 
 ## Cấu trúc thư mục
 
 ```
 masita/
-├── backend/          # Node.js Express & Socket.io server
-├── frontend/         # Expo React Native (iOS, Android, Web)
-└── database/         # MySQL schema & migrations
+├── backend/          # Node.js Express & Socket.io server (OTA, DB Auto-init, Google Drive Storage)
+├── frontend/         # Expo React Native đa nền tảng (Bilingual i18n, Theme Engine, OTA Update)
+├── database/         # MySQL schema, migrations và backups
+└── README.md         # Tài liệu dự án
 ```

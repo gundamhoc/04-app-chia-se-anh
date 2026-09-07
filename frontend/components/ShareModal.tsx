@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Colors } from '../constants/Colors';
+import { ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 import { Photo } from '../types';
 import { useToast } from '../hooks/useToast';
 import { savePhotoToDevice } from '../utils/mediaSaver';
-
-const C = Colors.dark;
+import { useI18n } from '../utils/i18n';
 
 interface ShareModalProps {
   visible: boolean;
@@ -29,6 +29,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   onClose,
 }) => {
   const { showToast } = useToast();
+  const { colors: C, isDark } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
   const [saving, setSaving] = useState(false);
 
   if (!photo) return null;
@@ -97,7 +100,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.dragBar} />
-            <Text style={styles.headerTitle}>Chia sẻ khoảnh khắc 📤</Text>
+            <Text style={styles.headerTitle}>{t('share_moment')}</Text>
           </View>
 
           {/* Options List */}
@@ -117,8 +120,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 )}
               </View>
               <View style={styles.optionTextBox}>
-                <Text style={styles.optionTitle}>Lưu ảnh về máy</Text>
-                <Text style={styles.optionSubtitle}>Tải và lưu ảnh vào bộ sưu tập thiết bị</Text>
+                <Text style={styles.optionTitle}>{t('save_to_device')}</Text>
+                <Text style={styles.optionSubtitle}>{t('save_to_device_desc')}</Text>
               </View>
             </TouchableOpacity>
 
@@ -132,8 +135,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 <Text style={styles.optionIcon}>🔗</Text>
               </View>
               <View style={styles.optionTextBox}>
-                <Text style={styles.optionTitle}>Sao chép đường link</Text>
-                <Text style={styles.optionSubtitle}>Lấy liên kết bài viết để gửi bạn bè</Text>
+                <Text style={styles.optionTitle}>{t('copy_link')}</Text>
+                <Text style={styles.optionSubtitle}>{t('copy_link_desc')}</Text>
               </View>
             </TouchableOpacity>
 
@@ -147,15 +150,15 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 <Text style={styles.optionIcon}>📱</Text>
               </View>
               <View style={styles.optionTextBox}>
-                <Text style={styles.optionTitle}>Chia sẻ qua ứng dụng khác</Text>
-                <Text style={styles.optionSubtitle}>Gửi qua Zalo, Messenger, Telegram, Facebook...</Text>
+                <Text style={styles.optionTitle}>{t('share_other_apps')}</Text>
+                <Text style={styles.optionSubtitle}>{t('share_other_apps_desc')}</Text>
               </View>
             </TouchableOpacity>
           </View>
 
           {/* Cancel Button */}
           <TouchableOpacity style={styles.cancelBtn} onPress={onClose} activeOpacity={0.8}>
-            <Text style={styles.cancelBtnText}>Đóng</Text>
+            <Text style={styles.cancelBtnText}>{t('close')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -163,7 +166,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.65)',
@@ -173,13 +176,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetCard: {
-    backgroundColor: '#181828',
+    backgroundColor: C.card,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === 'ios' ? 32 : 18,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: C.border,
   },
   header: {
     alignItems: 'center',
@@ -198,7 +201,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   optionsList: {
     paddingVertical: 8,
@@ -228,7 +231,7 @@ const styles = StyleSheet.create({
   optionTitle: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 2,
   },
   optionSubtitle: {
@@ -238,7 +241,9 @@ const styles = StyleSheet.create({
   },
   cancelBtn: {
     marginTop: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     borderRadius: 18,
     paddingVertical: 13,
     alignItems: 'center',
@@ -247,6 +252,6 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
   },
 });

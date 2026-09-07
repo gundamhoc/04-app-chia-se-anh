@@ -16,10 +16,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Colors } from '../../constants/Colors';
+import { ColorScheme } from '../../constants/Colors';
+import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../hooks/useSocket';
 import { useToast } from '../../hooks/useToast';
+import { useI18n } from '../../utils/i18n';
 import { photoService } from '../../services/photoService';
 import { Photo, PhotoReaction } from '../../types';
 import { CommentModal } from '../../components/CommentModal';
@@ -28,7 +30,6 @@ import { PostOptionsModal } from '../../components/PostOptionsModal';
 import { EditPostModal } from '../../components/EditPostModal';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 
-const C = Colors.dark;
 const EMOJIS = ['❤️', '🔥', '😂', '😮', '😢'];
 
 export default function HomeScreen() {
@@ -37,6 +38,9 @@ export default function HomeScreen() {
   const { isConnected, socket } = useSocket();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
+  const { colors: C, isDark } = useTheme();
+  const { t, formatTime } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
 
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -226,24 +230,6 @@ export default function HomeScreen() {
     }
   };
 
-  // Format relative date (vd: "Vừa xong", "10 phút trước", "15:30 06/09")
-  const formatTime = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMins / 60);
-
-      if (diffMins < 1) return 'Vừa xong';
-      if (diffMins < 60) return `${diffMins} phút trước`;
-      if (diffHours < 24) return `${diffHours} giờ trước`;
-      return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-    } catch (e) {
-      return '';
-    }
-  };
-
   const renderPhotoCard = ({ item }: { item: Photo }) => {
     const isOwner = user?.id === item.user_id;
     const authorAvatarUri = item.author_avatar
@@ -286,10 +272,10 @@ export default function HomeScreen() {
               ]}>
                 <Text style={styles.privacyBadgeText}>
                   {item.privacy === 'public'
-                    ? '🌐 Công khai'
+                    ? `🌐 ${t('public')}`
                     : item.privacy === 'private'
-                    ? '🔒 Riêng tư'
-                    : '👥 Bạn bè coi'}
+                    ? `🔒 ${t('private')}`
+                    : `👥 ${t('friends_only')}`}
                 </Text>
               </View>
             </View>
@@ -349,7 +335,7 @@ export default function HomeScreen() {
                   {top2Reactions.map((r) => r.emoji).join('')}
                 </Text>
                 <Text style={styles.metricsReactionCount}>
-                  {totalReactionsCount} lượt tương tác
+                  {totalReactionsCount} {t('interactions')}
                 </Text>
               </View>
             ) : <View />}
@@ -357,7 +343,7 @@ export default function HomeScreen() {
             {item.comment_count && item.comment_count > 0 ? (
               <TouchableOpacity onPress={() => setActiveCommentPhoto(item)}>
                 <Text style={styles.metricsCommentText}>
-                  {item.comment_count} bình luận
+                  {item.comment_count} {t('comments_count')}
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -402,7 +388,7 @@ export default function HomeScreen() {
           >
             <Text style={styles.mainActionIcon}>{hasUserReacted ? userReaction.emoji : '🤍'}</Text>
             <Text style={[styles.mainActionText, hasUserReacted && styles.mainActionTextActive]}>
-              {hasUserReacted ? 'Đã thích' : 'Thích'}
+              {hasUserReacted ? t('liked') : t('like')}
             </Text>
           </TouchableOpacity>
 
@@ -416,7 +402,7 @@ export default function HomeScreen() {
           >
             <Text style={styles.mainActionIcon}>💬</Text>
             <Text style={styles.mainActionText}>
-              Bình luận {item.comment_count && item.comment_count > 0 ? `(${item.comment_count})` : ''}
+              {t('comment')} {item.comment_count && item.comment_count > 0 ? `(${item.comment_count})` : ''}
             </Text>
           </TouchableOpacity>
 
@@ -429,7 +415,7 @@ export default function HomeScreen() {
             activeOpacity={0.7}
           >
             <Text style={styles.mainActionIcon}>↗️</Text>
-            <Text style={styles.mainActionText}>Chia sẻ</Text>
+            <Text style={styles.mainActionText}>{t('share')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -438,7 +424,7 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
-      <StatusBar style="light" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       {/* App Bar hoặc Search Bar bài viết */}
       {isSearchVisible ? (
@@ -450,8 +436,8 @@ export default function HomeScreen() {
                 style={styles.searchBarInput}
                 placeholder={
                   searchScope === 'friends'
-                    ? 'Tìm bài viết của bạn bè...'
-                    : 'Khám phá bài viết công khai của mọi người...'
+                    ? t('feed_search_placeholder')
+                    : t('search_public_explore')
                 }
                 placeholderTextColor={C.textMuted}
                 value={searchQuery}
@@ -483,7 +469,7 @@ export default function HomeScreen() {
                 fetchFeed();
               }}
             >
-              <Text style={styles.closeSearchText}>Đóng</Text>
+              <Text style={styles.closeSearchText}>{t('close')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -503,7 +489,7 @@ export default function HomeScreen() {
                   searchScope === 'friends' && styles.scopeChipTextActive,
                 ]}
               >
-                👥 Bài viết bạn bè
+                👥 {t('friends_posts')}
               </Text>
             </TouchableOpacity>
 
@@ -521,7 +507,7 @@ export default function HomeScreen() {
                   searchScope === 'public' && styles.scopeChipTextActive,
                 ]}
               >
-                🌐 Khám phá (Toàn MXH)
+                🌐 {t('explore_public')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -533,14 +519,14 @@ export default function HomeScreen() {
           <View style={styles.appBarRight}>
             <View style={[styles.socketBadge, isConnected ? styles.socketOn : styles.socketOff]}>
               <View style={[styles.socketDot, isConnected ? styles.dotOn : styles.dotOff]} />
-              <Text style={styles.socketText}>{isConnected ? 'Online' : 'Offline'}</Text>
+              <Text style={styles.socketText}>{isConnected ? t('online') : t('offline')}</Text>
             </View>
 
             <TouchableOpacity
               style={styles.btnHeaderCamera}
               onPress={() => router.push('/add-photo')}
             >
-              <Text style={styles.btnHeaderCameraText}>+ Khoảnh khắc</Text>
+              <Text style={styles.btnHeaderCameraText}>{t('moment_tag')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -558,7 +544,7 @@ export default function HomeScreen() {
       {isSearchVisible && searchQuery.trim().length > 0 && (
         <View style={styles.searchBanner}>
           <Text style={styles.searchBannerText} numberOfLines={1}>
-            {searchScope === 'friends' ? '👥 Bạn bè' : '🌐 Khám phá'}: "{searchQuery.trim()}" ({filteredPhotos.length} bài)
+            {searchScope === 'friends' ? `👥 ${t('feed_friends')}` : `🌐 ${t('feed_title')}`}: "{searchQuery.trim()}" ({filteredPhotos.length} {t('posts_stat').toLowerCase()})
           </Text>
           <TouchableOpacity
             onPress={() => {
@@ -566,7 +552,7 @@ export default function HomeScreen() {
               fetchFeed(undefined, searchScope);
             }}
           >
-            <Text style={styles.searchBannerReset}>Bỏ lọc</Text>
+            <Text style={styles.searchBannerReset}>{t('clear_filter')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -575,17 +561,17 @@ export default function HomeScreen() {
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={styles.loadingText}>Đang tải khoảnh khắc Locket...</Text>
+          <Text style={styles.loadingText}>{t('loading')}</Text>
         </View>
       ) : filteredPhotos.length === 0 ? (
         <View style={styles.centerContainer}>
           {searchQuery.trim().length > 0 ? (
             <>
               <Text style={styles.emptyEmoji}>🔎</Text>
-              <Text style={styles.emptyTitle}>Không tìm thấy bài viết</Text>
+              <Text style={styles.emptyTitle}>{t('no_posts_found')}</Text>
               <Text style={styles.emptySub}>
-                Không có bài viết nào khớp với từ khóa "{searchQuery}" trong phạm vi{' '}
-                {searchScope === 'friends' ? 'bạn bè' : 'khám phá công khai'}.
+                {t('no_posts_match')} "{searchQuery}" {t('in_scope')}{' '}
+                {searchScope === 'friends' ? t('search_friends_scope') : t('search_public_scope')}.
               </Text>
               {searchScope === 'friends' && (
                 <TouchableOpacity
@@ -593,7 +579,7 @@ export default function HomeScreen() {
                   onPress={() => handleScopeChange('public')}
                 >
                   <Text style={styles.btnSwitchExploreText}>
-                    🌐 Tìm kiếm trong Khám phá công khai
+                    🌐 {t('search_public_explore')}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -604,21 +590,21 @@ export default function HomeScreen() {
                   fetchFeed(undefined, searchScope);
                 }}
               >
-                <Text style={styles.btnCreateFirstText}>✕ Xóa từ khóa tìm kiếm</Text>
+                <Text style={styles.btnCreateFirstText}>✕ {t('clear_search')}</Text>
               </TouchableOpacity>
             </>
           ) : (
             <>
               <Text style={styles.emptyEmoji}>📸</Text>
-              <Text style={styles.emptyTitle}>Chưa có khoảnh khắc nào</Text>
+              <Text style={styles.emptyTitle}>{t('feed_empty')}</Text>
               <Text style={styles.emptySub}>
-                Hãy đăng khoảnh khắc đầu tiên của bạn hoặc kết bạn thêm để ngắm nhìn ảnh từ bạn bè!
+                {t('feed_empty_desc')}
               </Text>
               <TouchableOpacity
                 style={styles.btnCreateFirst}
                 onPress={() => router.push('/add-photo')}
               >
-                <Text style={styles.btnCreateFirstText}>📷 Chia sẻ khoảnh khắc ngay</Text>
+                <Text style={styles.btnCreateFirstText}>📷 {t('share_moment_now')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -707,7 +693,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
@@ -893,12 +879,12 @@ const styles = StyleSheet.create({
     right: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 14, 23, 0.78)',
+    backgroundColor: isDark ? 'rgba(15, 14, 23, 0.78)' : 'rgba(255, 255, 255, 0.88)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
   },
   topEmojiFloatIcons: {
     fontSize: 15,
@@ -907,7 +893,7 @@ const styles = StyleSheet.create({
   topEmojiFloatCount: {
     fontSize: 12,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : C.text,
   },
   metricsBar: {
     flexDirection: 'row',
@@ -953,15 +939,15 @@ const styles = StyleSheet.create({
     left: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1E2F',
+    backgroundColor: C.card,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 26,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.55,
+    shadowOpacity: isDark ? 0.55 : 0.15,
     shadowRadius: 10,
     elevation: 20,
     zIndex: 9999,
@@ -1094,7 +1080,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: C.inputBg,
     borderRadius: 20,
     paddingHorizontal: 12,
     height: 40,
@@ -1138,7 +1124,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 14,
-    backgroundColor: '#242426',
+    backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
   },

@@ -17,6 +17,9 @@ export const connectSocket = (userId: number): Socket => {
 
   socket = io(SOCKET_URL, {
     transports: ['websocket', 'polling'],
+    extraHeaders: {
+      'ngrok-skip-browser-warning': '69420',
+    },
     autoConnect: true,
     reconnection: true,
     reconnectionDelay: 1000,

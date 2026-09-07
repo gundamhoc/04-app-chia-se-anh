@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -12,20 +12,24 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
-import { Colors } from '../constants/Colors';
+import { ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 import { photoService } from '../services/photoService';
 import { friendService } from '../services/friendService';
 import { Friend, PhotoPrivacy } from '../types';
 import { useToast } from '../hooks/useToast';
 import { WebCameraModal } from '../components/WebCameraModal';
-
-const C = Colors.dark;
+import { useI18n } from '../utils/i18n';
 
 export default function AddPhotoScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
+  const { colors: C, isDark } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
@@ -104,27 +108,27 @@ export default function AddPhotoScreen() {
       }
     } catch (error) {
       console.warn('Camera error:', error);
-      showToast('error', 'Không thể mở máy ảnh. Vui lòng thử lại.');
+      showToast('error', t('camera_error'));
     }
   };
 
   // Thực hiện đăng bài
   const handleUpload = async () => {
     if (!imageUri) {
-      showToast('warning', 'Vui lòng chọn hoặc chụp 1 bức ảnh trước.');
+      showToast('warning', t('select_photo_first'));
       return;
     }
 
     setSubmitting(true);
     try {
       await photoService.uploadPhoto(imageUri, caption, selectedRecipientId, privacy);
-      showToast('success', 'Đã đăng ảnh khoảnh khắc Locket thành công! 📸');
+      showToast('success', t('post_success'));
       setTimeout(() => {
         router.replace('/(tabs)');
       }, 500);
     } catch (error: unknown) {
       console.warn('Upload photo failed:', error);
-      let errMsg = 'Đăng ảnh thất bại.';
+      let errMsg = t('upload_photo_failed');
       if (error && typeof error === 'object') {
         const axErr = error as { response?: { data?: { message?: string } }; message?: string };
         if (axErr.response?.data?.message) {
@@ -141,6 +145,7 @@ export default function AddPhotoScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* Header Bar */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -149,7 +154,7 @@ export default function AddPhotoScreen() {
         >
           <Text style={styles.closeText}>✕</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Khoảnh khắc mới 📸</Text>
+        <Text style={styles.headerTitle}>{t('new_moment')} 📸</Text>
         <TouchableOpacity
           style={[styles.btnPost, (!imageUri || submitting) && styles.btnPostDisabled]}
           onPress={handleUpload}
@@ -158,7 +163,7 @@ export default function AddPhotoScreen() {
           {submitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.btnPostText}>Chia sẻ</Text>
+            <Text style={styles.btnPostText}>{t('share')}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -174,15 +179,15 @@ export default function AddPhotoScreen() {
                 onPress={() => setImageUri(null)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.changePhotoText}>🔄 Chọn ảnh khác</Text>
+                <Text style={styles.changePhotoText}>🔄 {t('change_photo')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.placeholderContainer}>
               <Text style={styles.placeholderIcon}>📸</Text>
-              <Text style={styles.placeholderTitle}>Thêm khoảnh khắc</Text>
+              <Text style={styles.placeholderTitle}>{t('add_moment_title')}</Text>
               <Text style={styles.placeholderSub}>
-                Chọn cách bạn muốn thêm ảnh vào bài đăng:
+                {t('add_moment_sub')}
               </Text>
 
               <View style={styles.choiceButtonsContainer}>
@@ -195,8 +200,8 @@ export default function AddPhotoScreen() {
                     <Text style={styles.choiceIcon}>📷</Text>
                   </View>
                   <View style={styles.choiceTextBox}>
-                    <Text style={styles.choiceTitle}>Chụp ảnh mới</Text>
-                    <Text style={styles.choiceDesc}>Mở máy ảnh chụp khoảnh khắc trực tiếp</Text>
+                    <Text style={styles.choiceTitle}>{t('take_new_photo')}</Text>
+                    <Text style={styles.choiceDesc}>{t('take_new_photo_desc')}</Text>
                   </View>
                 </TouchableOpacity>
 
@@ -209,8 +214,8 @@ export default function AddPhotoScreen() {
                     <Text style={styles.choiceIcon}>🖼️</Text>
                   </View>
                   <View style={styles.choiceTextBox}>
-                    <Text style={styles.choiceTitle}>Chọn từ thư viện</Text>
-                    <Text style={styles.choiceDesc}>Tải bức ảnh có sẵn từ bộ nhớ máy</Text>
+                    <Text style={styles.choiceTitle}>{t('choose_from_library')}</Text>
+                    <Text style={styles.choiceDesc}>{t('choose_from_library_desc')}</Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -222,22 +227,22 @@ export default function AddPhotoScreen() {
           <View style={styles.photoPickerBar}>
             <TouchableOpacity style={styles.pickerBtn} onPress={takeWithCamera}>
               <Text style={styles.pickerIcon}>📷</Text>
-              <Text style={styles.pickerText}>Chụp lại</Text>
+              <Text style={styles.pickerText}>{t('retake_photo')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.pickerBtn} onPress={pickFromLibrary}>
               <Text style={styles.pickerIcon}>🖼️</Text>
-              <Text style={styles.pickerText}>Chọn ảnh khác</Text>
+              <Text style={styles.pickerText}>{t('change_photo')}</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Caption Input */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Lời nhắn / Caption</Text>
+          <Text style={styles.label}>{t('caption_label')}</Text>
           <TextInput
             style={styles.captionInput}
-            placeholder="Viết lời nhắn cho khoảnh khắc này..."
+            placeholder={t('caption_placeholder')}
             placeholderTextColor={C.textMuted}
             value={caption}
             onChangeText={setCaption}
@@ -248,7 +253,7 @@ export default function AddPhotoScreen() {
 
         {/* Quyền riêng tư bài viết */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Quyền riêng tư bài viết</Text>
+          <Text style={styles.label}>{t('post_privacy')}</Text>
           <View style={styles.privacyRow}>
             <TouchableOpacity
               style={[
@@ -265,7 +270,7 @@ export default function AddPhotoScreen() {
                   privacy === 'public' && styles.privacyTextActive,
                 ]}
               >
-                Công khai
+                {t('public')}
               </Text>
             </TouchableOpacity>
 
@@ -284,7 +289,7 @@ export default function AddPhotoScreen() {
                   privacy === 'friends' && styles.privacyTextActive,
                 ]}
               >
-                Bạn bè coi
+                {t('friends_only')}
               </Text>
             </TouchableOpacity>
 
@@ -303,22 +308,22 @@ export default function AddPhotoScreen() {
                   privacy === 'private' && styles.privacyTextActive,
                 ]}
               >
-                Riêng tư
+                {t('private')}
               </Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.privacyDesc}>
             {privacy === 'public'
-              ? '🌐 Ai trên Masita cũng có thể xem và khám phá bài viết này.'
+              ? `🌐 ${t('public_desc')}`
               : privacy === 'friends'
-              ? '👥 Chỉ bạn bè đã kết bạn mới có thể xem bài viết này.'
-              : '🔒 Chỉ mình bạn mới có thể xem bài viết này (ẩn với tất cả).'}
+              ? `👥 ${t('friends_desc')}`
+              : `🔒 ${t('private_desc')}`}
           </Text>
         </View>
 
         {/* Audience / Recipient Selector */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Gửi riêng tới bạn bè (Tùy chọn)</Text>
+          <Text style={styles.label}>{t('send_private_to_friends')}</Text>
           {loadingFriends ? (
             <ActivityIndicator size="small" color={C.primary} style={{ alignSelf: 'flex-start' }} />
           ) : (
@@ -336,7 +341,7 @@ export default function AddPhotoScreen() {
                     selectedRecipientId === null && styles.recipientTextActive,
                   ]}
                 >
-                  👥 Tất cả bạn bè
+                  👥 {t('all_friends')}
                 </Text>
               </TouchableOpacity>
 
@@ -374,7 +379,7 @@ export default function AddPhotoScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
@@ -447,17 +452,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 14,
     right: 14,
-    backgroundColor: 'rgba(15, 15, 26, 0.88)',
+    backgroundColor: isDark ? 'rgba(15, 15, 26, 0.88)' : 'rgba(255, 255, 255, 0.92)',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
   },
   changePhotoText: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   placeholderContainer: {
     padding: 20,
@@ -471,7 +476,7 @@ const styles = StyleSheet.create({
   placeholderTitle: {
     fontSize: 17,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 4,
   },
   placeholderSub: {
@@ -488,7 +493,7 @@ const styles = StyleSheet.create({
   choiceBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
     paddingVertical: 14,
@@ -512,7 +517,7 @@ const styles = StyleSheet.create({
   choiceTitle: {
     fontSize: 15,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 2,
   },
   choiceDesc: {
@@ -555,7 +560,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   captionInput: {
-    backgroundColor: C.card,
+    backgroundColor: C.inputBg,
     borderRadius: 16,
     padding: 14,
     fontSize: 15,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,11 +11,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
-import { Colors } from '../constants/Colors';
+import { Colors, ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 import { messageService } from '../services/messageService';
 import { useToast } from '../hooks/useToast';
-
-const C = Colors.dark;
+import { useI18n } from '../utils/i18n';
 
 interface FileViewerModalProps {
   visible: boolean;
@@ -36,6 +36,9 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({
   onClose,
   onDownload,
 }) => {
+  const { colors: C, isDark } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
@@ -114,10 +117,10 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({
             </View>
             <View style={styles.titleBox}>
               <Text style={styles.fileName} numberOfLines={1}>
-                {fileName || 'Tệp tin'}
+                {fileName || t('choose_file')}
               </Text>
               <Text style={styles.fileSub}>
-                {formatFileSize(fileSize)} {lines.length > 0 ? `• ${lines.length} dòng` : ''}
+                {formatFileSize(fileSize)} {lines.length > 0 ? `• ${lines.length} ${t('lines_count')}` : ''}
               </Text>
             </View>
           </View>
@@ -130,7 +133,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({
                 onPress={handleCopy}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionBtnText}>{copied ? '✓ Đã chép' : '📋 Chép'}</Text>
+                <Text style={styles.actionBtnText}>{copied ? `✓ ${t('copied_text')}` : `📋 ${t('copy_text')}`}</Text>
               </TouchableOpacity>
             )}
 
@@ -140,7 +143,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({
                 onPress={() => onDownload(fileUrl, fileName || 'download')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionBtnText}>⬇️ Tải</Text>
+                <Text style={styles.actionBtnText}>⬇️ {t('download_text')}</Text>
               </TouchableOpacity>
             )}
 
@@ -155,7 +158,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({
           {loading ? (
             <View style={styles.centerBox}>
               <ActivityIndicator size="large" color={C.primary} />
-              <Text style={styles.loadingText}>Đang đọc tệp tin...</Text>
+              <Text style={styles.loadingText}>{t('reading_file')}</Text>
             </View>
           ) : error ? (
             <View style={styles.centerBox}>
@@ -166,7 +169,7 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({
                   style={styles.errorDownloadBtn}
                   onPress={() => onDownload(fileUrl, fileName || 'download')}
                 >
-                  <Text style={styles.errorDownloadText}>⬇️ Tải tệp về thiết bị để mở</Text>
+                  <Text style={styles.errorDownloadText}>⬇️ {t('download_to_open')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -213,164 +216,165 @@ export const FileViewerModal: React.FC<FileViewerModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0D1117',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#161B22',
-    borderBottomWidth: 1,
-    borderBottomColor: '#30363D',
-  },
-  headerLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: 'rgba(108, 99, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  fileIcon: {
-    fontSize: 18,
-  },
-  titleBox: {
-    flex: 1,
-  },
-  fileName: {
-    fontSize: 15,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#F0F6FC',
-  },
-  fileSub: {
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-    color: '#8B949E',
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#21262D',
-    borderWidth: 1,
-    borderColor: '#30363D',
-  },
-  actionBtnCopied: {
-    backgroundColor: 'rgba(0, 230, 118, 0.15)',
-    borderColor: '#00E676',
-  },
-  actionBtnText: {
-    fontSize: 12,
-    fontFamily: 'Inter_500Medium',
-    color: '#E6EDF3',
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#21262D',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#30363D',
-  },
-  closeBtnText: {
-    fontSize: 14,
-    color: '#8B949E',
-    fontWeight: 'bold',
-  },
-  editorArea: {
-    flex: 1,
-    backgroundColor: '#0D1117',
-  },
-  centerBox: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#8B949E',
-    fontFamily: 'Inter_400Regular',
-  },
-  errorIcon: {
-    fontSize: 40,
-    marginBottom: 12,
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#F85149',
-    textAlign: 'center',
-    lineHeight: 22,
-    fontFamily: 'Inter_400Regular',
-  },
-  errorDownloadBtn: {
-    marginTop: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: C.primary,
-    borderRadius: 10,
-  },
-  errorDownloadText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  verticalScroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingVertical: 12,
-  },
-  horizontalContent: {
-    minWidth: '100%',
-  },
-  codeContainer: {
-    flexDirection: 'row',
-  },
-  gutter: {
-    paddingLeft: 12,
-    paddingRight: 14,
-    borderRightWidth: 1,
-    borderRightColor: '#21262D',
-    alignItems: 'flex-end',
-    userSelect: 'none',
-  },
-  lineNumber: {
-    fontSize: 12,
-    lineHeight: 20,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    color: '#484F58',
-  },
-  codeLines: {
-    paddingLeft: 14,
-    paddingRight: 24,
-    flex: 1,
-  },
-  codeText: {
-    fontSize: 13,
-    lineHeight: 20,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    color: '#C9D1D9',
-  },
-});
+const createStyles = (C: ColorScheme, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: isDark ? '#0D1117' : C.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: isDark ? '#161B22' : C.card,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+    },
+    headerLeft: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    iconBox: {
+      width: 36,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: isDark ? 'rgba(108, 99, 255, 0.15)' : 'rgba(108, 99, 255, 0.1)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 10,
+    },
+    fileIcon: {
+      fontSize: 18,
+    },
+    titleBox: {
+      flex: 1,
+    },
+    fileName: {
+      fontSize: 15,
+      fontFamily: 'Inter_600SemiBold',
+      color: C.text,
+    },
+    fileSub: {
+      fontSize: 12,
+      fontFamily: 'Inter_400Regular',
+      color: C.textMuted,
+      marginTop: 2,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    actionBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: isDark ? '#21262D' : C.surface,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    actionBtnCopied: {
+      backgroundColor: 'rgba(0, 230, 118, 0.15)',
+      borderColor: '#00E676',
+    },
+    actionBtnText: {
+      fontSize: 12,
+      fontFamily: 'Inter_500Medium',
+      color: C.text,
+    },
+    closeBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: isDark ? '#21262D' : C.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    closeBtnText: {
+      fontSize: 14,
+      color: C.textSecondary,
+      fontWeight: 'bold',
+    },
+    editorArea: {
+      flex: 1,
+      backgroundColor: isDark ? '#0D1117' : '#F6F8FA',
+    },
+    centerBox: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 32,
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 14,
+      color: C.textMuted,
+      fontFamily: 'Inter_400Regular',
+    },
+    errorIcon: {
+      fontSize: 40,
+      marginBottom: 12,
+    },
+    errorText: {
+      fontSize: 14,
+      color: '#F85149',
+      textAlign: 'center',
+      lineHeight: 22,
+      fontFamily: 'Inter_400Regular',
+    },
+    errorDownloadBtn: {
+      marginTop: 16,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      backgroundColor: C.primary,
+      borderRadius: 10,
+    },
+    errorDownloadText: {
+      color: '#FFFFFF',
+      fontSize: 13,
+      fontFamily: 'Inter_600SemiBold',
+    },
+    verticalScroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingVertical: 12,
+    },
+    horizontalContent: {
+      minWidth: '100%',
+    },
+    codeContainer: {
+      flexDirection: 'row',
+    },
+    gutter: {
+      paddingLeft: 12,
+      paddingRight: 14,
+      borderRightWidth: 1,
+      borderRightColor: isDark ? '#21262D' : '#E1E4E8',
+      alignItems: 'flex-end',
+      userSelect: 'none',
+    },
+    lineNumber: {
+      fontSize: 12,
+      lineHeight: 20,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      color: isDark ? '#484F58' : '#959DA5',
+    },
+    codeLines: {
+      paddingLeft: 14,
+      paddingRight: 24,
+      flex: 1,
+    },
+    codeText: {
+      fontSize: 13,
+      lineHeight: 20,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      color: isDark ? '#C9D1D9' : '#24292F',
+    },
+  });

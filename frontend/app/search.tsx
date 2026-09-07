@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -12,17 +12,21 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors } from '../constants/Colors';
+import { StatusBar } from 'expo-status-bar';
+import { ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 import { friendService } from '../services/friendService';
 import { UserSearchResult, FriendshipStatus } from '../types';
 import { useToast } from '../hooks/useToast';
-
-const C = Colors.dark;
+import { useI18n } from '../utils/i18n';
 
 export default function SearchScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
+  const { colors: C, isDark } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserSearchResult[]>([]);
@@ -109,19 +113,19 @@ export default function SearchScreen() {
       case 'none':
         return (
           <TouchableOpacity style={styles.btnPrimary} onPress={() => handleAction(user)}>
-            <Text style={styles.btnPrimaryText}>+ Kết bạn</Text>
+            <Text style={styles.btnPrimaryText}>+ {t('add_friend')}</Text>
           </TouchableOpacity>
         );
       case 'pending_sent':
         return (
           <TouchableOpacity style={styles.btnOutline} onPress={() => handleAction(user)}>
-            <Text style={styles.btnOutlineText}>Đã gửi</Text>
+            <Text style={styles.btnOutlineText}>{t('request_sent')}</Text>
           </TouchableOpacity>
         );
       case 'pending_received':
         return (
           <TouchableOpacity style={styles.btnSuccess} onPress={() => handleAction(user)}>
-            <Text style={styles.btnSuccessText}>Chấp nhận</Text>
+            <Text style={styles.btnSuccessText}>{t('accept')}</Text>
           </TouchableOpacity>
         );
       case 'accepted':
@@ -129,13 +133,22 @@ export default function SearchScreen() {
           <View style={styles.acceptedRow}>
             <TouchableOpacity
               style={styles.btnChatSmall}
-              onPress={() => router.push(`/chat/${user.id}`)}
+              onPress={() =>
+                router.push({
+                  pathname: '/chat/[id]',
+                  params: {
+                    id: user.id.toString(),
+                    name: user.full_name || user.username,
+                    avatar: user.avatar_url || '',
+                  },
+                })
+              }
               activeOpacity={0.7}
             >
-              <Text style={styles.btnChatSmallText}>💬 Nhắn</Text>
+              <Text style={styles.btnChatSmallText}>💬 {t('chat_btn')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnAccepted} onPress={() => handleAction(user)}>
-              <Text style={styles.btnAcceptedText}>Bạn bè ✓</Text>
+              <Text style={styles.btnAcceptedText}>{t('friends_badge')} ✓</Text>
             </TouchableOpacity>
           </View>
         );
@@ -172,6 +185,7 @@ export default function SearchScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* Header Bar */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -182,7 +196,7 @@ export default function SearchScreen() {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm theo tên, @username, email..."
+            placeholder={t('search_users_placeholder')}
             placeholderTextColor={C.textMuted}
             value={query}
             onChangeText={setQuery}
@@ -201,21 +215,21 @@ export default function SearchScreen() {
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={styles.loadingText}>Đang tìm kiếm...</Text>
+          <Text style={styles.loadingText}>{t('loading')}</Text>
         </View>
       ) : query.trim().length === 0 ? (
         <View style={styles.centerContainer}>
           <Text style={styles.hintIcon}>🔎</Text>
-          <Text style={styles.hintTitle}>Tìm kiếm người dùng</Text>
+          <Text style={styles.hintTitle}>{t('search_users')}</Text>
           <Text style={styles.hintSub}>
-            Nhập tên người dùng hoặc email để kết nối bạn bè mới.
+            {t('search_users_desc')}
           </Text>
         </View>
       ) : results.length === 0 ? (
         <View style={styles.centerContainer}>
           <Text style={styles.hintIcon}>🤷</Text>
-          <Text style={styles.hintTitle}>Không tìm thấy kết quả</Text>
-          <Text style={styles.hintSub}>Không có người dùng nào khớp với "{query}".</Text>
+          <Text style={styles.hintTitle}>{t('no_results_for_query')}</Text>
+          <Text style={styles.hintSub}>{t('no_users_match')} "{query}".</Text>
         </View>
       ) : (
         <ScrollView
@@ -227,7 +241,7 @@ export default function SearchScreen() {
           {results.filter((u) => u.friendship_status === 'accepted').length > 0 && (
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>
-                👥 Bạn bè của bạn ({results.filter((u) => u.friendship_status === 'accepted').length})
+                👥 {t('your_friends_section')} ({results.filter((u) => u.friendship_status === 'accepted').length})
               </Text>
               {results
                 .filter((u) => u.friendship_status === 'accepted')
@@ -241,7 +255,7 @@ export default function SearchScreen() {
           {results.filter((u) => u.friendship_status !== 'accepted').length > 0 && (
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>
-                ➕ Tìm kết bạn mới ({results.filter((u) => u.friendship_status !== 'accepted').length})
+                ➕ {t('find_friends_section')} ({results.filter((u) => u.friendship_status !== 'accepted').length})
               </Text>
               {results
                 .filter((u) => u.friendship_status !== 'accepted')
@@ -256,7 +270,7 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
@@ -285,7 +299,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: C.background,
+    backgroundColor: C.inputBg,
     borderRadius: 20,
     paddingHorizontal: 14,
     height: 44,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,8 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { Colors } from '../constants/Colors';
-
-const C = Colors.dark;
+import { Colors, ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 
 interface WebCameraModalProps {
   visible: boolean;
@@ -23,6 +22,9 @@ export const WebCameraModal: React.FC<WebCameraModalProps> = ({
   onClose,
   onCapture,
 }) => {
+  const { colors: C, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
+
   if (Platform.OS !== 'web') {
     return null;
   }
@@ -225,135 +227,136 @@ export const WebCameraModal: React.FC<WebCameraModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  container: {
-    width: '100%',
-    maxWidth: 480,
-    backgroundColor: '#161622',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: C.border,
-    overflow: 'hidden',
-    paddingBottom: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  title: {
-    fontSize: 17,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  viewfinderContainer: {
-    width: '100%',
-    aspectRatio: 1,
-    backgroundColor: '#0A0A10',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  centerBox: {
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hintText: {
-    marginTop: 12,
-    color: C.textMuted,
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-  },
-  errorEmoji: {
-    fontSize: 40,
-    marginBottom: 8,
-  },
-  errorTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter_700Bold',
-    color: '#FF5252',
-    marginBottom: 6,
-  },
-  errorText: {
-    fontSize: 13,
-    color: C.textMuted,
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  retryBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: C.primary,
-    borderRadius: 8,
-  },
-  retryText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  controlsBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingHorizontal: 20,
-  },
-  iconBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 60,
-  },
-  iconBtnText: {
-    fontSize: 22,
-  },
-  iconBtnLabel: {
-    fontSize: 11,
-    color: C.textMuted,
-    marginTop: 4,
-  },
-  shutterBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  shutterBtnDisabled: {
-    opacity: 0.4,
-  },
-  shutterInner: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#FF3366',
-  },
-});
+const createStyles = (C: ColorScheme, isDark: boolean) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.85)' : 'rgba(0, 0, 0, 0.6)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 16,
+    },
+    container: {
+      width: '100%',
+      maxWidth: 480,
+      backgroundColor: C.card,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: C.border,
+      overflow: 'hidden',
+      paddingBottom: 20,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+    },
+    title: {
+      fontSize: 17,
+      fontFamily: 'Inter_600SemiBold',
+      color: C.text,
+    },
+    closeBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: C.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    closeText: {
+      color: C.textSecondary,
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    viewfinderContainer: {
+      width: '100%',
+      aspectRatio: 1,
+      backgroundColor: '#0A0A10',
+      justifyContent: 'center',
+      alignItems: 'center',
+      position: 'relative',
+    },
+    centerBox: {
+      padding: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    hintText: {
+      marginTop: 12,
+      color: C.textMuted,
+      fontSize: 14,
+      fontFamily: 'Inter_400Regular',
+    },
+    errorEmoji: {
+      fontSize: 40,
+      marginBottom: 8,
+    },
+    errorTitle: {
+      fontSize: 16,
+      fontFamily: 'Inter_700Bold',
+      color: '#FF5252',
+      marginBottom: 6,
+    },
+    errorText: {
+      fontSize: 13,
+      color: C.textMuted,
+      textAlign: 'center',
+      marginBottom: 16,
+      lineHeight: 18,
+    },
+    retryBtn: {
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      backgroundColor: C.primary,
+      borderRadius: 8,
+    },
+    retryText: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    controlsBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      paddingTop: 16,
+      paddingHorizontal: 20,
+    },
+    iconBtn: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 60,
+    },
+    iconBtnText: {
+      fontSize: 22,
+    },
+    iconBtnLabel: {
+      fontSize: 11,
+      color: C.textMuted,
+      marginTop: 4,
+    },
+    shutterBtn: {
+      width: 68,
+      height: 68,
+      borderRadius: 34,
+      borderWidth: 4,
+      borderColor: isDark ? '#FFFFFF' : C.text,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'transparent',
+    },
+    shutterBtnDisabled: {
+      opacity: 0.4,
+    },
+    shutterInner: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: '#FF3366',
+    },
+  });

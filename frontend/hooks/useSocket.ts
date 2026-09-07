@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getSocket, pingServer } from '../services/socketService';
 import { useToast } from '../context/ToastContext';
+import { useAppSettings } from '../store/appSettingsStore';
 
 /**
  * Hook để sử dụng Socket.io trong components
@@ -9,6 +10,7 @@ export const useSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
   const socket = getSocket();
   const { showToast } = useToast();
+  const { notifyMessages, notifyPosts, notifyInteractions } = useAppSettings();
 
   useEffect(() => {
     if (!socket) return;
@@ -25,8 +27,9 @@ export const useSocket = () => {
       if (mounted) setIsConnected(false);
     };
 
-    // Socket Event Handlers toàn cục cho Toast Notifications
+    // Socket Event Handlers toàn cục cho Toast Notifications (dựa theo cài đặt người dùng)
     const onNewPhoto = (data: { message?: string; author_name?: string }) => {
+      if (!notifyPosts) return;
       const msg = data.message || `📸 ${data.author_name || 'Một người bạn'} vừa chia sẻ ảnh mới!`;
       showToast('info', msg, 4000);
     };
@@ -42,8 +45,16 @@ export const useSocket = () => {
     };
 
     const onPhotoReaction = (data: { message?: string; actor_name?: string; emoji?: string }) => {
+      if (!notifyInteractions) return;
       const msg = data.message || `❤️ ${data.actor_name || 'Bạn bè'} đã thả cảm xúc vào ảnh của bạn!`;
       showToast('info', msg, 3500);
+    };
+
+    const onNewDirectMessage = (data: { message?: string; sender_name?: string; text?: string }) => {
+      if (!notifyMessages) return;
+      const sender = data.sender_name || 'Bạn bè';
+      const preview = data.text ? `: "${data.text.slice(0, 30)}${data.text.length > 30 ? '...' : ''}"` : '';
+      showToast('info', `💬 ${sender}${preview}`, 3500);
     };
 
     socket.on('connect', onConnect);
@@ -54,6 +65,7 @@ export const useSocket = () => {
     socket.on('friend_request_received', onFriendRequest);
     socket.on('friend_request_accepted', onFriendAccept);
     socket.on('photo_reaction_updated', onPhotoReaction);
+    socket.on('new_direct_message', onNewDirectMessage);
 
     // Set initial state
     if (mounted) setIsConnected(socket.connected);
@@ -68,8 +80,9 @@ export const useSocket = () => {
       socket.off('friend_request_received', onFriendRequest);
       socket.off('friend_request_accepted', onFriendAccept);
       socket.off('photo_reaction_updated', onPhotoReaction);
+      socket.off('new_direct_message', onNewDirectMessage);
     };
-  }, [socket, showToast]);
+  }, [socket, showToast, notifyMessages, notifyPosts, notifyInteractions]);
 
   const ping = (callback: (data: { message: string; timestamp: number }) => void) => {
     pingServer(callback);

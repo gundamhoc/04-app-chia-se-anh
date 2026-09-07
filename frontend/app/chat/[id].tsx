@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -15,19 +15,20 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Colors } from '../../constants/Colors';
+import { ColorScheme } from '../../constants/Colors';
+import { useTheme } from '../../context/ThemeContext';
 import { useAuthStore } from '../../store/authStore';
 import { useSocket } from '../../hooks/useSocket';
 import { useToast } from '../../hooks/useToast';
+import { useI18n } from '../../utils/i18n';
 import { messageService } from '../../services/messageService';
 import { Message, Photo } from '../../types';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { WebCameraModal } from '../../components/WebCameraModal';
 import { FileViewerModal } from '../../components/FileViewerModal';
-
-const C = Colors.dark;
 
 const PRESET_THEMES = [
   { id: 'cosmic', name: 'Vũ trụ huyền ảo', url: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000&auto=format&fit=crop' },
@@ -51,6 +52,9 @@ export default function ChatScreen() {
   const { user } = useAuthStore();
   const { socket, isConnected } = useSocket();
   const { showToast } = useToast();
+  const { colors: C, isDark } = useTheme();
+  const { t, language } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
 
   const params = useLocalSearchParams<{
     id: string;
@@ -59,8 +63,13 @@ export default function ChatScreen() {
   }>();
 
   const friendId = parseInt(params.id, 10);
-  const friendName = params.name || 'Người bạn';
-  const friendAvatar = params.avatar || null;
+  const [friendName, setFriendName] = useState<string>(params.name || (language === 'vi' ? 'Người bạn' : 'Friend'));
+  const [friendAvatar, setFriendAvatar] = useState<string | null>(params.avatar || null);
+
+  useEffect(() => {
+    if (params.name) setFriendName(params.name);
+    if (params.avatar) setFriendAvatar(params.avatar);
+  }, [params.name, params.avatar]);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,6 +138,15 @@ export default function ChatScreen() {
     try {
       const data = await messageService.getMessages(friendId);
       setMessages(data.messages);
+      if (data.friend) {
+        const resolvedName = data.friend.full_name || data.friend.username;
+        if (resolvedName) {
+          setFriendName(resolvedName);
+        }
+        if (data.friend.avatar_url) {
+          setFriendAvatar(data.friend.avatar_url);
+        }
+      }
       if (data.background_url !== undefined) {
         setChatBackground(data.background_url || null);
       }
@@ -143,7 +161,7 @@ export default function ChatScreen() {
       setTimeout(() => scrollToBottom(false), 200);
     } catch (e) {
       console.warn('Lỗi tải tin nhắn:', e);
-      showToast('error', 'Không thể tải lịch sử trò chuyện.');
+      showToast('error', language === 'vi' ? 'Không thể tải lịch sử trò chuyện.' : 'Failed to load chat history.');
     } finally {
       setLoading(false);
     }
@@ -675,7 +693,7 @@ export default function ChatScreen() {
   const formatMsgTime = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
-      return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
     } catch {
       return '';
     }
@@ -731,7 +749,7 @@ export default function ChatScreen() {
               {/* Huy hiệu hiển thị dung lượng MB ở dưới tấm hình + nút tải về */}
               <View style={styles.imageMetaBadge}>
                 <View style={styles.imageMetaLeft}>
-                  <Text style={styles.imageZoomHint}>🔍 Chạm phóng to</Text>
+                  <Text style={styles.imageZoomHint}>🔍 {t('zoom_hint')}</Text>
                   {item.file_size ? (
                     <Text style={styles.imageSizeText}>• {formatFileSize(item.file_size)}</Text>
                   ) : null}
@@ -753,25 +771,32 @@ export default function ChatScreen() {
           {/* TRƯỜNG HỢP 2: Tin nhắn tệp tin là CODE, TEXT, PDF, ZIP, DOCX... */}
           {!isImg && hasFile && (
             <TouchableOpacity
-              style={styles.fileCard}
+              style={[styles.fileCard, isMine ? styles.fileCardMine : styles.fileCardOther]}
               activeOpacity={0.8}
               onPress={() => handleFilePress(item)}
             >
-              <View style={styles.fileCardIconBox}>
+              <View style={[styles.fileCardIconBox, isMine ? styles.fileCardIconBoxMine : styles.fileCardIconBoxOther]}>
                 <Text style={styles.fileCardEmoji}>{getFileEmoji(item.file_name)}</Text>
               </View>
 
               <View style={styles.fileCardInfo}>
-                <Text style={styles.fileCardName} numberOfLines={1}>
-                  {item.file_name || 'Tệp tin đính kèm'}
+                <Text
+                  style={[styles.fileCardName, isMine ? styles.fileCardNameMine : styles.fileCardNameOther]}
+                  numberOfLines={1}
+                >
+                  {item.file_name || t('readable_file')}
                 </Text>
                 <View style={styles.fileCardMetaRow}>
                   {item.file_size ? (
-                    <Text style={styles.fileCardSize}>{formatFileSize(item.file_size)}</Text>
+                    <Text style={[styles.fileCardSize, isMine ? styles.fileCardSizeMine : styles.fileCardSizeOther]}>
+                      {formatFileSize(item.file_size)}
+                    </Text>
                   ) : null}
                   {isReadableTextOrCode(item) && (
-                    <View style={styles.readableBadge}>
-                      <Text style={styles.readableBadgeText}>📖 Có thể đọc</Text>
+                    <View style={[styles.readableBadge, isMine ? styles.readableBadgeMine : styles.readableBadgeOther]}>
+                      <Text style={[styles.readableBadgeText, isMine ? styles.readableBadgeTextMine : styles.readableBadgeTextOther]}>
+                        📖 {t('readable_file')}
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -779,7 +804,7 @@ export default function ChatScreen() {
 
               {/* Nút tải về tệp tin */}
               <TouchableOpacity
-                style={styles.fileCardDownloadBtn}
+                style={[styles.fileCardDownloadBtn, isMine ? styles.fileCardDownloadBtnMine : styles.fileCardDownloadBtnOther]}
                 onPress={() => handleDownloadFile(item.file_url!, item.file_name || 'file')}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -818,6 +843,7 @@ export default function ChatScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* 1. Header Bar cố định trên đỉnh */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -852,10 +878,10 @@ export default function ChatScreen() {
             </View>
             <Text style={[styles.headerStatus, isFriendTyping && styles.headerStatusTyping]}>
               {isFriendTyping
-                ? 'đang soạn tin... ✍️'
+                ? t('typing_status')
                 : isConnected
-                ? 'Đang trực tuyến'
-                : 'Ngoại tuyến'}
+                ? t('online')
+                : t('offline')}
             </Text>
           </View>
         </View>
@@ -881,7 +907,7 @@ export default function ChatScreen() {
           <Text style={styles.chatSearchIcon}>🔍</Text>
           <TextInput
             style={styles.chatSearchInput}
-            placeholder="Tìm tin nhắn hoặc tệp tin..."
+            placeholder={t('search_in_chat')}
             placeholderTextColor={C.textMuted}
             value={searchKeyword}
             onChangeText={handleSearchChange}
@@ -895,7 +921,7 @@ export default function ChatScreen() {
             </View>
           ) : searchKeyword.trim().length > 0 ? (
             <View style={styles.searchMatchCounter}>
-              <Text style={[styles.searchMatchText, { color: '#FF7070' }]}>0 kết quả</Text>
+              <Text style={[styles.searchMatchText, { color: '#FF7070' }]}>0 {t('zero_results')}</Text>
             </View>
           ) : null}
           {searchMatches.length > 0 && (
@@ -975,9 +1001,11 @@ export default function ChatScreen() {
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyIcon}>👋✨</Text>
-                <Text style={styles.emptyTitle}>Chưa có tin nhắn</Text>
+                <Text style={styles.emptyTitle}>{language === 'vi' ? 'Chưa có tin nhắn' : 'No messages yet'}</Text>
                 <Text style={styles.emptyDesc}>
-                  Hãy gửi một lời chào, hình ảnh hoặc tệp tin tới {friendName} nào!
+                  {language === 'vi'
+                    ? `Hãy gửi một lời chào, hình ảnh hoặc tệp tin tới ${friendName} nào!`
+                    : `Send a greeting, photo, or file to ${friendName}!`}
                 </Text>
               </View>
             }
@@ -987,7 +1015,9 @@ export default function ChatScreen() {
         {/* Typing indicator banner */}
         {isFriendTyping && (
           <View style={styles.typingBanner}>
-            <Text style={styles.typingBannerText}>{friendName} đang soạn tin...</Text>
+            <Text style={styles.typingBannerText}>
+              {friendName} {language === 'vi' ? 'đang soạn tin... ✍️' : 'is typing... ✍️'}
+            </Text>
           </View>
         )}
 
@@ -1033,7 +1063,7 @@ export default function ChatScreen() {
               <View style={[styles.actionIconCircle, { backgroundColor: '#6C63FF' }]}>
                 <Text style={styles.actionEmoji}>📷</Text>
               </View>
-              <Text style={styles.actionTitle}>Chụp ảnh</Text>
+              <Text style={styles.actionTitle}>{t('take_photo')}</Text>
             </TouchableOpacity>
 
             {/* 2. Thư viện ảnh */}
@@ -1045,7 +1075,7 @@ export default function ChatScreen() {
               <View style={[styles.actionIconCircle, { backgroundColor: '#10B981' }]}>
                 <Text style={styles.actionEmoji}>🖼️</Text>
               </View>
-              <Text style={styles.actionTitle}>Thư viện</Text>
+              <Text style={styles.actionTitle}>{t('photo_library')}</Text>
             </TouchableOpacity>
 
             {/* 3. Tệp tin */}
@@ -1057,7 +1087,7 @@ export default function ChatScreen() {
               <View style={[styles.actionIconCircle, { backgroundColor: '#F59E0B' }]}>
                 <Text style={styles.actionEmoji}>📁</Text>
               </View>
-              <Text style={styles.actionTitle}>Tệp tin</Text>
+              <Text style={styles.actionTitle}>{t('choose_file')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1085,7 +1115,7 @@ export default function ChatScreen() {
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.textInput}
-              placeholder={selectedFile ? 'Thêm ghi chú cho tệp tin...' : 'Nhập tin nhắn...'}
+              placeholder={selectedFile ? t('attach_note_placeholder') : t('type_message')}
               placeholderTextColor={C.textMuted}
               value={inputText}
               onChangeText={handleTextChange}
@@ -1183,7 +1213,7 @@ export default function ChatScreen() {
                 />
                 <View style={styles.settingsHeaderInfo}>
                   <Text style={styles.settingsModalTitle} numberOfLines={1}>
-                    Cài đặt cuộc trò chuyện ⚙️
+                    {t('chat_settings')} ⚙️
                   </Text>
                   <Text style={styles.settingsModalSubtitle} numberOfLines={1}>
                     {friendName}
@@ -1216,8 +1246,8 @@ export default function ChatScreen() {
                   <Text style={styles.settingsItemIcon}>🔍</Text>
                 </View>
                 <View style={styles.settingsItemContent}>
-                  <Text style={styles.settingsItemTitle}>Tìm kiếm tin nhắn</Text>
-                  <Text style={styles.settingsItemDesc}>Tìm nhanh nội dung và tệp tin trong đoạn chat</Text>
+                  <Text style={styles.settingsItemTitle}>{t('search')}</Text>
+                  <Text style={styles.settingsItemDesc}>{t('search_messages_desc')}</Text>
                 </View>
                 <Text style={styles.settingsItemArrow}>›</Text>
               </TouchableOpacity>
@@ -1232,14 +1262,14 @@ export default function ChatScreen() {
                   <Text style={styles.settingsItemIcon}>📌</Text>
                 </View>
                 <View style={styles.settingsItemContent}>
-                  <Text style={styles.settingsItemTitle}>Ghim cuộc trò chuyện</Text>
+                  <Text style={styles.settingsItemTitle}>{t('pin_chat')}</Text>
                   <Text style={styles.settingsItemDesc}>
-                    {isPinned ? 'Đang ghim lên đầu danh sách tin nhắn' : 'Đưa cuộc trò chuyện lên vị trí ưu tiên'}
+                    {isPinned ? t('pinned_chat_desc') : t('pin_chat_desc')}
                   </Text>
                 </View>
                 <View style={[styles.settingsBadge, isPinned ? styles.settingsBadgeActive : styles.settingsBadgeInactive]}>
                   <Text style={[styles.settingsBadgeText, isPinned && styles.settingsBadgeTextActive]}>
-                    {isPinned ? 'Đã ghim 📌' : 'Chưa ghim'}
+                    {isPinned ? `${t('pinned')} 📌` : t('unpinned_status')}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -1254,14 +1284,14 @@ export default function ChatScreen() {
                   <Text style={styles.settingsItemIcon}>{isMuted ? '🔕' : '🔔'}</Text>
                 </View>
                 <View style={styles.settingsItemContent}>
-                  <Text style={styles.settingsItemTitle}>Thông báo tin nhắn</Text>
+                  <Text style={styles.settingsItemTitle}>{t('notifications')}</Text>
                   <Text style={styles.settingsItemDesc}>
-                    {isMuted ? 'Đang tắt thông báo (Im lặng)' : 'Nhận thông báo khi có tin nhắn mới'}
+                    {isMuted ? t('muted_chat_desc') : t('mute_chat_desc')}
                   </Text>
                 </View>
                 <View style={[styles.settingsBadge, isMuted ? styles.settingsBadgeMuted : styles.settingsBadgeEnabled]}>
                   <Text style={[styles.settingsBadgeText, isMuted ? styles.settingsBadgeTextMuted : styles.settingsBadgeTextEnabled]}>
-                    {isMuted ? 'Đã tắt 🔕' : 'Đang bật 🔔'}
+                    {isMuted ? `${t('off')} 🔕` : `${t('on')} 🔔`}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -1281,9 +1311,9 @@ export default function ChatScreen() {
                   <Text style={styles.settingsItemIcon}>🎨</Text>
                 </View>
                 <View style={styles.settingsItemContent}>
-                  <Text style={styles.settingsItemTitle}>Theme & Hình nền</Text>
+                  <Text style={styles.settingsItemTitle}>{t('chat_theme')}</Text>
                   <Text style={styles.settingsItemDesc}>
-                    {chatBackground ? 'Đang dùng hình nền tùy chỉnh' : 'Đổi hình nền nghệ thuật hoặc ảnh cá nhân'}
+                    {chatBackground ? t('custom_theme_desc') : t('theme_chat_desc')}
                   </Text>
                 </View>
                 <Text style={styles.settingsItemArrow}>›</Text>
@@ -1296,7 +1326,7 @@ export default function ChatScreen() {
               onPress={() => setSettingsModalVisible(false)}
               activeOpacity={0.8}
             >
-              <Text style={styles.settingsCloseBtnText}>Đóng</Text>
+              <Text style={styles.settingsCloseBtnText}>{t('close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1405,7 +1435,7 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
@@ -1425,7 +1455,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   backArrow: {
-    color: '#FFFFFF',
+    color: C.text,
     fontSize: 24,
     fontWeight: 'bold',
   },
@@ -1442,7 +1472,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#202030',
+    backgroundColor: C.separator,
   },
   headerOnlineDot: {
     position: 'absolute',
@@ -1462,7 +1492,7 @@ const styles = StyleSheet.create({
   headerName: {
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   headerStatus: {
     fontSize: 12,
@@ -1506,7 +1536,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 6,
   },
   emptyDesc: {
@@ -1553,7 +1583,9 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   bubbleFriend: {
-    backgroundColor: '#202030',
+    backgroundColor: isDark ? '#202030' : C.card,
+    borderWidth: isDark ? 0 : 1,
+    borderColor: C.border,
     borderBottomLeftRadius: 4,
   },
   imageWrapper: {
@@ -1605,22 +1637,33 @@ const styles = StyleSheet.create({
   fileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
     borderRadius: 14,
     padding: 10,
     minWidth: 220,
     maxWidth: 280,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  fileCardMine: {
+    backgroundColor: 'rgba(0, 0, 0, 0.24)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  fileCardOther: {
+    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.3)' : '#F1F5F9',
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
   },
   fileCardIconBox: {
     width: 42,
     height: 42,
     borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
+  },
+  fileCardIconBoxMine: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  fileCardIconBoxOther: {
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
   },
   fileCardEmoji: {
     fontSize: 22,
@@ -1632,8 +1675,13 @@ const styles = StyleSheet.create({
   fileCardName: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
     marginBottom: 3,
+  },
+  fileCardNameMine: {
+    color: '#FFFFFF',
+  },
+  fileCardNameOther: {
+    color: isDark ? '#FFFFFF' : '#0F172A',
   },
   fileCardMetaRow: {
     flexDirection: 'row',
@@ -1643,23 +1691,43 @@ const styles = StyleSheet.create({
   fileCardSize: {
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
-    color: 'rgba(255, 255, 255, 0.65)',
+  },
+  fileCardSizeMine: {
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  fileCardSizeOther: {
+    color: isDark ? '#8A8A9E' : '#64748B',
   },
   readableBadge: {
-    backgroundColor: 'rgba(0, 230, 118, 0.2)',
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 6,
   },
+  readableBadgeMine: {
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  readableBadgeOther: {
+    backgroundColor: isDark ? 'rgba(108, 99, 255, 0.2)' : 'rgba(108, 99, 255, 0.12)',
+  },
   readableBadgeText: {
-    color: '#00E676',
     fontSize: 9,
     fontFamily: 'Inter_600SemiBold',
+  },
+  readableBadgeTextMine: {
+    color: '#FFFFFF',
+  },
+  readableBadgeTextOther: {
+    color: isDark ? '#B4AFFF' : '#6C63FF',
   },
   fileCardDownloadBtn: {
     padding: 6,
     borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  fileCardDownloadBtnMine: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  fileCardDownloadBtnOther: {
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
   },
   fileCardDownloadIcon: {
     fontSize: 16,
@@ -1680,7 +1748,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   textFriend: {
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : C.text,
   },
   metaRow: {
     flexDirection: 'row',
@@ -1726,7 +1794,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#161626',
+    backgroundColor: C.card,
     borderTopWidth: 1,
     borderTopColor: C.border,
   },
@@ -1745,7 +1813,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 10,
-    backgroundColor: '#222234',
+    backgroundColor: C.surface,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -1776,7 +1844,7 @@ const styles = StyleSheet.create({
   previewFileName: {
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   previewFileMeta: {
     fontSize: 11,
@@ -1789,7 +1857,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 14,
-    backgroundColor: '#141422',
+    backgroundColor: C.card,
     borderTopWidth: 1,
     borderTopColor: C.border,
     gap: 28,
@@ -1816,7 +1884,7 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: 12,
     fontFamily: 'Inter_500Medium',
-    color: '#FFFFFF',
+    color: C.text,
   },
   bottomBar: {
     flexDirection: 'row',
@@ -1832,12 +1900,12 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#222234',
+    backgroundColor: C.surface,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: C.border,
   },
   plusButtonActive: {
     backgroundColor: C.primary,
@@ -1856,15 +1924,17 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flex: 1,
-    backgroundColor: '#202030',
+    backgroundColor: C.inputBg,
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === 'ios' ? 8 : 4,
     maxHeight: 100,
     marginBottom: 2,
+    borderWidth: 1,
+    borderColor: C.border,
   },
   textInput: {
-    color: '#FFFFFF',
+    color: C.text,
     fontSize: 15,
     fontFamily: 'Inter_400Regular',
     minHeight: 32,
@@ -1894,10 +1964,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#26263A',
+    backgroundColor: C.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
+    borderWidth: 1,
+    borderColor: C.border,
   },
   headerThemeIcon: {
     fontSize: 18,
@@ -1906,13 +1978,15 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#26263A',
+    backgroundColor: C.surface,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    borderWidth: 1,
+    borderColor: C.border,
   },
   headerSettingsBtnHighlighted: {
-    backgroundColor: '#302E4A',
+    backgroundColor: `${C.primary}20`,
     borderWidth: 1,
     borderColor: C.primary,
   },
@@ -1929,13 +2003,13 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   settingsModalCard: {
-    backgroundColor: '#1E1E2D',
+    backgroundColor: C.card,
     borderRadius: 20,
     padding: 20,
     width: '100%',
     maxWidth: 440,
     borderWidth: 1,
-    borderColor: '#2E2E44',
+    borderColor: C.border,
   },
   settingsModalHeader: {
     flexDirection: 'row',
@@ -1944,7 +2018,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#2C2C3E',
+    borderBottomColor: C.border,
   },
   settingsHeaderLeft: {
     flexDirection: 'row',
@@ -1956,7 +2030,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#2A2A3E',
+    backgroundColor: C.separator,
   },
   settingsHeaderInfo: {
     flex: 1,
@@ -1964,7 +2038,7 @@ const styles = StyleSheet.create({
   settingsModalTitle: {
     fontSize: 16,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   settingsModalSubtitle: {
     fontSize: 13,
@@ -1979,12 +2053,12 @@ const styles = StyleSheet.create({
   settingsItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#161622',
+    backgroundColor: C.surface,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#26263A',
+    borderColor: C.border,
     gap: 12,
   },
   settingsItemIconBox: {
@@ -2003,7 +2077,7 @@ const styles = StyleSheet.create({
   settingsItemTitle: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 2,
   },
   settingsItemDesc: {
@@ -2147,13 +2221,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   themeModalCard: {
-    backgroundColor: '#1E1E2D',
+    backgroundColor: isDark ? '#1E1E2D' : '#F8FAFC',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
     maxHeight: '80%',
     borderWidth: 1,
-    borderColor: '#2E2E42',
+    borderColor: isDark ? '#2E2E42' : '#E2E8F0',
   },
   themeModalHeader: {
     flexDirection: 'row',
@@ -2164,11 +2238,11 @@ const styles = StyleSheet.create({
   themeModalTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : '#0F172A',
   },
   themeModalSubtitle: {
     fontSize: 12,
-    color: '#8A8A9E',
+    color: isDark ? '#8A8A9E' : '#64748B',
     marginTop: 2,
   },
   modalCloseBtn: {
@@ -2176,7 +2250,7 @@ const styles = StyleSheet.create({
   },
   modalCloseText: {
     fontSize: 18,
-    color: '#8A8A9E',
+    color: C.textMuted,
     fontWeight: '600',
   },
   themeActionsRow: {
@@ -2189,29 +2263,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#26263A',
+    backgroundColor: isDark ? '#26263A' : '#FFFFFF',
     paddingVertical: 12,
     borderRadius: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#32324D',
+    borderColor: isDark ? '#32324D' : '#E2E8F0',
   },
   themeRemoveBtn: {
-    backgroundColor: 'rgba(255, 82, 82, 0.12)',
-    borderColor: 'rgba(255, 82, 82, 0.3)',
+    backgroundColor: isDark ? 'rgba(255, 82, 82, 0.12)' : '#FEE2E2',
+    borderColor: isDark ? 'rgba(255, 82, 82, 0.3)' : '#FECACA',
   },
   themeActionIcon: {
     fontSize: 16,
   },
   themeActionText: {
-    color: '#FFFFFF',
+    color: isDark ? '#FFFFFF' : '#0F172A',
     fontSize: 13,
     fontWeight: '600',
   },
   presetHeading: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#C0C0D4',
+    color: isDark ? '#C0C0D4' : '#334155',
     marginBottom: 10,
   },
   presetListContent: {
@@ -2223,8 +2297,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: '#2A2A3E',
-    backgroundColor: '#161622',
+    borderColor: isDark ? '#2A2A3E' : '#E2E8F0',
+    backgroundColor: isDark ? '#161622' : '#FFFFFF',
     position: 'relative',
   },
   presetCardActive: {
@@ -2236,7 +2310,7 @@ const styles = StyleSheet.create({
   },
   presetCardTitle: {
     fontSize: 11,
-    color: '#E0E0EE',
+    color: isDark ? '#E0E0EE' : '#334155',
     textAlign: 'center',
     paddingHorizontal: 4,
     paddingVertical: 6,

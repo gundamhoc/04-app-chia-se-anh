@@ -1,5 +1,5 @@
 import api from './api';
-import { UserPrivacySettings } from '../types';
+import { UserPrivacySettings, SecurityStatus, LoginSession } from '../types';
 
 export interface ForgotPasswordResponse {
   success: boolean;
@@ -35,6 +35,28 @@ export interface PrivacySettingsResponse {
   success: boolean;
   message?: string;
   data: UserPrivacySettings;
+}
+
+export interface SecurityStatusResponse {
+  success: boolean;
+  message?: string;
+  data: SecurityStatus;
+}
+
+export interface SessionsResponse {
+  success: boolean;
+  message?: string;
+  data: LoginSession[];
+}
+
+export interface OtpResponse {
+  success: boolean;
+  message: string;
+  data: {
+    otp: string;
+    expires_at: string;
+    email: string;
+  };
 }
 
 export const authService = {
@@ -94,6 +116,69 @@ export const authService = {
     payload: Partial<UserPrivacySettings>
   ): Promise<PrivacySettingsResponse> => {
     const res = await api.put<PrivacySettingsResponse>('/auth/privacy-settings', payload);
+    return res.data;
+  },
+
+  /**
+   * Lấy trạng thái bảo mật tài khoản
+   * GET /api/auth/security-status
+   */
+  getSecurityStatus: async (): Promise<SecurityStatusResponse> => {
+    const res = await api.get<SecurityStatusResponse>('/auth/security-status');
+    return res.data;
+  },
+
+  /**
+   * Bật/tắt xác minh 2 bước (2FA)
+   * PUT /api/auth/two-factor
+   */
+  toggleTwoFactor: async (enabled: boolean): Promise<{ success: boolean; message: string; data: { two_factor_enabled: boolean } }> => {
+    const res = await api.put('/auth/two-factor', { enabled });
+    return res.data;
+  },
+
+  /**
+   * Bật/tắt lưu thông tin đăng nhập
+   * PUT /api/auth/remember-login
+   */
+  toggleRememberLogin: async (enabled: boolean): Promise<{ success: boolean; message: string; data: { remember_login: boolean } }> => {
+    const res = await api.put('/auth/remember-login', { enabled });
+    return res.data;
+  },
+
+  /**
+   * Lấy danh sách phiên đăng nhập đang hoạt động
+   * GET /api/auth/sessions
+   */
+  getLoginSessions: async (): Promise<SessionsResponse> => {
+    const res = await api.get<SessionsResponse>('/auth/sessions');
+    return res.data;
+  },
+
+  /**
+   * Thu hồi (đăng xuất) một phiên cụ thể
+   * DELETE /api/auth/sessions/:id
+   */
+  revokeSession: async (sessionId: number): Promise<{ success: boolean; message: string }> => {
+    const res = await api.delete(`/auth/sessions/${sessionId}`);
+    return res.data;
+  },
+
+  /**
+   * Xóa tài khoản (soft delete) — yêu cầu xác nhận email + mật khẩu
+   * DELETE /api/auth/account
+   */
+  deleteAccount: async (email: string, password: string): Promise<{ success: boolean; message: string }> => {
+    const res = await api.delete('/auth/account', { data: { email, password } });
+    return res.data;
+  },
+
+  /**
+   * Tạo OTP giả lập cho xác minh 2 bước
+   * POST /api/auth/generate-otp
+   */
+  generateOtp: async (): Promise<OtpResponse> => {
+    const res = await api.post<OtpResponse>('/auth/generate-otp');
     return res.data;
   },
 };

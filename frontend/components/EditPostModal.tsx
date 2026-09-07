@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,12 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { Colors } from '../constants/Colors';
+import { ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 import { Photo, PhotoPrivacy } from '../types';
 import { photoService } from '../services/photoService';
 import { useToast } from '../hooks/useToast';
-
-const C = Colors.dark;
+import { useI18n } from '../utils/i18n';
 
 interface EditPostModalProps {
   visible: boolean;
@@ -33,6 +33,9 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   onSuccess,
 }) => {
   const { showToast } = useToast();
+  const { colors: C, isDark } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
   const [caption, setCaption] = useState('');
   const [privacy, setPrivacy] = useState<PhotoPrivacy>('friends');
   const [loading, setLoading] = useState(false);
@@ -74,10 +77,10 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose} disabled={loading} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>Hủy</Text>
+              <Text style={styles.closeBtnText}>{t('cancel')}</Text>
             </TouchableOpacity>
 
-            <Text style={styles.title}>Chỉnh sửa bài đăng</Text>
+            <Text style={styles.title}>{t('edit_post')}</Text>
 
             <TouchableOpacity
               onPress={handleSave}
@@ -87,7 +90,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
               {loading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.saveBtnText}>Lưu</Text>
+                <Text style={styles.saveBtnText}>{t('save')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -98,7 +101,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
               <Image source={{ uri: photo.image_url }} style={styles.previewImage} />
               <View style={styles.previewInfo}>
                 <Text style={styles.previewAuthor}>{photo.author_name}</Text>
-                <Text style={styles.previewHint}>Chỉnh sửa chú thích bài đăng khoảnh khắc</Text>
+                <Text style={styles.previewHint}>{t('edit_post_desc')}</Text>
               </View>
             </View>
 
@@ -106,7 +109,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
             <View style={styles.inputBox}>
               <TextInput
                 style={styles.textInput}
-                placeholder="Viết chú thích mới cho khoảnh khắc..."
+                placeholder={t('write_caption')}
                 placeholderTextColor={C.textMuted}
                 value={caption}
                 onChangeText={setCaption}
@@ -119,7 +122,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 
             {/* Bộ chọn quyền riêng tư bài viết */}
             <View style={styles.privacySection}>
-              <Text style={styles.sectionLabel}>Quyền riêng tư bài viết</Text>
+              <Text style={styles.sectionLabel}>{t('post_privacy')}</Text>
               <View style={styles.privacyRow}>
                 <TouchableOpacity
                   style={[
@@ -136,7 +139,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       privacy === 'public' && styles.privacyTextActive,
                     ]}
                   >
-                    Công khai
+                    {t('public')}
                   </Text>
                 </TouchableOpacity>
 
@@ -155,7 +158,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       privacy === 'friends' && styles.privacyTextActive,
                     ]}
                   >
-                    Bạn bè coi
+                    {t('friends_only')}
                   </Text>
                 </TouchableOpacity>
 
@@ -174,16 +177,16 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       privacy === 'private' && styles.privacyTextActive,
                     ]}
                   >
-                    Riêng tư
+                    {t('private')}
                   </Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.privacyDesc}>
                 {privacy === 'public'
-                  ? '🌐 Mọi người trên Masita đều có thể xem bài viết này.'
+                  ? `🌐 ${t('public_desc')}`
                   : privacy === 'friends'
-                  ? '👥 Chỉ bạn bè đã kết bạn mới xem được bài viết này.'
-                  : '🔒 Chỉ mình bạn mới xem được bài viết này (ẩn với tất cả).'}
+                  ? `👥 ${t('friends_desc')}`
+                  : `🔒 ${t('private_desc')}`}
               </Text>
             </View>
           </ScrollView>
@@ -193,23 +196,23 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     justifyContent: 'flex-end',
   },
   backdrop: {
     flex: 1,
   },
   modalCard: {
-    backgroundColor: '#181828',
+    backgroundColor: C.card,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     maxHeight: '80%',
     paddingBottom: Platform.OS === 'ios' ? 36 : 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: C.border,
   },
   header: {
     flexDirection: 'row',
@@ -232,7 +235,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   saveBtn: {
     backgroundColor: C.primary,
@@ -257,7 +260,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     padding: 10,
     borderRadius: 16,
   },
@@ -266,7 +271,7 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 12,
     marginRight: 12,
-    backgroundColor: C.card,
+    backgroundColor: C.separator,
   },
   previewInfo: {
     flex: 1,
@@ -274,7 +279,7 @@ const styles = StyleSheet.create({
   previewAuthor: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 3,
   },
   previewHint: {
@@ -283,7 +288,7 @@ const styles = StyleSheet.create({
     color: C.textMuted,
   },
   inputBox: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: C.inputBg,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: C.border,
@@ -293,7 +298,7 @@ const styles = StyleSheet.create({
   textInput: {
     fontSize: 15,
     fontFamily: 'Inter_400Regular',
-    color: '#FFFFFF',
+    color: C.text,
     minHeight: 80,
     textAlignVertical: 'top',
   },
@@ -310,7 +315,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    color: C.text,
     marginBottom: 8,
   },
   privacyRow: {
@@ -323,7 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
     paddingVertical: 10,

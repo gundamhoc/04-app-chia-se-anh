@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -12,12 +12,12 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Colors } from '../constants/Colors';
+import { ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 import { friendService } from '../services/friendService';
 import { groupService } from '../services/groupService';
 import { Friend, Group } from '../types';
-
-const C = Colors.dark;
+import { useI18n } from '../utils/i18n';
 
 interface CreateGroupModalProps {
   visible: boolean;
@@ -30,6 +30,9 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   onClose,
   onGroupCreated,
 }) => {
+  const { colors: C, isDark } = useTheme();
+  const { t } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
   const [groupName, setGroupName] = useState('');
   const [friends, setFriends] = useState<Friend[]>([]);
   const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
@@ -133,7 +136,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
         <View style={styles.modalCard}>
           {/* Header */}
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Tạo nhóm trò chuyện 👥</Text>
+            <Text style={styles.modalTitle}>{t('create_group_title')} 👥</Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
@@ -151,22 +154,22 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               ) : (
                 <View style={styles.avatarPlaceholder}>
                   <Text style={styles.avatarPlaceholderIcon}>📷</Text>
-                  <Text style={styles.avatarPlaceholderText}>Thêm ảnh</Text>
+                  <Text style={styles.avatarPlaceholderText}>＋</Text>
                 </View>
               )}
               <View style={styles.avatarCameraBadge}>
                 <Text style={{ fontSize: 10 }}>✏️</Text>
               </View>
             </TouchableOpacity>
-            <Text style={styles.avatarHint}>Chạm để chọn hoặc chụp ảnh nhóm</Text>
+            <Text style={styles.avatarHint}>{t('create_group_hint')}</Text>
           </View>
 
           {/* Group Name Input */}
           <View style={styles.inputBox}>
-            <Text style={styles.inputLabel}>Tên nhóm trò chuyện</Text>
+            <Text style={styles.inputLabel}>{t('group_name_label')}</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="Nhập tên nhóm (ví dụ: Team Dev, Gia đình...)"
+              placeholder={t('group_name_placeholder')}
               placeholderTextColor="#8A8A9E"
               value={groupName}
               onChangeText={setGroupName}
@@ -179,7 +182,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
             <Text style={styles.searchIcon}>🔍</Text>
             <TextInput
               style={styles.searchInput}
-              placeholder="Tìm bạn bè để thêm vào nhóm..."
+              placeholder={t('search_friends_add')}
               placeholderTextColor="#8A8A9E"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -189,7 +192,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
           {/* Selected Counter */}
           <View style={styles.selectedCountBar}>
             <Text style={styles.selectedCountText}>
-              Đã chọn: <Text style={styles.selectedCountHighlight}>{selectedFriendIds.length}</Text> bạn bè
+              {t('selected_friends')}: <Text style={styles.selectedCountHighlight}>{selectedFriendIds.length}</Text> {t('friends')}
             </Text>
           </View>
 
@@ -205,7 +208,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               ListEmptyComponent={
                 <View style={styles.emptyFriendsBox}>
                   <Text style={styles.emptyFriendsText}>
-                    {searchQuery ? 'Không tìm thấy bạn bè phù hợp' : 'Chưa có bạn bè để thêm'}
+                    {searchQuery ? t('no_results_for_query') : t('no_friends_to_add')}
                   </Text>
                 </View>
               }
@@ -220,7 +223,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                     <Image
                       source={
                         item.avatar_url
-                          ? { uri: item.avatar_url }
+                            ? { uri: item.avatar_url }
                           : require('../assets/splash-icon.png')
                       }
                       style={styles.friendAvatar}
@@ -245,7 +248,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
           {/* Actions */}
           <View style={styles.footerActions}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={creating}>
-              <Text style={styles.cancelBtnText}>Hủy</Text>
+              <Text style={styles.cancelBtnText}>{t('cancel')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -256,7 +259,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               {creating ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.submitBtnText}>Tạo nhóm ✨</Text>
+                <Text style={styles.submitBtnText}>{t('create_group_action')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -267,7 +270,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       <Modal visible={avatarActionVisible} transparent animationType="fade" onRequestClose={() => setAvatarActionVisible(false)}>
         <TouchableOpacity style={styles.actionSheetOverlay} activeOpacity={1} onPress={() => setAvatarActionVisible(false)}>
           <View style={styles.actionSheetCard}>
-            <Text style={styles.actionSheetTitle}>Ảnh đại diện nhóm 📸</Text>
+            <Text style={styles.actionSheetTitle}>{t('change_group_avatar')}</Text>
             <TouchableOpacity
               style={styles.actionSheetBtn}
               onPress={() => {
@@ -276,7 +279,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               }}
             >
               <Text style={styles.actionSheetBtnIcon}>📷</Text>
-              <Text style={styles.actionSheetBtnText}>Chụp ảnh mới</Text>
+              <Text style={styles.actionSheetBtnText}>{t('take_new_photo')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -287,14 +290,14 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               }}
             >
               <Text style={styles.actionSheetBtnIcon}>🖼️</Text>
-              <Text style={styles.actionSheetBtnText}>Chọn từ thư viện ảnh</Text>
+              <Text style={styles.actionSheetBtnText}>{t('choose_from_library')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.actionSheetBtn, { borderTopWidth: 1, borderColor: '#2E2E42', marginTop: 4, justifyContent: 'center' }]}
               onPress={() => setAvatarActionVisible(false)}
             >
-              <Text style={{ color: '#8A8A9E', fontSize: 14, fontWeight: '600' }}>Hủy</Text>
+              <Text style={{ color: '#8A8A9E', fontSize: 14, fontWeight: '600' }}>{t('cancel')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -303,20 +306,20 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   modalCard: {
-    backgroundColor: C.surface,
+    backgroundColor: C.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
     maxHeight: '85%',
     borderWidth: 1,
-    borderColor: '#26263A',
+    borderColor: C.border,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -330,7 +333,7 @@ const styles = StyleSheet.create({
     color: C.text,
   },
   closeBtnText: {
-    color: '#8A8A9E',
+    color: C.textMuted,
     fontSize: 20,
     paddingHorizontal: 8,
   },
@@ -340,29 +343,29 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#A0A0B2',
+    color: C.textSecondary,
     marginBottom: 6,
   },
   textInput: {
-    backgroundColor: '#1B1B2A',
+    backgroundColor: C.inputBg,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: C.text,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#2D2D42',
+    borderColor: C.border,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1B1B2A',
+    backgroundColor: C.inputBg,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#26263A',
+    borderColor: C.border,
   },
   searchIcon: {
     fontSize: 14,
@@ -379,7 +382,7 @@ const styles = StyleSheet.create({
   },
   selectedCountText: {
     fontSize: 12,
-    color: '#8A8A9E',
+    color: C.textMuted,
   },
   selectedCountHighlight: {
     color: C.primary,
@@ -393,7 +396,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyFriendsText: {
-    color: '#8A8A9E',
+    color: C.textMuted,
     fontSize: 13,
   },
   friendItem: {
@@ -403,10 +406,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 12,
     marginBottom: 6,
-    backgroundColor: '#181826',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
   },
   friendItemSelected: {
-    backgroundColor: 'rgba(108, 99, 255, 0.15)',
+    backgroundColor: `${C.primary}20`,
     borderWidth: 1,
     borderColor: C.primary,
   },
@@ -414,7 +419,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#2A2A3E',
+    backgroundColor: C.separator,
     marginRight: 12,
   },
   friendInfo: {
@@ -427,7 +432,7 @@ const styles = StyleSheet.create({
   },
   friendUsername: {
     fontSize: 12,
-    color: '#8A8A9E',
+    color: C.textMuted,
     marginTop: 2,
   },
   checkbox: {
@@ -435,7 +440,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
-    borderColor: '#4A4A62',
+    borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -449,7 +454,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   errorBanner: {
-    color: '#FF5252',
+    color: C.error,
     fontSize: 13,
     marginBottom: 10,
     textAlign: 'center',
@@ -464,11 +469,13 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#202030',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     alignItems: 'center',
   },
   cancelBtnText: {
-    color: '#C0C0D0',
+    color: C.text,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -497,8 +504,8 @@ const styles = StyleSheet.create({
     height: 74,
     borderRadius: 37,
     borderWidth: 2,
-    borderColor: '#303045',
-    backgroundColor: '#1C1C2A',
+    borderColor: C.border,
+    backgroundColor: C.surface,
     overflow: 'visible',
     alignItems: 'center',
     justifyContent: 'center',
@@ -517,7 +524,7 @@ const styles = StyleSheet.create({
   },
   avatarPlaceholderText: {
     fontSize: 10,
-    color: '#8A8A9E',
+    color: C.textMuted,
     marginTop: 2,
     fontWeight: '600',
   },
@@ -532,11 +539,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#161622',
+    borderColor: C.card,
   },
   avatarHint: {
     fontSize: 12,
-    color: '#8A8A9E',
+    color: C.textMuted,
     marginTop: 6,
   },
   actionSheetOverlay: {
@@ -546,17 +553,17 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   actionSheetCard: {
-    backgroundColor: '#1E1E2D',
+    backgroundColor: C.card,
     borderRadius: 20,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#2E2E42',
+    borderColor: C.border,
     gap: 10,
   },
   actionSheetTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: C.text,
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -565,7 +572,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 13,
     paddingHorizontal: 16,
-    backgroundColor: '#262638',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
     borderRadius: 12,
     gap: 12,
   },
@@ -573,7 +582,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   actionSheetBtnText: {
-    color: '#FFFFFF',
+    color: C.text,
     fontSize: 15,
     fontWeight: '600',
   },

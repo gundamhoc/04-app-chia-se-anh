@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,14 +13,16 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Colors } from '../constants/Colors';
+import { Colors, ColorScheme } from '../constants/Colors';
+import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../store/authStore';
-import { UserPrivacySettings } from '../types';
-
-const C = Colors.dark;
+import { UserPrivacySettings, SecurityStatus, LoginSession } from '../types';
+import { useAppSettings } from '../store/appSettingsStore';
+import { useI18n, formatRelativeTime as formatRelativeTimeI18n } from '../utils/i18n';
+import { otaUpdateService, OtaUpdateInfo } from '../services/otaUpdateService';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -32,6 +34,8 @@ type DetailModalType =
   | 'privacy_detail'
   | 'security_detail'
   | 'accessibility_detail'
+  | 'notify_detail'
+  | 'language_detail'
   | 'help_center'
   | 'privacy_center'
   | 'terms_policies'
@@ -63,18 +67,98 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   const { user } = useAuth();
   const { updateUser } = useAuthStore();
   const { showToast } = useToast();
+  const { t } = useI18n();
 
-  // Switch states for Display & Content
-  const [notifyMessages, setNotifyMessages] = useState(true);
-  const [notifyPosts, setNotifyPosts] = useState(true);
-  const [notifyInteractions, setNotifyInteractions] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const [highContrast, setHighContrast] = useState(false);
-  const [currentLanguage, setCurrentLanguage] = useState<'vi' | 'en'>('vi');
+  // Cài đặt hiển thị — lấy từ AppSettingsStore (persist vào SecureStore)
+  const {
+    themeMode, setThemeMode,
+    notifyMessages, setNotifyMessages,
+    notifyPosts, setNotifyPosts,
+    notifyInteractions, setNotifyInteractions,
+    language, setLanguage,
+    highContrast, setHighContrast,
+    reduceMotion, setReduceMotion,
+    largeText, setLargeText,
+    appVersion, setAppVersion,
+    otaChannel, setOtaChannel,
+    autoCheckOta, setAutoCheckOta,
+    lastOtaCheckTime,
+  } = useAppSettings();
+
+  // Trạng thái OTA Updates
+  const [otaLoading, setOtaLoading] = useState(false);
+  const [otaInfo, setOtaInfo] = useState<OtaUpdateInfo | null>(null);
+  const [otaDownloading, setOtaDownloading] = useState(false);
+  const [otaProgress, setOtaProgress] = useState(0);
+  const [otaDownloaded, setOtaDownloaded] = useState(false);
+  const [otaChecked, setOtaChecked] = useState(false);
+
+  const handleCheckOta = async (simulate?: 'new_version' | 'up_to_date') => {
+    setOtaLoading(true);
+    setOtaDownloaded(false);
+    setOtaProgress(0);
+    try {
+      const info = await otaUpdateService.checkForUpdate({
+        channel: otaChannel,
+        simulate,
+      });
+      setOtaInfo(info);
+      setOtaChecked(true);
+      if (info.is_update_available) {
+        showToast('info', language === 'vi' ? `Có bản cập nhật OTA v${info.latest_version}!` : `New OTA update v${info.latest_version} available!`);
+      } else {
+        showToast('success', language === 'vi' ? 'Ứng dụng của bạn đang ở phiên bản mới nhất! ✨' : 'Your app is up to date! ✨');
+      }
+    } catch (e: any) {
+      showToast('error', e.message || (language === 'vi' ? 'Lỗi kiểm tra cập nhật.' : 'Failed to check updates.'));
+    } finally {
+      setOtaLoading(false);
+    }
+  };
+
+  const handleDownloadOta = async () => {
+    if (!otaInfo) return;
+    setOtaDownloading(true);
+    setOtaProgress(0);
+    try {
+      await otaUpdateService.downloadUpdate(
+        Boolean(otaInfo.is_native_expo_update),
+        (p) => setOtaProgress(p)
+      );
+      setOtaDownloaded(true);
+      showToast('success', language === 'vi' ? 'Đã tải xong gói cập nhật OTA! 🚀' : 'OTA update downloaded! 🚀');
+    } catch (e: any) {
+      showToast('error', e.message || (language === 'vi' ? 'Lỗi tải bản cập nhật.' : 'Download failed.'));
+    } finally {
+      setOtaDownloading(false);
+    }
+  };
+
+  const handleApplyOta = async () => {
+    if (!otaInfo) return;
+    try {
+      showToast('info', language === 'vi' ? 'Đang áp dụng và khởi động lại... ⏳' : 'Applying update and restarting... ⏳');
+      await otaUpdateService.applyUpdateAndReload(otaInfo.latest_version, Boolean(otaInfo.is_native_expo_update));
+      setOtaDownloaded(false);
+      setOtaInfo(null);
+      setOtaChecked(false);
+    } catch (e: any) {
+      showToast('error', e.message || 'Lỗi áp dụng bản cập nhật.');
+    }
+  };
+
+  const { colors: C, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
 
   // Sub-detail modal
   const [activeDetail, setActiveDetail] = useState<DetailModalType>(null);
+
+  // Tự động kiểm tra OTA khi mở trang phiên bản nếu bật autoCheckOta
+  useEffect(() => {
+    if (activeDetail === 'app_version' && autoCheckOta && !otaChecked && !otaLoading) {
+      handleCheckOta();
+    }
+  }, [activeDetail, autoCheckOta]);
 
   // Tab inside account_detail: 'username' | 'email' | 'password'
   const [accountTab, setAccountTab] = useState<'username' | 'email' | 'password'>('username');
@@ -105,11 +189,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   const [loadingPrivacy, setLoadingPrivacy] = useState(false);
   const [updatingPrivacyKey, setUpdatingPrivacyKey] = useState<string | null>(null);
 
+  // Security Settings states
+  const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(null);
+  const [loadingSecurity, setLoadingSecurity] = useState(false);
+  const [loginSessions, setLoginSessions] = useState<LoginSession[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [updatingTwoFactor, setUpdatingTwoFactor] = useState(false);
+  const [updatingRememberLogin, setUpdatingRememberLogin] = useState(false);
+  // 2FA OTP flow state
+  const [otpStep, setOtpStep] = useState<'idle' | 'pending' | 'confirm'>('idle');
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [enteredOtp, setEnteredOtp] = useState('');
+  // Delete account state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteEmail, setDeleteEmail] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
   useEffect(() => {
     if (visible || activeDetail === 'privacy_detail') {
       fetchPrivacySettings();
     }
   }, [visible, activeDetail]);
+
+  useEffect(() => {
+    if (activeDetail === 'security_detail') {
+      fetchSecurityStatus();
+      fetchLoginSessions();
+    }
+  }, [activeDetail]);
 
   const fetchPrivacySettings = async () => {
     try {
@@ -123,6 +231,142 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     } finally {
       setLoadingPrivacy(false);
     }
+  };
+
+  const fetchSecurityStatus = async () => {
+    try {
+      setLoadingSecurity(true);
+      const res = await authService.getSecurityStatus();
+      if (res && res.success && res.data) {
+        setSecurityStatus(res.data);
+      }
+    } catch (err) {
+      console.warn('Lỗi tải trạng thái bảo mật:', err);
+    } finally {
+      setLoadingSecurity(false);
+    }
+  };
+
+  const fetchLoginSessions = async () => {
+    try {
+      setLoadingSessions(true);
+      const res = await authService.getLoginSessions();
+      if (res && res.success) {
+        setLoginSessions(res.data || []);
+      }
+    } catch (err) {
+      console.warn('Lỗi tải phiên đăng nhập:', err);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const handleToggleTwoFactor = async (enabled: boolean) => {
+    if (enabled) {
+      // Khi bật: Sinh OTP giả lập để user xác nhận
+      try {
+        setOtpStep('pending');
+        const res = await authService.generateOtp();
+        if (res && res.success) {
+          setGeneratedOtp(res.data.otp);
+          setOtpStep('confirm');
+          showToast('info', `Mã OTP của bạn là: ${res.data.otp} (Demo — hiệu lực 5 phút)`);
+        }
+      } catch {
+        setOtpStep('idle');
+        showToast('error', 'Không thể tạo OTP. Vui lòng thử lại.');
+      }
+    } else {
+      // Khi tắt: Tắt ngay
+      try {
+        setUpdatingTwoFactor(true);
+        const res = await authService.toggleTwoFactor(false);
+        if (res.success) {
+          setSecurityStatus((prev) => prev ? { ...prev, two_factor_enabled: false } : prev);
+          showToast('success', res.message);
+        }
+      } catch (err: any) {
+        showToast('error', err.response?.data?.message || 'Không thể tắt 2FA.');
+      } finally {
+        setUpdatingTwoFactor(false);
+      }
+    }
+  };
+
+  const handleConfirmOtp = async () => {
+    if (enteredOtp.trim() !== generatedOtp) {
+      showToast('error', 'Mã OTP không đúng. Vui lòng thử lại.');
+      return;
+    }
+    try {
+      setUpdatingTwoFactor(true);
+      const res = await authService.toggleTwoFactor(true);
+      if (res.success) {
+        setSecurityStatus((prev) => prev ? { ...prev, two_factor_enabled: true } : prev);
+        showToast('success', 'Đã bật xác minh 2 bước! 🔐');
+        setOtpStep('idle');
+        setEnteredOtp('');
+        setGeneratedOtp('');
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Không thể bật 2FA.');
+    } finally {
+      setUpdatingTwoFactor(false);
+    }
+  };
+
+  const handleToggleRememberLogin = async (enabled: boolean) => {
+    try {
+      setUpdatingRememberLogin(true);
+      const res = await authService.toggleRememberLogin(enabled);
+      if (res.success) {
+        setSecurityStatus((prev) => prev ? { ...prev, remember_login: enabled } : prev);
+        showToast('success', res.message);
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Không thể cập nhật.');
+    } finally {
+      setUpdatingRememberLogin(false);
+    }
+  };
+
+  const handleRevokeSession = async (sessionId: number) => {
+    try {
+      const res = await authService.revokeSession(sessionId);
+      if (res.success) {
+        setLoginSessions((prev) => prev.filter((s) => s.id !== sessionId));
+        setSecurityStatus((prev) => prev ? { ...prev, active_session_count: Math.max(0, prev.active_session_count - 1) } : prev);
+        showToast('success', 'Đã đăng xuất thiết bị này! 📱');
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Không thể đăng xuất thiết bị.');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteEmail.trim() || !deletePassword.trim()) {
+      showToast('error', 'Vui lòng nhập đầy đủ email và mật khẩu.');
+      return;
+    }
+    setDeletingAccount(true);
+    try {
+      const res = await authService.deleteAccount(deleteEmail.trim(), deletePassword.trim());
+      if (res.success) {
+        showToast('success', res.message || 'Tài khoản đã bị xóa.');
+        setShowDeleteConfirm(false);
+        setActiveDetail(null);
+        // Đăng xuất
+        await useAuthStore.getState().logout();
+      }
+    } catch (err: any) {
+      showToast('error', err.response?.data?.message || 'Không thể xóa tài khoản.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const formatRelativeTime = (dateStr: string): string => {
+    return formatRelativeTimeI18n(dateStr, language);
   };
 
   const handleTogglePrivacy = async (key: keyof UserPrivacySettings, value: boolean) => {
@@ -268,54 +512,72 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
     switch (activeDetail) {
       case 'account_detail':
         return (
-          <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>👤 Quản lý tài khoản</Text>
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
+            <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+              👤 {language === 'vi' ? 'Quản lý tài khoản' : 'Account Management'}
+            </Text>
 
             {/* Segmented Tab Selector */}
             <View style={styles.accountTabsRow}>
               <TouchableOpacity
-                style={[styles.accountTabBtn, accountTab === 'username' && styles.accountTabBtnActive]}
+                style={[
+                  styles.accountTabBtn,
+                  { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6', borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E5E7EB' },
+                  accountTab === 'username' && styles.accountTabBtnActive,
+                ]}
                 onPress={() => setAccountTab('username')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.accountTabText, accountTab === 'username' && styles.accountTabTextActive]}>
+                <Text style={[styles.accountTabText, { color: isDark ? C.textMuted : '#6B7280' }, accountTab === 'username' && styles.accountTabTextActive]}>
                   👤 Username
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.accountTabBtn, accountTab === 'email' && styles.accountTabBtnActive]}
+                style={[
+                  styles.accountTabBtn,
+                  { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6', borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E5E7EB' },
+                  accountTab === 'email' && styles.accountTabBtnActive,
+                ]}
                 onPress={() => setAccountTab('email')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.accountTabText, accountTab === 'email' && styles.accountTabTextActive]}>
+                <Text style={[styles.accountTabText, { color: isDark ? C.textMuted : '#6B7280' }, accountTab === 'email' && styles.accountTabTextActive]}>
                   📧 Email
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.accountTabBtn, accountTab === 'password' && styles.accountTabBtnActive]}
+                style={[
+                  styles.accountTabBtn,
+                  { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6', borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E5E7EB' },
+                  accountTab === 'password' && styles.accountTabBtnActive,
+                ]}
                 onPress={() => setAccountTab('password')}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.accountTabText, accountTab === 'password' && styles.accountTabTextActive]}>
-                  🔑 Mật khẩu
+                <Text style={[styles.accountTabText, { color: isDark ? C.textMuted : '#6B7280' }, accountTab === 'password' && styles.accountTabTextActive]}>
+                  🔑 {language === 'vi' ? 'Mật khẩu' : 'Password'}
                 </Text>
               </TouchableOpacity>
             </View>
 
             {/* TAB 1: CHỈNH SỬA USERNAME */}
             {accountTab === 'username' && (
-              <View style={styles.tabContentBox}>
+              <View style={[styles.tabContentBox, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
                 <View style={styles.currentValRow}>
-                  <Text style={styles.currentValLabel}>Username hiện tại:</Text>
-                  <Text style={styles.currentValText}>@{user?.username}</Text>
+                  <Text style={[styles.currentValLabel, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {language === 'vi' ? 'Username hiện tại:' : 'Current username:'}
+                  </Text>
+                  <Text style={[styles.currentValText, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>@{user?.username}</Text>
                 </View>
 
-                <Text style={styles.inputLabel}>Nhập username mới:</Text>
+                <Text style={[styles.inputLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  {language === 'vi' ? 'Nhập username mới:' : 'New username:'}
+                </Text>
                 <TextInput
-                  style={styles.textInputStyle}
-                  placeholder="Ví dụ: nam_tran99"
+                  style={[styles.textInputStyle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#1A1A2E', borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#D1D5DB' }]}
+                  placeholder={language === 'vi' ? 'Ví dụ: nam_tran99' : 'e.g. nam_tran99'}
                   placeholderTextColor={C.textMuted}
                   value={editUsername}
                   onChangeText={setEditUsername}
@@ -323,8 +585,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   autoCorrect={false}
                   maxLength={30}
                 />
-                <Text style={styles.fieldHint}>
-                  Chỉ gồm chữ cái, số và dấu gạch dưới (_), độ dài từ 3 đến 30 ký tự.
+                <Text style={[styles.fieldHint, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {language === 'vi'
+                    ? 'Chỉ gồm chữ cái, số và dấu gạch dưới (_), độ dài từ 3 đến 30 ký tự.'
+                    : 'Only letters, numbers, and underscores (_), length 3 to 30 chars.'}
                 </Text>
 
                 <TouchableOpacity
@@ -336,7 +600,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   {savingUsername ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.submitActionBtnText}>Lưu thay đổi Username</Text>
+                    <Text style={styles.submitActionBtnText}>
+                      {language === 'vi' ? 'Lưu thay đổi Username' : 'Save Username'}
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -344,21 +610,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
             {/* TAB 2: EMAIL ĐĂNG KÝ (CẦN MẬT KHẨU ĐÚNG) */}
             {accountTab === 'email' && (
-              <View style={styles.tabContentBox}>
+              <View style={[styles.tabContentBox, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
                 <View style={styles.infoNoticeBadge}>
                   <Text style={styles.infoNoticeText}>
-                    🔒 Để đổi email đăng ký, bạn phải nhập đúng mật khẩu hiện tại để xác thực an toàn.
+                    {language === 'vi'
+                      ? '🔒 Để đổi email đăng ký, bạn phải nhập đúng mật khẩu hiện tại để xác thực an toàn.'
+                      : '🔒 To change registered email, enter your current password for security verification.'}
                   </Text>
                 </View>
 
                 <View style={styles.currentValRow}>
-                  <Text style={styles.currentValLabel}>Email hiện tại:</Text>
-                  <Text style={styles.currentValText}>{maskEmail(user?.email)}</Text>
+                  <Text style={[styles.currentValLabel, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {language === 'vi' ? 'Email hiện tại:' : 'Current email:'}
+                  </Text>
+                  <Text style={[styles.currentValText, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>{maskEmail(user?.email)}</Text>
                 </View>
 
-                <Text style={styles.inputLabel}>Email đăng ký mới:</Text>
+                <Text style={[styles.inputLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  {language === 'vi' ? 'Email đăng ký mới:' : 'New email address:'}
+                </Text>
                 <TextInput
-                  style={styles.textInputStyle}
+                  style={[styles.textInputStyle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#1A1A2E', borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#D1D5DB' }]}
                   placeholder="name@example.com"
                   placeholderTextColor={C.textMuted}
                   value={newEmail}
@@ -368,10 +640,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   autoCorrect={false}
                 />
 
-                <Text style={styles.inputLabel}>Mật khẩu hiện tại của bạn:</Text>
+                <Text style={[styles.inputLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  {language === 'vi' ? 'Mật khẩu hiện tại của bạn:' : 'Current password:'}
+                </Text>
                 <TextInput
-                  style={styles.textInputStyle}
-                  placeholder="Nhập mật khẩu hiện tại..."
+                  style={[styles.textInputStyle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#1A1A2E', borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#D1D5DB' }]}
+                  placeholder={language === 'vi' ? 'Nhập mật khẩu hiện tại...' : 'Enter current password...'}
                   placeholderTextColor={C.textMuted}
                   value={emailCurrentPassword}
                   onChangeText={setEmailCurrentPassword}
@@ -388,7 +662,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   {savingEmail ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.submitActionBtnText}>Xác nhận đổi Email</Text>
+                    <Text style={styles.submitActionBtnText}>
+                      {language === 'vi' ? 'Xác nhận đổi Email' : 'Confirm Change Email'}
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -396,17 +672,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
             {/* TAB 3: ĐỔI MẬT KHẨU (CẦN EMAIL ĐĂNG KÝ ĐÚNG) */}
             {accountTab === 'password' && (
-              <View style={styles.tabContentBox}>
+              <View style={[styles.tabContentBox, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
                 <View style={styles.infoNoticeBadge}>
                   <Text style={styles.infoNoticeText}>
-                    🛡️ Để đổi mật khẩu, bạn phải nhập chính xác địa chỉ email đã đăng ký tài khoản này.
+                    {language === 'vi'
+                      ? '🛡️ Để đổi mật khẩu, bạn phải nhập chính xác địa chỉ email đã đăng ký tài khoản này.'
+                      : '🛡️ To change password, enter your registered email address correctly.'}
                   </Text>
                 </View>
 
-                <Text style={styles.inputLabel}>Email đăng ký để xác nhận:</Text>
+                <Text style={[styles.inputLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  {language === 'vi' ? 'Email đăng ký để xác nhận:' : 'Registered email to verify:'}
+                </Text>
                 <TextInput
-                  style={styles.textInputStyle}
-                  placeholder="Nhập email đăng ký của bạn..."
+                  style={[styles.textInputStyle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#1A1A2E', borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#D1D5DB' }]}
+                  placeholder={language === 'vi' ? 'Nhập email đăng ký của bạn...' : 'Enter your registered email...'}
                   placeholderTextColor={C.textMuted}
                   value={registeredEmailForPass}
                   onChangeText={setRegisteredEmailForPass}
@@ -415,10 +695,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   autoCorrect={false}
                 />
 
-                <Text style={styles.inputLabel}>Mật khẩu mới (tối thiểu 6 ký tự):</Text>
+                <Text style={[styles.inputLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  {language === 'vi' ? 'Mật khẩu mới (tối thiểu 6 ký tự):' : 'New password (min 6 chars):'}
+                </Text>
                 <TextInput
-                  style={styles.textInputStyle}
-                  placeholder="Nhập mật khẩu mới..."
+                  style={[styles.textInputStyle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#1A1A2E', borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#D1D5DB' }]}
+                  placeholder={language === 'vi' ? 'Nhập mật khẩu mới...' : 'Enter new password...'}
                   placeholderTextColor={C.textMuted}
                   value={newPassword}
                   onChangeText={setNewPassword}
@@ -426,10 +708,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   autoCapitalize="none"
                 />
 
-                <Text style={styles.inputLabel}>Xác nhận mật khẩu mới:</Text>
+                <Text style={[styles.inputLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  {language === 'vi' ? 'Xác nhận mật khẩu mới:' : 'Confirm new password:'}
+                </Text>
                 <TextInput
-                  style={styles.textInputStyle}
-                  placeholder="Nhập lại mật khẩu mới..."
+                  style={[styles.textInputStyle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#1A1A2E', borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#D1D5DB' }]}
+                  placeholder={language === 'vi' ? 'Nhập lại mật khẩu mới...' : 'Re-enter new password...'}
                   placeholderTextColor={C.textMuted}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
@@ -446,7 +730,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                   {savingPassword ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.submitActionBtnText}>Xác nhận đổi Mật khẩu</Text>
+                    <Text style={styles.submitActionBtnText}>
+                      {language === 'vi' ? 'Xác nhận đổi Mật khẩu' : 'Confirm Change Password'}
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -456,27 +742,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
       case 'privacy_detail':
         return (
-          <View style={styles.detailCard}>
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
             <View style={styles.privacyHeaderRow}>
-              <Text style={styles.detailTitle}>🔒 Cài đặt quyền riêng tư</Text>
+              <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                🔒 {language === 'vi' ? 'Cài đặt quyền riêng tư' : 'Privacy Settings'}
+              </Text>
               {loadingPrivacy && <ActivityIndicator size="small" color={C.primary} />}
             </View>
-            <Text style={styles.detailDesc}>
-              Kiểm soát phạm vi hiển thị tài khoản, tính năng đề xuất và cách người lạ có thể tìm kiếm bạn.
+            <Text style={[styles.detailDesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+              {language === 'vi'
+                ? 'Kiểm soát phạm vi hiển thị tài khoản, tính năng đề xuất và cách người lạ có thể tìm kiếm bạn.'
+                : 'Control profile visibility, suggestion features, and how strangers can discover your account.'}
             </Text>
 
             {/* 1. Chế độ tài khoản */}
-            <View style={styles.privacySectionGroup}>
-              <Text style={styles.privacySectionTitle}>👤 CHẾ ĐỘ TÀI KHOẢN</Text>
+            <View style={[styles.privacySectionGroup, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
+              <Text style={styles.privacySectionTitle}>
+                👤 {language === 'vi' ? 'CHẾ ĐỘ TÀI KHOẢN' : 'ACCOUNT PRIVACY MODE'}
+              </Text>
               <View style={styles.privacySwitchRow}>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.privacySwitchLabel}>
-                    {privacySettings.is_private_account ? '🔒 Tài khoản riêng tư' : '🌐 Tài khoản công khai'}
-                  </Text>
-                  <Text style={styles.privacySwitchDesc}>
+                  <Text style={[styles.privacySwitchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
                     {privacySettings.is_private_account
-                      ? 'Chỉ những người bạn chấp nhận mới xem được bài đăng của bạn. Các bài đăng công khai sẽ không hiển thị cho người lạ trên bảng tin khám phá.'
-                      : 'Bất kỳ ai cũng có thể xem hồ sơ và các bài viết công khai của bạn trong mục Khám phá.'}
+                      ? (language === 'vi' ? '🔒 Tài khoản riêng tư' : '🔒 Private Account')
+                      : (language === 'vi' ? '🌐 Tài khoản công khai' : '🌐 Public Account')}
+                  </Text>
+                  <Text style={[styles.privacySwitchDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {privacySettings.is_private_account
+                      ? (language === 'vi'
+                          ? 'Chỉ những người bạn chấp nhận mới xem được bài đăng của bạn. Các bài đăng công khai sẽ không hiển thị cho người lạ trên bảng tin khám phá.'
+                          : 'Only accepted friends can see your posts. Your posts will not appear to strangers on the discovery feed.')
+                      : (language === 'vi'
+                          ? 'Bất kỳ ai cũng có thể xem hồ sơ và các bài viết công khai của bạn trong mục Khám phá.'
+                          : 'Anyone can view your profile and public moments on the explore feed.')}
                   </Text>
                 </View>
                 <Switch
@@ -490,13 +788,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             </View>
 
             {/* 2. Đề xuất tài khoản */}
-            <View style={styles.privacySectionGroup}>
-              <Text style={styles.privacySectionTitle}>✨ ĐỀ XUẤT TÀI KHOẢN</Text>
+            <View style={[styles.privacySectionGroup, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
+              <Text style={styles.privacySectionTitle}>
+                ✨ {language === 'vi' ? 'ĐỀ XUẤT TÀI KHOẢN' : 'ACCOUNT SUGGESTIONS'}
+              </Text>
               <View style={styles.privacySwitchRow}>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.privacySwitchLabel}>Gợi ý tài khoản cho người khác</Text>
-                  <Text style={styles.privacySwitchDesc}>
-                    Cho phép hệ thống đề xuất tài khoản của bạn trong danh sách "Gợi ý kết bạn" cho những người dùng khác.
+                  <Text style={[styles.privacySwitchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                    {language === 'vi' ? 'Gợi ý tài khoản cho người khác' : 'Suggest account to others'}
+                  </Text>
+                  <Text style={[styles.privacySwitchDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {language === 'vi'
+                      ? 'Cho phép hệ thống đề xuất tài khoản của bạn trong danh sách "Gợi ý kết bạn" cho những người dùng khác.'
+                      : 'Allow Masita to suggest your profile to other users in their friend recommendation feed.'}
                   </Text>
                 </View>
                 <Switch
@@ -510,18 +814,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             </View>
 
             {/* 3. Người lạ tìm thấy bạn */}
-            <View style={styles.privacySectionGroup}>
-              <Text style={styles.privacySectionTitle}>🔍 NGƯỜI LẠ TÌM THẤY BẠN</Text>
-              <Text style={styles.privacyGroupSubdesc}>
-                Thiết lập xem người lạ (chưa kết bạn) có thể tìm kiếm ra bạn thông qua các thông tin nào:
+            <View style={[styles.privacySectionGroup, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
+              <Text style={styles.privacySectionTitle}>
+                🔍 {language === 'vi' ? 'NGƯỜI LẠ TÌM THẤY BẠN' : 'DISCOVERABILITY BY STRANGERS'}
+              </Text>
+              <Text style={[styles.privacyGroupSubdesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                {language === 'vi'
+                  ? 'Thiết lập xem người lạ (chưa kết bạn) có thể tìm kiếm ra bạn thông qua các thông tin nào:'
+                  : 'Choose how strangers (non-friends) are allowed to find your account:'}
               </Text>
 
               {/* Tên hiển thị */}
               <View style={styles.privacySwitchRowSub}>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.privacySwitchLabel}>Bằng Tên hiển thị (Họ và tên)</Text>
-                  <Text style={styles.privacySwitchDesc}>
-                    Người lạ có thể gõ tên hiển thị ({user?.full_name || 'Họ và tên'}) để tìm thấy tài khoản của bạn.
+                  <Text style={[styles.privacySwitchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                    {language === 'vi' ? 'Bằng Tên hiển thị (Họ và tên)' : 'By Display Name'}
+                  </Text>
+                  <Text style={[styles.privacySwitchDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {language === 'vi'
+                      ? `Người lạ có thể gõ tên hiển thị (${user?.full_name || 'Họ và tên'}) để tìm thấy tài khoản của bạn.`
+                      : `Strangers can type your display name (${user?.full_name || 'Full Name'}) to find you.`}
                   </Text>
                 </View>
                 <Switch
@@ -536,9 +848,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               {/* Username */}
               <View style={styles.privacySwitchRowSub}>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.privacySwitchLabel}>Bằng Tên người dùng (Username)</Text>
-                  <Text style={styles.privacySwitchDesc}>
-                    Người lạ có thể gõ username (@{user?.username || 'username'}) để tìm kiếm tài khoản của bạn.
+                  <Text style={[styles.privacySwitchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                    {language === 'vi' ? 'Bằng Tên người dùng (Username)' : 'By Username'}
+                  </Text>
+                  <Text style={[styles.privacySwitchDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {language === 'vi'
+                      ? `Người lạ có thể gõ username (@${user?.username || 'username'}) để tìm kiếm tài khoản của bạn.`
+                      : `Strangers can search your username (@${user?.username || 'username'}).`}
                   </Text>
                 </View>
                 <Switch
@@ -553,9 +869,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               {/* Email */}
               <View style={styles.privacySwitchRowSub}>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.privacySwitchLabel}>Bằng Địa chỉ Email</Text>
-                  <Text style={styles.privacySwitchDesc}>
-                    Người lạ có thể tìm kiếm bạn bằng địa chỉ email ({maskEmail(user?.email)}).
+                  <Text style={[styles.privacySwitchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                    {language === 'vi' ? 'Bằng Địa chỉ Email' : 'By Email Address'}
+                  </Text>
+                  <Text style={[styles.privacySwitchDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {language === 'vi'
+                      ? `Người lạ có thể tìm kiếm bạn bằng địa chỉ email (${maskEmail(user?.email)}).`
+                      : `Strangers can search you using email (${maskEmail(user?.email)}).`}
                   </Text>
                 </View>
                 <Switch
@@ -572,148 +892,960 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
       case 'security_detail':
         return (
-          <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>🛡️ Bảo mật & Quyền ứng dụng</Text>
-            <Text style={styles.detailDesc}>
-              Bảo vệ thông tin tài khoản và kiểm soát các quyền truy cập trên thiết bị di động.
-            </Text>
-            <TouchableOpacity
-              style={styles.securityActionCard}
-              onPress={() => {
-                setAccountTab('password');
-                setActiveDetail('account_detail');
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.securityItemTitle}>🔑 Đổi mật khẩu tài khoản</Text>
-                <Text style={styles.securityItemDesc}>Đổi mật khẩu với xác thực email đăng ký.</Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </TouchableOpacity>
-
-            <View style={styles.securityItem}>
-              <Text style={styles.securityItemTitle}>📷 Quyền Máy ảnh & Bộ nhớ ảnh</Text>
-              <Text style={styles.securityItemDesc}>
-                Chỉ truy cập khi bạn thực hiện chụp ảnh hoặc đăng tải khoảnh khắc Locket.
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
+            {/* Header */}
+            <View style={styles.securityHeader}>
+              <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                🛡️ {language === 'vi' ? 'Bảo mật & Quyền' : 'Security & Permissions'}
               </Text>
+              {loadingSecurity && <ActivityIndicator size="small" color={C.primary} />}
             </View>
-            <View style={styles.securityItem}>
-              <Text style={styles.securityItemTitle}>📱 Phiên đăng nhập</Text>
-              <Text style={styles.securityItemDesc}>Được lưu trữ an toàn bằng mã JWT qua SecureStore.</Text>
+
+            {/* 1. KIỂM TRA BẢO MẬT */}
+            <View style={[styles.securityGroup, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
+              <Text style={styles.securityGroupTitle}>
+                🔎 {language === 'vi' ? 'KIỂM TRA BẢO MẬT' : 'SECURITY CHECK'}
+              </Text>
+              {securityStatus ? (
+                <>
+                  <View style={styles.securityCheckRow}>
+                    <Text style={styles.securityCheckIcon}>
+                      {securityStatus.last_password_changed ? '✅' : '⚠️'}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.securityCheckLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                        {language === 'vi' ? 'Mật khẩu' : 'Password'}
+                      </Text>
+                      <Text style={[styles.securityCheckValue, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                        {securityStatus.last_password_changed
+                          ? (language === 'vi' ? `Đã đổi ${formatRelativeTime(securityStatus.last_password_changed)}` : `Changed ${formatRelativeTime(securityStatus.last_password_changed)}`)
+                          : (language === 'vi' ? 'Chưa đổi mật khẩu lần nào' : 'Password never changed')}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.securityCheckRow}>
+                    <Text style={styles.securityCheckIcon}>✅</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.securityCheckLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                        {language === 'vi' ? 'Trạng thái tài khoản' : 'Account Status'}
+                      </Text>
+                      <Text style={[styles.securityCheckValue, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                        {language === 'vi' ? 'Hoạt động bình thường' : 'Normal / Good Standing'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.securityCheckRow}>
+                    <Text style={styles.securityCheckIcon}>📅</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.securityCheckLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                        {language === 'vi' ? 'Ngày tạo tài khoản' : 'Account Created'}
+                      </Text>
+                      <Text style={[styles.securityCheckValue, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                        {new Date(securityStatus.created_at).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.securityCheckRow}>
+                    <Text style={styles.securityCheckIcon}>📱</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.securityCheckLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                        {language === 'vi' ? 'Phiên đang hoạt động' : 'Active Sessions'}
+                      </Text>
+                      <Text style={[styles.securityCheckValue, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                        {securityStatus.active_session_count} {language === 'vi' ? 'thiết bị' : 'devices'}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.securityActionCard}
+                    onPress={() => {
+                      setAccountTab('password');
+                      setActiveDetail('account_detail');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.securityItemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                        🔑 {language === 'vi' ? 'Đổi mật khẩu tài khoản' : 'Change account password'}
+                      </Text>
+                      <Text style={[styles.securityItemDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                        {language === 'vi' ? 'Đổi mật khẩu với xác thực email đăng ký.' : 'Change password with email verification.'}
+                      </Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <View style={styles.securityLoadingBox}>
+                  <ActivityIndicator size="small" color={C.primary} />
+                  <Text style={[styles.securityLoadingText, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {language === 'vi' ? 'Đang tải thông tin bảo mật...' : 'Loading security status...'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* 2. THIẾT BỊ & PHIÊN ĐĂNG NHẬP */}
+            <View style={[styles.securityGroup, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
+              <View style={styles.securityGroupHeader}>
+                <Text style={styles.securityGroupTitle}>
+                  📱 {language === 'vi' ? 'THIẾT BỊ & PHIÊN ĐĂNG NHẬP' : 'DEVICES & SESSIONS'}
+                </Text>
+                {loadingSessions && <ActivityIndicator size="small" color={C.primary} />}
+              </View>
+              {loginSessions.length === 0 ? (
+                <Text style={[styles.securityEmptyText, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {loadingSessions
+                    ? (language === 'vi' ? 'Đang tải...' : 'Loading...')
+                    : (language === 'vi' ? 'Chưa có phiên đăng nhập nào được ghi lại.' : 'No sessions recorded.')}
+                </Text>
+              ) : (
+                loginSessions.map((session) => (
+                  <View key={session.id} style={styles.sessionCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.sessionDeviceName, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                        {session.device_name}
+                      </Text>
+                      <Text style={[styles.sessionMeta, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                        {session.ip_address ? `IP: ${session.ip_address} · ` : ''}
+                        {formatRelativeTime(session.last_active)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.sessionRevokeBtn}
+                      onPress={() => handleRevokeSession(session.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.sessionRevokeBtnText}>
+                        {language === 'vi' ? 'Đăng xuất' : 'Revoke'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+
+            {/* 3. BẢO MẬT ĐĂNG NHẬP (2FA + Remember Me) */}
+            <View style={[styles.securityGroup, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
+              <Text style={styles.securityGroupTitle}>
+                🔐 {language === 'vi' ? 'BẢO MẬT ĐĂNG NHẬP' : 'LOGIN SECURITY'}
+              </Text>
+
+              {/* Xác minh 2 bước */}
+              <View style={styles.privacySwitchRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={[styles.privacySwitchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                    {securityStatus?.two_factor_enabled
+                      ? (language === 'vi' ? '🔐 Xác minh 2 bước: Bật' : '🔐 2-Step Verification: ON')
+                      : (language === 'vi' ? '🔓 Xác minh 2 bước: Tắt' : '🔓 2-Step Verification: OFF')}
+                  </Text>
+                  <Text style={[styles.privacySwitchDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {language === 'vi'
+                      ? 'Khi bật, bạn cần nhập mã OTP (gửi qua email) mỗi lần đăng nhập mới.'
+                      : 'When enabled, an OTP code is required via email for every new login.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={securityStatus?.two_factor_enabled ?? false}
+                  onValueChange={handleToggleTwoFactor}
+                  trackColor={{ false: '#2D3748', true: C.primary }}
+                  thumbColor="#FFFFFF"
+                  disabled={updatingTwoFactor || otpStep !== 'idle'}
+                />
+              </View>
+
+              {/* OTP Confirm step */}
+              {otpStep === 'confirm' && (
+                <View style={styles.otpBox}>
+                  <Text style={[styles.otpTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                    🔢 {language === 'vi' ? 'Nhập mã OTP để xác nhận' : 'Enter OTP to confirm'}
+                  </Text>
+                  <Text style={[styles.otpHint, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                    📩 {language === 'vi' ? 'Mã OTP (Demo): ' : 'Demo OTP Code: '}
+                    <Text style={styles.otpCode}>{generatedOtp}</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.textInputStyle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#1A1A2E', borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#D1D5DB' }]}
+                    placeholder={language === 'vi' ? 'Nhập mã OTP 6 số...' : 'Enter 6-digit OTP...'}
+                    placeholderTextColor={C.textMuted}
+                    value={enteredOtp}
+                    onChangeText={setEnteredOtp}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                  />
+                  <View style={styles.otpBtnRow}>
+                    <TouchableOpacity
+                      style={[styles.otpBtn, styles.otpBtnCancel]}
+                      onPress={() => { setOtpStep('idle'); setEnteredOtp(''); setGeneratedOtp(''); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.otpBtnCancelText, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                        {language === 'vi' ? 'Hủy' : 'Cancel'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.otpBtn, styles.otpBtnConfirm, updatingTwoFactor && styles.submitActionBtnDisabled]}
+                      onPress={handleConfirmOtp}
+                      disabled={updatingTwoFactor}
+                      activeOpacity={0.8}
+                    >
+                      {updatingTwoFactor
+                        ? <ActivityIndicator size="small" color="#FFF" />
+                        : <Text style={styles.otpBtnConfirmText}>
+                            {language === 'vi' ? 'Xác nhận' : 'Confirm'}
+                          </Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
+
+              {/* Lưu thông tin đăng nhập */}
+              <View style={styles.privacySwitchRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={[styles.privacySwitchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                    💾 {language === 'vi' ? 'Lưu thông tin đăng nhập' : 'Remember Login Info'}
+                  </Text>
+                  <Text style={[styles.privacySwitchDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                    {language === 'vi'
+                      ? 'Giữ phiên đăng nhập lâu hơn. Tắt để đăng xuất tự động sau khi đóng ứng dụng.'
+                      : 'Stay signed in longer on this device. Disable to logout when app closes.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={securityStatus?.remember_login ?? true}
+                  onValueChange={handleToggleRememberLogin}
+                  trackColor={{ false: '#2D3748', true: C.primary }}
+                  thumbColor="#FFFFFF"
+                  disabled={updatingRememberLogin}
+                />
+              </View>
+            </View>
+
+            {/* 4. XÓA TÀI KHOẢN */}
+            <View style={[styles.securityGroup, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F9FAFB', borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#E5E7EB' }]}>
+              <Text style={styles.securityGroupTitle}>
+                ⚠️ {language === 'vi' ? 'VÙNG NGUY HIỂM' : 'DANGER ZONE'}
+              </Text>
+              {!showDeleteConfirm ? (
+                <TouchableOpacity
+                  style={styles.deleteAccountBtn}
+                  onPress={() => setShowDeleteConfirm(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.deleteAccountBtnText}>
+                    🗑️ {language === 'vi' ? 'Xóa tài khoản vĩnh viễn' : 'Delete Account Permanently'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.deleteConfirmBox}>
+                  <Text style={styles.deleteConfirmTitle}>
+                    ⚠️ {language === 'vi' ? 'Xác nhận xóa tài khoản' : 'Confirm Delete Account'}
+                  </Text>
+                  <Text style={[styles.deleteConfirmDesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                    {language === 'vi'
+                      ? 'Hành động này không thể hoàn tác. Tài khoản và toàn bộ dữ liệu sẽ bị xóa vĩnh viễn. Vui lòng nhập email và mật khẩu để xác nhận.'
+                      : 'This action cannot be undone. Your account and all data will be permanently deleted. Please enter your email and password to confirm.'}
+                  </Text>
+                  <Text style={[styles.inputLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                    {language === 'vi' ? 'Email đăng ký:' : 'Registered email:'}
+                  </Text>
+                  <TextInput
+                    style={[styles.textInputStyle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#1A1A2E', borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#D1D5DB' }]}
+                    placeholder={language === 'vi' ? 'Nhập email của bạn...' : 'Enter your email...'}
+                    placeholderTextColor={C.textMuted}
+                    value={deleteEmail}
+                    onChangeText={setDeleteEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    autoCorrect={false}
+                  />
+                  <Text style={[styles.inputLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                    {language === 'vi' ? 'Mật khẩu xác nhận:' : 'Confirm password:'}
+                  </Text>
+                  <TextInput
+                    style={[styles.textInputStyle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#FFFFFF', color: isDark ? '#FFFFFF' : '#1A1A2E', borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#D1D5DB' }]}
+                    placeholder={language === 'vi' ? 'Nhập mật khẩu của bạn...' : 'Enter your password...'}
+                    placeholderTextColor={C.textMuted}
+                    value={deletePassword}
+                    onChangeText={setDeletePassword}
+                    secureTextEntry
+                    autoCapitalize="none"
+                  />
+                  <View style={styles.otpBtnRow}>
+                    <TouchableOpacity
+                      style={[styles.otpBtn, styles.otpBtnCancel]}
+                      onPress={() => { setShowDeleteConfirm(false); setDeleteEmail(''); setDeletePassword(''); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.otpBtnCancelText, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                        {language === 'vi' ? 'Hủy' : 'Cancel'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.deleteConfirmActionBtn, deletingAccount && styles.submitActionBtnDisabled]}
+                      onPress={handleDeleteAccount}
+                      disabled={deletingAccount}
+                      activeOpacity={0.8}
+                    >
+                      {deletingAccount
+                        ? <ActivityIndicator size="small" color="#FFF" />
+                        : <Text style={styles.deleteAccountBtnText}>
+                            {language === 'vi' ? 'Xóa tài khoản' : 'Delete Account'}
+                          </Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           </View>
         );
 
       case 'accessibility_detail':
         return (
-          <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>♿ Cài đặt trợ năng</Text>
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
+            <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>♿ {t('accessibility')}</Text>
+            <Text style={[styles.detailDesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+              {language === 'vi'
+                ? 'Điều chỉnh các cài đặt giúp trải nghiệm ứng dụng tốt hơn.'
+                : 'Adjust settings to improve your app experience.'}
+            </Text>
+
+            {/* Độ tương phản cao */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.switchLabel}>Độ tương phản cao</Text>
-                <Text style={styles.switchSub}>Tăng độ rõ nét của chữ và biểu tượng</Text>
+                <Text style={[styles.switchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  🎨 {t('high_contrast')}
+                </Text>
+                <Text style={[styles.switchSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {t('high_contrast_desc')}
+                </Text>
               </View>
               <Switch
                 value={highContrast}
-                onValueChange={setHighContrast}
+                onValueChange={async (val) => {
+                  await setHighContrast(val);
+                  showToast('success', val
+                    ? (language === 'vi' ? 'Đã bật độ tương phản cao ✨' : 'High contrast enabled ✨')
+                    : (language === 'vi' ? 'Đã tắt độ tương phản cao' : 'High contrast disabled'));
+                }}
                 trackColor={{ false: '#3A3A4C', true: C.primary }}
                 thumbColor="#FFFFFF"
               />
             </View>
+
             <View style={styles.separator} />
+
+            {/* Giảm hiệu ứng chuyển động */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.switchLabel}>Giảm hiệu ứng chuyển động</Text>
-                <Text style={styles.switchSub}>Tối ưu tốc độ tải và giảm hoạt cảnh</Text>
+                <Text style={[styles.switchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  ⚡ {t('reduce_motion')}
+                </Text>
+                <Text style={[styles.switchSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {t('reduce_motion_desc')}
+                </Text>
               </View>
               <Switch
                 value={reduceMotion}
-                onValueChange={setReduceMotion}
+                onValueChange={async (val) => {
+                  await setReduceMotion(val);
+                  showToast('success', val
+                    ? (language === 'vi' ? 'Đã bật giảm hiệu ứng chuyển động' : 'Reduce motion enabled')
+                    : (language === 'vi' ? 'Đã tắt giảm hiệu ứng chuyển động' : 'Reduce motion disabled'));
+                }}
                 trackColor={{ false: '#3A3A4C', true: C.primary }}
                 thumbColor="#FFFFFF"
               />
             </View>
+
+            <View style={styles.separator} />
+
+            {/* Chữ lớn */}
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.switchLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  🔤 {t('large_text')}
+                </Text>
+                <Text style={[styles.switchSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {t('large_text_desc')}
+                </Text>
+              </View>
+              <Switch
+                value={largeText}
+                onValueChange={async (val) => {
+                  await setLargeText(val);
+                  showToast('success', val
+                    ? (language === 'vi' ? 'Đã bật chữ lớn. Khởi động lại app để áp dụng.' : 'Large text enabled. Restart app to apply.')
+                    : (language === 'vi' ? 'Đã tắt chữ lớn.' : 'Large text disabled.'));
+                }}
+                trackColor={{ false: '#3A3A4C', true: C.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {/* Preview */}
+            <View style={[styles.accessibilityPreview, {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+            }]}>
+              <Text style={[
+                styles.accessibilityPreviewLabel,
+                { color: isDark ? C.textMuted : '#9CA3AF' }
+              ]}>
+                {language === 'vi' ? 'Xem trước cỡ chữ:' : 'Text size preview:'}
+              </Text>
+              <Text style={[
+                styles.accessibilityPreviewText,
+                {
+                  color: isDark ? '#FFFFFF' : '#1A1A2E',
+                  fontSize: largeText ? 18 : 15,
+                  fontWeight: highContrast ? '700' : '400',
+                }
+              ]}>
+                {language === 'vi'
+                  ? 'Masita — Kết nối khoảnh khắc cuộc sống'
+                  : 'Masita — Connect life moments'}
+              </Text>
+            </View>
+          </View>
+        );
+
+      case 'notify_detail':
+        return (
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
+            <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+              🔔 {t('notifications')}
+            </Text>
+            <Text style={[styles.detailDesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+              {language === 'vi'
+                ? 'Quản lý các loại thông báo bạn muốn nhận.'
+                : 'Manage which notifications you want to receive.'}
+            </Text>
+
+            {/* Tin nhắn mới */}
+            <View style={[styles.notifyRow, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : '#E5E7EB' }]}>
+              <View style={styles.notifyIconBox}>
+                <Text style={styles.notifyIcon}>💬</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.notifyLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  {t('notify_messages')}
+                </Text>
+                <Text style={[styles.notifyDesc, { color: isDark ? C.textMuted : '#9CA3AF' }]}>
+                  {t('notify_messages_desc')}
+                </Text>
+              </View>
+              <Switch
+                value={notifyMessages}
+                onValueChange={async (val) => {
+                  await setNotifyMessages(val);
+                  showToast(val ? 'success' : 'info', val
+                    ? (language === 'vi' ? '✅ Đã bật thông báo tin nhắn' : '✅ Message notifications on')
+                    : (language === 'vi' ? 'Đã tắt thông báo tin nhắn' : 'Message notifications off'));
+                }}
+                trackColor={{ false: '#3A3A4C', true: C.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {/* Bài viết mới */}
+            <View style={[styles.notifyRow, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : '#E5E7EB' }]}>
+              <View style={styles.notifyIconBox}>
+                <Text style={styles.notifyIcon}>📸</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.notifyLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  {t('notify_posts')}
+                </Text>
+                <Text style={[styles.notifyDesc, { color: isDark ? C.textMuted : '#9CA3AF' }]}>
+                  {t('notify_posts_desc')}
+                </Text>
+              </View>
+              <Switch
+                value={notifyPosts}
+                onValueChange={async (val) => {
+                  await setNotifyPosts(val);
+                  showToast(val ? 'success' : 'info', val
+                    ? (language === 'vi' ? '✅ Đã bật thông báo bài viết' : '✅ Post notifications on')
+                    : (language === 'vi' ? 'Đã tắt thông báo bài viết' : 'Post notifications off'));
+                }}
+                trackColor={{ false: '#3A3A4C', true: C.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {/* Tương tác */}
+            <View style={[styles.notifyRow, { borderBottomColor: 'transparent' }]}>
+              <View style={styles.notifyIconBox}>
+                <Text style={styles.notifyIcon}>❤️</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.notifyLabel, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  {t('notify_interactions')}
+                </Text>
+                <Text style={[styles.notifyDesc, { color: isDark ? C.textMuted : '#9CA3AF' }]}>
+                  {t('notify_interactions_desc')}
+                </Text>
+              </View>
+              <Switch
+                value={notifyInteractions}
+                onValueChange={async (val) => {
+                  await setNotifyInteractions(val);
+                  showToast(val ? 'success' : 'info', val
+                    ? (language === 'vi' ? '✅ Đã bật thông báo tương tác' : '✅ Interaction notifications on')
+                    : (language === 'vi' ? 'Đã tắt thông báo tương tác' : 'Interaction notifications off'));
+                }}
+                trackColor={{ false: '#3A3A4C', true: C.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {/* Tắt tất cả */}
+            <TouchableOpacity
+              style={[styles.notifyAllOffBtn, {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#E5E7EB',
+              }]}
+              onPress={async () => {
+                const allOn = notifyMessages && notifyPosts && notifyInteractions;
+                await setNotifyMessages(!allOn);
+                await setNotifyPosts(!allOn);
+                await setNotifyInteractions(!allOn);
+                showToast(!allOn ? 'success' : 'info', !allOn
+                  ? (language === 'vi' ? '✅ Đã bật tất cả thông báo' : '✅ All notifications on')
+                  : (language === 'vi' ? 'Đã tắt tất cả thông báo' : 'All notifications off'));
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.notifyAllOffBtnText, { color: isDark ? C.primaryLight : C.primary }]}>
+                {notifyMessages && notifyPosts && notifyInteractions
+                  ? (language === 'vi' ? '🔕 Tắt tất cả thông báo' : '🔕 Turn off all notifications')
+                  : (language === 'vi' ? '🔔 Bật tất cả thông báo' : '🔔 Turn on all notifications')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 'language_detail':
+        return (
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
+            <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+              🌐 {t('language')}
+            </Text>
+            <Text style={[styles.detailDesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+              {language === 'vi'
+                ? 'Chọn ngôn ngữ hiển thị cho toàn bộ ứng dụng.'
+                : 'Select the display language for the entire app.'}
+            </Text>
+
+            {/* Tiếng Việt */}
+            <TouchableOpacity
+              style={[styles.langOption, {
+                backgroundColor: language === 'vi'
+                  ? `${C.primary}18`
+                  : (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)'),
+                borderColor: language === 'vi' ? C.primary : (isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB'),
+              }]}
+              onPress={async () => {
+                await setLanguage('vi');
+                showToast('success', '✅ Đã chọn Tiếng Việt 🇻🇳');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.langOptionFlag}>🇻🇳</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.langOptionName, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  Tiếng Việt
+                </Text>
+                <Text style={[styles.langOptionDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  Vietnamese
+                </Text>
+              </View>
+              {language === 'vi' && (
+                <View style={[styles.langOptionCheck, { backgroundColor: C.primary }]}>
+                  <Text style={styles.langOptionCheckText}>✓</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* English */}
+            <TouchableOpacity
+              style={[styles.langOption, {
+                backgroundColor: language === 'en'
+                  ? `${C.primary}18`
+                  : (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)'),
+                borderColor: language === 'en' ? C.primary : (isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB'),
+              }]}
+              onPress={async () => {
+                await setLanguage('en');
+                showToast('success', '✅ English selected 🇺🇸');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.langOptionFlag}>🇺🇸</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.langOptionName, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                  English
+                </Text>
+                <Text style={[styles.langOptionDesc, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  English (United States)
+                </Text>
+              </View>
+              {language === 'en' && (
+                <View style={[styles.langOptionCheck, { backgroundColor: C.primary }]}>
+                  <Text style={styles.langOptionCheckText}>✓</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
         );
 
       case 'help_center':
         return (
-          <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>❓ Trung tâm trợ giúp</Text>
-            <Text style={styles.detailDesc}>
-              Giải đáp thắc mắc và hỗ trợ người dùng ứng dụng mạng xã hội Masita.
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
+            <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+              ❓ {t('help_center')}
+            </Text>
+            <Text style={[styles.detailDesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+              {language === 'vi'
+                ? 'Giải đáp thắc mắc và hỗ trợ người dùng ứng dụng mạng xã hội Masita.'
+                : 'Answers to frequent questions and support for Masita app users.'}
             </Text>
             <View style={styles.faqItem}>
-              <Text style={styles.faqQ}>1. Làm sao để chia sẻ khoảnh khắc với bạn bè?</Text>
-              <Text style={styles.faqA}>Nhấn nút dấu (+) trên thanh điều hướng để chụp ảnh hoặc chọn ảnh đăng tải.</Text>
+              <Text style={[styles.faqQ, { color: isDark ? C.primaryLight : C.primary }]}>
+                {language === 'vi' ? '1. Làm sao để chia sẻ khoảnh khắc với bạn bè?' : '1. How do I share moments with friends?'}
+              </Text>
+              <Text style={[styles.faqA, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+                {language === 'vi'
+                  ? 'Nhấn nút dấu (+) trên thanh điều hướng để chụp ảnh hoặc chọn ảnh đăng tải.'
+                  : 'Tap the (+) button on the navigation bar to take a photo or select an image to post.'}
+              </Text>
             </View>
             <View style={styles.faqItem}>
-              <Text style={styles.faqQ}>2. Làm sao để kết bạn mới?</Text>
-              <Text style={styles.faqA}>Vào tab Bạn bè, xem mục Gợi ý kết bạn hoặc sử dụng thanh tìm kiếm để kết nối.</Text>
+              <Text style={[styles.faqQ, { color: isDark ? C.primaryLight : C.primary }]}>
+                {language === 'vi' ? '2. Làm sao để kết bạn mới?' : '2. How do I make new friends?'}
+              </Text>
+              <Text style={[styles.faqA, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+                {language === 'vi'
+                  ? 'Vào tab Bạn bè, xem mục Gợi ý kết bạn hoặc sử dụng thanh tìm kiếm để kết nối.'
+                  : 'Go to Friends tab, view Friend Suggestions or use the search bar to connect.'}
+              </Text>
             </View>
             <View style={styles.faqItem}>
-              <Text style={styles.faqQ}>3. Làm sao để đổi ảnh nền cuộc trò chuyện?</Text>
-              <Text style={styles.faqA}>Vào phòng chat, nhấn nút bánh răng cài đặt và chọn "Đổi chủ đề chat".</Text>
+              <Text style={[styles.faqQ, { color: isDark ? C.primaryLight : C.primary }]}>
+                {language === 'vi' ? '3. Làm sao để đổi ảnh nền cuộc trò chuyện?' : '3. How do I change the chat background?'}
+              </Text>
+              <Text style={[styles.faqA, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+                {language === 'vi'
+                  ? 'Vào phòng chat, nhấn nút bánh răng cài đặt và chọn "Đổi chủ đề chat".'
+                  : 'Open a chat room, tap the settings gear and choose "Change chat theme".'}
+              </Text>
             </View>
             <TouchableOpacity
-              style={styles.contactBtn}
-              onPress={() => showToast('info', 'Liên hệ hỗ trợ: support@masita.app')}
+              style={[styles.contactBtn, { borderColor: isDark ? `${C.primary}45` : C.primary }]}
+              onPress={() => showToast('info', language === 'vi' ? 'Liên hệ hỗ trợ: support@masita.app' : 'Contact support: support@masita.app')}
             >
-              <Text style={styles.contactBtnText}>📧 Liên hệ đội ngũ hỗ trợ</Text>
+              <Text style={[styles.contactBtnText, { color: isDark ? C.primaryLight : C.primary }]}>
+                {language === 'vi' ? '📧 Liên hệ đội ngũ hỗ trợ' : '📧 Contact Support Team'}
+              </Text>
             </TouchableOpacity>
           </View>
         );
 
       case 'privacy_center':
         return (
-          <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>🛡️ Trung tâm quyền riêng tư</Text>
-            <Text style={styles.detailDesc}>
-              Masita cam kết bảo vệ dữ liệu cá nhân của bạn với các tiêu chuẩn an toàn cao nhất:
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
+            <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+              🛡️ {t('privacy_center')}
             </Text>
-            <Text style={styles.bulletPoint}>• Tin nhắn cá nhân được mã hóa và chỉ lưu trữ bảo mật.</Text>
-            <Text style={styles.bulletPoint}>• Hình ảnh và khoảnh khắc riêng tư không bao giờ được chia sẻ ra ngoài.</Text>
-            <Text style={styles.bulletPoint}>• Bạn hoàn toàn kiểm soát ai có thể xem bài viết và gửi tin nhắn cho bạn.</Text>
-            <Text style={styles.bulletPoint}>• Bạn có quyền xóa vĩnh viễn bài đăng hoặc tài khoản bất cứ lúc nào.</Text>
+            <Text style={[styles.detailDesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+              {language === 'vi'
+                ? 'Masita cam kết bảo vệ dữ liệu cá nhân của bạn với các tiêu chuẩn an toàn cao nhất:'
+                : 'Masita is committed to protecting your personal data with the highest security standards:'}
+            </Text>
+            <Text style={[styles.bulletPoint, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+              {language === 'vi' ? '• Tin nhắn cá nhân được mã hóa và chỉ lưu trữ bảo mật.' : '• Personal messages are encrypted and securely stored.'}
+            </Text>
+            <Text style={[styles.bulletPoint, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+              {language === 'vi' ? '• Hình ảnh và khoảnh khắc riêng tư không bao giờ được chia sẻ ra ngoài.' : '• Private photos and moments are never shared externally.'}
+            </Text>
+            <Text style={[styles.bulletPoint, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+              {language === 'vi' ? '• Bạn hoàn toàn kiểm soát ai có thể xem bài viết và gửi tin nhắn cho bạn.' : '• You have full control over who can view your posts and send you messages.'}
+            </Text>
+            <Text style={[styles.bulletPoint, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+              {language === 'vi' ? '• Bạn có quyền xóa vĩnh viễn bài đăng hoặc tài khoản bất cứ lúc nào.' : '• You have the right to permanently delete posts or your account at any time.'}
+            </Text>
           </View>
         );
 
       case 'terms_policies':
         return (
-          <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>📜 Điều khoản và chính sách</Text>
-            <Text style={styles.detailDesc}>
-              Các quy định khi tham gia cộng đồng mạng xã hội Masita:
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
+            <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+              📜 {t('terms')}
             </Text>
-            <Text style={styles.bulletPoint}>1. Tôn trọng người khác: Không đăng tải nội dung quấy rối, xúc phạm.</Text>
-            <Text style={styles.bulletPoint}>2. Bảo vệ bản quyền: Không chia sẻ hình ảnh vi phạm pháp luật.</Text>
-            <Text style={styles.bulletPoint}>3. Tính xác thực: Không tạo tài khoản giả mạo người khác.</Text>
-            <Text style={styles.bulletPoint}>4. Bảo vệ cộng đồng: Báo cáo các hành vi vi phạm chuẩn mực đạo đức.</Text>
+            <Text style={[styles.detailDesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+              {language === 'vi'
+                ? 'Các quy định khi tham gia cộng đồng mạng xã hội Masita:'
+                : 'Community guidelines and policies when using the Masita network:'}
+            </Text>
+            <Text style={[styles.bulletPoint, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+              {language === 'vi' ? '1. Tôn trọng người khác: Không đăng tải nội dung quấy rối, xúc phạm.' : '1. Respect others: Do not post harassing or offensive content.'}
+            </Text>
+            <Text style={[styles.bulletPoint, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+              {language === 'vi' ? '2. Bảo vệ bản quyền: Không chia sẻ hình ảnh vi phạm pháp luật.' : '2. Respect copyright: Do not share unlawful or pirated media.'}
+            </Text>
+            <Text style={[styles.bulletPoint, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+              {language === 'vi' ? '3. Tính xác thực: Không tạo tài khoản giả mạo người khác.' : '3. Authenticity: Do not create misleading or impersonation accounts.'}
+            </Text>
+            <Text style={[styles.bulletPoint, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+              {language === 'vi' ? '4. Bảo vệ cộng đồng: Báo cáo các hành vi vi phạm chuẩn mực đạo đức.' : '4. Community safety: Report violations to our moderation team.'}
+            </Text>
           </View>
         );
 
-      case 'app_version':
+      case 'app_version': {
+        const isUpToDate = otaChecked && otaInfo && !otaInfo.is_update_available;
+        const hasUpdate = otaChecked && otaInfo && otaInfo.is_update_available;
+        const changelog = otaInfo
+          ? (language === 'vi' ? otaInfo.changelog_vi : otaInfo.changelog_en)
+          : [];
+
         return (
-          <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>🚀 Phiên bản cập nhật</Text>
-            <View style={styles.versionHeader}>
-              <Text style={styles.versionNumber}>Masita v1.2.0</Text>
-              <View style={styles.versionBadge}>
-                <Text style={styles.versionBadgeText}>Bản mới nhất ✓</Text>
+          <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
+            <View style={styles.otaHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', marginBottom: 2 }]}>
+                  🚀 {t('ota_title')}
+                </Text>
+                <Text style={[styles.otaSubText, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                  {t('ota_subtitle')}
+                </Text>
+              </View>
+              <View style={[
+                styles.versionBadge,
+                {
+                  backgroundColor: hasUpdate ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                  borderColor: hasUpdate ? 'rgba(245, 158, 11, 0.4)' : 'rgba(16, 185, 129, 0.4)',
+                }
+              ]}>
+                <Text style={[styles.versionBadgeText, { color: hasUpdate ? '#F59E0B' : '#10B981' }]}>
+                  {hasUpdate ? `${t('ota_update_available')} ⚡` : `${t('ota_up_to_date')} ✓`}
+                </Text>
               </View>
             </View>
-            <Text style={styles.detailDesc}>
-              Bản phát hành chính thức tích hợp chia sẻ khoảnh khắc Locket, tin nhắn realtime, chat nhóm, tùy chỉnh chủ đề và phân quyền bài viết 3 cấp độ.
-            </Text>
+
+            {/* Version Overview Card */}
+            <View style={[styles.otaInfoBox, { backgroundColor: isDark ? '#131224' : '#FFFFFF', borderColor: isDark ? '#2E2E48' : '#E5E7EB' }]}>
+              <View style={styles.otaInfoRow}>
+                <Text style={[styles.otaLabel, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                  {t('ota_current_ver')}:
+                </Text>
+                <Text style={[styles.otaValue, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: 'bold' }]}>
+                  v{appVersion}
+                </Text>
+              </View>
+
+              <View style={styles.otaInfoRow}>
+                <Text style={[styles.otaLabel, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                  {t('ota_channel')}:
+                </Text>
+                <View style={styles.channelBadgeGroup}>
+                  <TouchableOpacity
+                    style={[
+                      styles.channelChip,
+                      otaChannel === 'production' && styles.channelChipActive,
+                      { borderColor: isDark ? '#2E2E48' : '#E5E7EB' }
+                    ]}
+                    onPress={() => setOtaChannel('production')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.channelChipText,
+                      otaChannel === 'production' && styles.channelChipTextActive,
+                      { color: otaChannel === 'production' ? '#FFFFFF' : (isDark ? C.textSecondary : '#6B7280') }
+                    ]}>
+                      Production
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.channelChip,
+                      otaChannel === 'beta' && styles.channelChipActive,
+                      { borderColor: isDark ? '#2E2E48' : '#E5E7EB' }
+                    ]}
+                    onPress={() => setOtaChannel('beta')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.channelChipText,
+                      otaChannel === 'beta' && styles.channelChipTextActive,
+                      { color: otaChannel === 'beta' ? '#FFFFFF' : (isDark ? C.textSecondary : '#6B7280') }
+                    ]}>
+                      Beta 🧪
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {lastOtaCheckTime && (
+                <View style={styles.otaInfoRow}>
+                  <Text style={[styles.otaLabel, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                    {language === 'vi' ? 'Kiểm tra lần cuối:' : 'Last checked:'}
+                  </Text>
+                  <Text style={[styles.otaValue, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+                    {formatRelativeTimeI18n(lastOtaCheckTime, language)}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.otaInfoRow}>
+                <Text style={[styles.otaLabel, { color: isDark ? C.textSecondary : '#6B7280' }]}>
+                  {t('ota_auto_check')}:
+                </Text>
+                <Switch
+                  value={autoCheckOta}
+                  onValueChange={setAutoCheckOta}
+                  trackColor={{ false: '#3E3E5A', true: C.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            </View>
+
+            {/* State: Update Available Card */}
+            {hasUpdate && (
+              <View style={[styles.otaUpdateCard, { backgroundColor: isDark ? '#1C1936' : '#EEF2FF', borderColor: '#6C63FF' }]}>
+                <View style={styles.updateCardHeader}>
+                  <Text style={styles.updateCardTitle}>
+                    🎉 {language === 'vi' ? 'Phiên bản mới' : 'New version'}: v{otaInfo?.latest_version}
+                  </Text>
+                  <Text style={styles.updateCardMeta}>
+                    {otaInfo?.bundle_size} • {otaInfo?.release_date} • Channel: {otaInfo?.channel}
+                  </Text>
+                </View>
+
+                {/* Changelog Bullets */}
+                <Text style={[styles.changelogTitle, { color: isDark ? '#E0E7FF' : '#312E81' }]}>
+                  📋 {t('ota_changelog')}:
+                </Text>
+                {changelog.map((line, idx) => (
+                  <View key={idx} style={styles.changelogItem}>
+                    <Text style={styles.bulletDot}>•</Text>
+                    <Text style={[styles.changelogLine, { color: isDark ? C.textSecondary : '#4338CA' }]}>
+                      {line}
+                    </Text>
+                  </View>
+                ))}
+
+                {/* Progress bar if downloading */}
+                {otaDownloading && (
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressBarBackground}>
+                      <View style={[styles.progressBarFill, { width: `${otaProgress}%` }]} />
+                    </View>
+                    <Text style={[styles.progressText, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                      {t('ota_downloading')} {otaProgress}%
+                    </Text>
+                  </View>
+                )}
+
+                {/* Actions */}
+                {!otaDownloaded ? (
+                  <TouchableOpacity
+                    style={[styles.btnDownloadOta, otaDownloading && styles.btnDisabled]}
+                    onPress={handleDownloadOta}
+                    disabled={otaDownloading}
+                    activeOpacity={0.8}
+                  >
+                    {otaDownloading ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.btnDownloadOtaText}>
+                        📥 {t('ota_download_now')}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.btnApplyOta}
+                    onPress={handleApplyOta}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.btnApplyOtaText}>
+                      🔄 {t('ota_restart_apply')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* State: Up to date notice */}
+            {isUpToDate && (
+              <View style={[styles.upToDateBox, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5', borderColor: '#10B981' }]}>
+                <Text style={styles.upToDateIcon}>✨</Text>
+                <Text style={[styles.upToDateText, { color: isDark ? '#34D399' : '#065F46' }]}>
+                  {t('ota_up_to_date')}
+                </Text>
+              </View>
+            )}
+
+            {/* Main Action Button */}
             <TouchableOpacity
-              style={styles.checkUpdateBtn}
-              onPress={() => showToast('success', 'Ứng dụng của bạn đang ở phiên bản mới nhất! ✨')}
+              style={[styles.checkUpdateBtn, otaLoading && styles.btnDisabled]}
+              onPress={() => handleCheckOta()}
+              disabled={otaLoading || otaDownloading}
+              activeOpacity={0.8}
             >
-              <Text style={styles.checkUpdateBtnText}>Kiểm tra cập nhật</Text>
+              {otaLoading ? (
+                <View style={styles.checkingRow}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Text style={[styles.checkUpdateBtnText, { marginLeft: 8 }]}>
+                    {t('ota_checking')}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.checkUpdateBtnText}>
+                  🔄 {t('ota_check_now')}
+                </Text>
+              )}
             </TouchableOpacity>
+
+            {/* Simulator Tools for testing */}
+            <View style={styles.simulatorDivider}>
+              <Text style={[styles.simulatorDividerText, { color: isDark ? C.textMuted : '#9CA3AF' }]}>
+                {language === 'vi' ? '— Công cụ thử nghiệm OTA —' : '— OTA Testing Sandbox —'}
+              </Text>
+            </View>
+
+            <View style={styles.simulateButtonsRow}>
+              <TouchableOpacity
+                style={[styles.btnSimulate, { borderColor: isDark ? '#4B5563' : '#D1D5DB' }]}
+                onPress={() => handleCheckOta('new_version')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.btnSimulateText, { color: isDark ? '#E0E7FF' : '#374151' }]}>
+                  {t('ota_test_simulate_new')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.btnSimulate, { borderColor: isDark ? '#4B5563' : '#D1D5DB' }]}
+                onPress={() => handleCheckOta('up_to_date')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.btnSimulateText, { color: isDark ? '#E0E7FF' : '#374151' }]}>
+                  {t('ota_test_simulate_uptodate')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         );
+      }
 
       default:
         return null;
@@ -721,21 +1853,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
-      <View style={styles.container}>
+    <Modal
+      visible={visible}
+      animationType={reduceMotion ? 'none' : 'slide'}
+      transparent={false}
+      onRequestClose={onClose}
+    >
+      <View style={[styles.container, { backgroundColor: isDark ? '#0F0E17' : '#F8F7FF' }]}>
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={onClose} activeOpacity={0.7}>
-            <Text style={styles.backBtnText}>✕</Text>
+        <View style={[styles.header, { backgroundColor: isDark ? C.card : '#FFFFFF', borderBottomColor: isDark ? C.border : '#E5E7EB' }]}>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)' }]}
+            onPress={onClose}
+            activeOpacity={0.7}
+          >
+            <Text style={{ color: isDark ? '#FFFFFF' : '#1A1A2E', fontSize: 16, fontWeight: 'bold' }}>✕</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Cài đặt</Text>
+          <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+            {t('settings')}
+          </Text>
           <View style={styles.headerRightSpacer} />
         </View>
 
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {/* ================= SECTION 1: TÀI KHOẢN ================= */}
-          <Text style={styles.sectionHeader}>Tài khoản</Text>
-          <View style={styles.card}>
+          <Text style={[styles.sectionHeader, { color: isDark ? C.primaryLight : C.primary }]}>
+            {t('account')}
+          </Text>
+          <View style={[styles.card, {
+            backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
+            borderColor: isDark ? (highContrast ? '#FFFFFF' : C.border) : (highContrast ? '#000000' : '#E5E7EB'),
+            borderWidth: highContrast ? 2 : 1,
+          }]}>
             {/* 1. Tài khoản */}
             <TouchableOpacity
               style={styles.itemRow}
@@ -749,13 +1898,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.itemIcon}>👤</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Tài khoản</Text>
-                <Text style={styles.itemSub}>Chỉnh sửa username, email & mật khẩu</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('account')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {language === 'vi' ? 'Chỉnh sửa username, email & mật khẩu' : 'Edit username, email & password'}
+                </Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
             </TouchableOpacity>
 
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
 
             {/* 2. Quyền riêng tư */}
             <TouchableOpacity
@@ -767,15 +1920,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.itemIcon}>🔒</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Quyền riêng tư</Text>
-                <Text style={styles.itemSub}>
-                  {privacySettings.is_private_account ? 'Tài khoản riêng tư' : 'Tài khoản công khai'} • Đề xuất & Tìm kiếm
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('privacy')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {privacySettings.is_private_account
+                    ? (language === 'vi' ? 'Tài khoản riêng tư' : 'Private account')
+                    : (language === 'vi' ? 'Tài khoản công khai' : 'Public account')} • {language === 'vi' ? 'Đề xuất & Tìm kiếm' : 'Suggestions & Search'}
                 </Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
             </TouchableOpacity>
 
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
 
             {/* 3. Bảo mật và quyền */}
             <TouchableOpacity
@@ -787,13 +1944,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.itemIcon}>🛡️</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Bảo mật và quyền</Text>
-                <Text style={styles.itemSub}>Mật khẩu, quyền máy ảnh & bộ nhớ</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('security')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {language === 'vi' ? 'Mật khẩu, quyền máy ảnh & bộ nhớ' : 'Password, camera & storage permissions'}
+                </Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
             </TouchableOpacity>
 
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
 
             {/* 4. Chia sẻ hồ sơ */}
             <TouchableOpacity
@@ -805,85 +1966,102 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.itemIcon}>🔗</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Chia sẻ hồ sơ</Text>
-                <Text style={styles.itemSub}>Sao chép liên kết trang cá nhân</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('share_profile')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {language === 'vi' ? 'Sao chép liên kết trang cá nhân' : 'Copy profile link'}
+                </Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
             </TouchableOpacity>
           </View>
 
           {/* ================= SECTION 2: NỘI DUNG HIỂN THỊ ================= */}
-          <Text style={styles.sectionHeader}>Nội dung hiển thị</Text>
-          <View style={styles.card}>
+          <Text style={[styles.sectionHeader, { color: isDark ? C.primaryLight : C.primary }]}>
+            {t('display')}
+          </Text>
+          <View style={[styles.card, {
+            backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
+            borderColor: isDark ? (highContrast ? '#FFFFFF' : C.border) : (highContrast ? '#000000' : '#E5E7EB'),
+            borderWidth: highContrast ? 2 : 1,
+          }]}>
+
             {/* 1. Thông báo */}
-            <View style={styles.itemRow}>
+            <TouchableOpacity
+              style={styles.itemRow}
+              onPress={() => setActiveDetail('notify_detail')}
+              activeOpacity={0.7}
+            >
               <View style={[styles.itemIconBox, { backgroundColor: 'rgba(255, 45, 85, 0.15)' }]}>
                 <Text style={styles.itemIcon}>🔔</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Thông báo</Text>
-                <Text style={styles.itemSub}>Nhận thông báo tin nhắn & bài viết mới</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('notifications')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {notifyMessages || notifyPosts || notifyInteractions
+                    ? (language === 'vi' ? 'Đã bật thông báo' : 'Notifications on')
+                    : (language === 'vi' ? 'Tất cả thông báo tắt' : 'All notifications off')}
+                </Text>
               </View>
-              <Switch
-                value={notifyMessages}
-                onValueChange={(val) => {
-                  setNotifyMessages(val);
-                  showToast('info', val ? 'Đã bật thông báo' : 'Đã tắt thông báo');
-                }}
-                trackColor={{ false: '#3A3A4C', true: C.primary }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
+              <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
+            </TouchableOpacity>
 
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
 
-            {/* 2. Hiển thị */}
+            {/* 2. Hiển thị sáng/tối */}
             <View style={styles.itemRow}>
               <View style={[styles.itemIconBox, { backgroundColor: 'rgba(175, 82, 222, 0.15)' }]}>
-                <Text style={styles.itemIcon}>🌓</Text>
+                <Text style={styles.itemIcon}>{isDark ? '🌙' : '☀️'}</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Hiển thị</Text>
-                <Text style={styles.itemSub}>Giao diện tối ưu (Chế độ tối)</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('appearance')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {isDark ? t('theme_dark') : t('theme_light')}
+                </Text>
               </View>
               <Switch
-                value={darkMode}
-                onValueChange={(val) => {
-                  setDarkMode(val);
-                  showToast('info', 'Ứng dụng đang tối ưu giao diện Dark Mode');
+                value={isDark}
+                onValueChange={async (val) => {
+                  await setThemeMode(val ? 'dark' : 'light');
+                  showToast('success', val
+                    ? (language === 'vi' ? '🌙 Đã bật Giao diện tối' : '🌙 Dark mode enabled')
+                    : (language === 'vi' ? '☀️ Đã bật Giao diện sáng' : '☀️ Light mode enabled'));
                 }}
-                trackColor={{ false: '#3A3A4C', true: C.primary }}
+                trackColor={{ false: '#D1D5DB', true: C.primary }}
                 thumbColor="#FFFFFF"
               />
             </View>
 
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
 
             {/* 3. Ngôn ngữ */}
             <TouchableOpacity
               style={styles.itemRow}
-              onPress={() => {
-                const next = currentLanguage === 'vi' ? 'en' : 'vi';
-                setCurrentLanguage(next);
-                showToast('success', next === 'vi' ? 'Đã chọn Tiếng Việt' : 'Selected English');
-              }}
+              onPress={() => setActiveDetail('language_detail')}
               activeOpacity={0.7}
             >
               <View style={[styles.itemIconBox, { backgroundColor: 'rgba(88, 86, 214, 0.15)' }]}>
                 <Text style={styles.itemIcon}>🌐</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Ngôn ngữ</Text>
-                <Text style={styles.itemSub}>
-                  {currentLanguage === 'vi' ? 'Tiếng Việt (Mặc định)' : 'English'}
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('language')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {language === 'vi' ? '🇻🇳 Tiếng Việt' : '🇺🇸 English'}
                 </Text>
               </View>
               <View style={styles.langBadge}>
-                <Text style={styles.langBadgeText}>{currentLanguage.toUpperCase()}</Text>
+                <Text style={styles.langBadgeText}>{language.toUpperCase()}</Text>
               </View>
             </TouchableOpacity>
 
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
 
             {/* 4. Trợ năng */}
             <TouchableOpacity
@@ -895,16 +2073,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.itemIcon}>♿</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Trợ năng</Text>
-                <Text style={styles.itemSub}>Tương phản cao, giảm hiệu ứng chuyển động</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('accessibility')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {[highContrast && (language === 'vi' ? 'Tương phản cao' : 'High contrast'),
+                     reduceMotion && (language === 'vi' ? 'Giảm hiệu ứng' : 'Reduce motion'),
+                     largeText && (language === 'vi' ? 'Chữ lớn' : 'Large text')].filter(Boolean).join(' • ')
+                   || (language === 'vi' ? 'Chuẩn (Mặc định)' : 'Standard (Default)')}
+                </Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
             </TouchableOpacity>
           </View>
 
           {/* ================= SECTION 3: HỖ TRỢ GIỚI THIỆU ================= */}
-          <Text style={styles.sectionHeader}>Hỗ trợ giới thiệu</Text>
-          <View style={styles.card}>
+          <Text style={[styles.sectionHeader, { color: isDark ? C.primaryLight : C.primary }]}>
+            {t('support')}
+          </Text>
+          <View style={[styles.card, {
+            backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
+            borderColor: isDark ? (highContrast ? '#FFFFFF' : C.border) : (highContrast ? '#000000' : '#E5E7EB'),
+            borderWidth: highContrast ? 2 : 1,
+          }]}>
             {/* 1. Trung tâm trợ giúp */}
             <TouchableOpacity
               style={styles.itemRow}
@@ -915,13 +2106,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.itemIcon}>❓</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Trung tâm trợ giúp</Text>
-                <Text style={styles.itemSub}>FAQ, hướng dẫn sử dụng & liên hệ</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('help_center')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {language === 'vi' ? 'FAQ, hướng dẫn sử dụng & liên hệ' : 'FAQ, guides & contact support'}
+                </Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
             </TouchableOpacity>
 
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
 
             {/* 2. Trung tâm quyền riêng tư */}
             <TouchableOpacity
@@ -933,13 +2128,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.itemIcon}>🛡️</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Trung tâm quyền riêng tư</Text>
-                <Text style={styles.itemSub}>Cam kết bảo mật dữ liệu người dùng</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('privacy_center')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {language === 'vi' ? 'Cam kết bảo mật dữ liệu người dùng' : 'User data privacy commitments'}
+                </Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
             </TouchableOpacity>
 
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
 
             {/* 3. Điều khoản và chính sách */}
             <TouchableOpacity
@@ -951,13 +2150,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.itemIcon}>📜</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Điều khoản và chính sách</Text>
-                <Text style={styles.itemSub}>Quy chuẩn cộng đồng và dịch vụ</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('terms')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {language === 'vi' ? 'Quy chuẩn cộng đồng và dịch vụ' : 'Community rules and terms'}
+                </Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
             </TouchableOpacity>
 
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
 
             {/* 4. Phiên bản cập nhật */}
             <TouchableOpacity
@@ -969,11 +2172,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
                 <Text style={styles.itemIcon}>🚀</Text>
               </View>
               <View style={styles.itemTextBox}>
-                <Text style={styles.itemTitle}>Phiên bản cập nhật</Text>
-                <Text style={styles.itemSub}>Masita Mobile v1.2.0 (Mới nhất)</Text>
+                <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                  {t('version')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  {language === 'vi' ? `Masita Mobile v${appVersion} (${t('version')})` : `Masita Mobile v${appVersion} (${t('version')})`}
+                </Text>
               </View>
               <View style={styles.versionPill}>
-                <Text style={styles.versionPillText}>v1.2.0</Text>
+                <Text style={styles.versionPillText}>v{appVersion}</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -985,7 +2192,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         <Modal
           visible={!!activeDetail}
           transparent
-          animationType="fade"
+          animationType={reduceMotion ? 'none' : 'fade'}
           onRequestClose={() => setActiveDetail(null)}
         >
           <KeyboardAvoidingView
@@ -997,17 +2204,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               activeOpacity={1}
               onPress={() => setActiveDetail(null)}
             />
-            <View style={styles.detailModalBox}>
-              <View style={styles.detailDragBar} />
+            <View style={[styles.detailModalBox, {
+              backgroundColor: isDark ? '#181826' : '#FFFFFF',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#E5E7EB',
+            }]}>
+              <View style={[styles.detailDragBar, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)' }]} />
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
                 {renderDetailContent()}
               </ScrollView>
               <TouchableOpacity
-                style={styles.detailCloseBtn}
+                style={[styles.detailCloseBtn, {
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                }]}
                 onPress={() => setActiveDetail(null)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.detailCloseBtnText}>Đóng</Text>
+                <Text style={[styles.detailCloseBtnText, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+                  {t('close')}
+                </Text>
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -1017,35 +2231,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: C.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 52 : 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    backgroundColor: C.card,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backBtnText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+const createStyles = (C: ColorScheme, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: C.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingTop: Platform.OS === 'ios' ? 52 : 20,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+      backgroundColor: C.card,
+    },
+    backBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    backBtnText: {
+      color: C.text,
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
   headerTitle: {
     fontSize: 18,
     fontFamily: 'Inter_700Bold',
@@ -1155,76 +2370,76 @@ const styles = StyleSheet.create({
   detailBackdrop: {
     flex: 1,
   },
-  detailModalBox: {
-    backgroundColor: '#181826',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    maxHeight: '85%',
-  },
-  detailDragBar: {
-    width: 36,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  detailCard: {
-    marginBottom: 10,
-  },
-  detailTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  detailDesc: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: C.textSecondary,
-    lineHeight: 20,
-    marginBottom: 14,
-  },
+    detailModalBox: {
+      backgroundColor: C.card,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+      borderWidth: 1,
+      borderColor: C.border,
+      maxHeight: '85%',
+    },
+    detailDragBar: {
+      width: 36,
+      height: 4,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)',
+      borderRadius: 2,
+      alignSelf: 'center',
+      marginBottom: 16,
+    },
+    detailCard: {
+      marginBottom: 10,
+    },
+    detailTitle: {
+      fontSize: 18,
+      fontFamily: 'Inter_700Bold',
+      color: C.text,
+      marginBottom: 12,
+    },
+    detailDesc: {
+      fontSize: 13,
+      fontFamily: 'Inter_400Regular',
+      color: C.textSecondary,
+      lineHeight: 20,
+      marginBottom: 14,
+    },
 
-  // Account Tabs and Forms
-  accountTabsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  accountTabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  accountTabBtnActive: {
-    backgroundColor: C.primary,
-    borderColor: C.primaryLight,
-  },
-  accountTabText: {
-    fontSize: 12,
-    fontFamily: 'Inter_600SemiBold',
-    color: C.textMuted,
-  },
-  accountTabTextActive: {
-    color: '#FFFFFF',
-  },
-  tabContentBox: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.07)',
-  },
+    // Account Tabs and Forms
+    accountTabsRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 16,
+    },
+    accountTabBtn: {
+      flex: 1,
+      paddingVertical: 8,
+      borderRadius: 10,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    accountTabBtnActive: {
+      backgroundColor: C.primary,
+      borderColor: C.primaryLight,
+    },
+    accountTabText: {
+      fontSize: 12,
+      fontFamily: 'Inter_600SemiBold',
+      color: C.textMuted,
+    },
+    accountTabTextActive: {
+      color: '#FFFFFF',
+    },
+    tabContentBox: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : C.surface,
+      borderRadius: 16,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
   infoNoticeBadge: {
     backgroundColor: 'rgba(108, 99, 255, 0.12)',
     borderWidth: 1,
@@ -1239,43 +2454,43 @@ const styles = StyleSheet.create({
     color: C.primaryLight,
     lineHeight: 18,
   },
-  currentValRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: 10,
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  currentValLabel: {
-    fontSize: 12,
-    color: C.textMuted,
-    fontFamily: 'Inter_400Regular',
-  },
-  currentValText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontFamily: 'Inter_600SemiBold',
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
-    marginBottom: 6,
-    marginTop: 8,
-  },
-  textInputStyle: {
-    height: 44,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-  },
+    currentValRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingBottom: 10,
+      marginBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+    },
+    currentValLabel: {
+      fontSize: 12,
+      color: C.textMuted,
+      fontFamily: 'Inter_400Regular',
+    },
+    currentValText: {
+      fontSize: 14,
+      color: C.text,
+      fontFamily: 'Inter_600SemiBold',
+    },
+    inputLabel: {
+      fontSize: 13,
+      fontFamily: 'Inter_600SemiBold',
+      color: C.text,
+      marginBottom: 6,
+      marginTop: 8,
+    },
+    textInputStyle: {
+      height: 44,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : C.inputBg,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderColor: C.border,
+      color: C.text,
+      fontSize: 14,
+      fontFamily: 'Inter_400Regular',
+    },
   fieldHint: {
     fontSize: 11,
     color: C.textMuted,
@@ -1306,132 +2521,326 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 4,
   },
-  privacySectionGroup: {
-    marginTop: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    privacySectionGroup: {
+      marginTop: 14,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : C.surface,
+      borderRadius: 14,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    privacySectionTitle: {
+      fontSize: 12,
+      fontFamily: 'Inter_700Bold',
+      color: C.primaryLight,
+      letterSpacing: 0.6,
+      marginBottom: 6,
+    },
+    privacyGroupSubdesc: {
+      fontSize: 12,
+      color: C.textSecondary,
+      marginBottom: 10,
+      lineHeight: 18,
+    },
+    privacySwitchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 6,
+    },
+    privacySwitchRowSub: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 8,
+      borderTopWidth: 1,
+      borderTopColor: C.border,
+    },
+    privacySwitchLabel: {
+      fontSize: 14,
+      fontFamily: 'Inter_600SemiBold',
+      color: C.text,
+      marginBottom: 3,
+    },
+    privacySwitchDesc: {
+      fontSize: 12,
+      color: C.textMuted,
+      lineHeight: 17,
+    },
+    securityActionCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: `${C.primary}18`,
+      padding: 12,
+      borderRadius: 12,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: `${C.primary}35`,
+    },
+    securityItem: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : C.surface,
+      padding: 12,
+      borderRadius: 12,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    securityItemTitle: {
+      fontSize: 14,
+      fontFamily: 'Inter_600SemiBold',
+      color: C.text,
+      marginBottom: 4,
+    },
+    securityItemDesc: {
+      fontSize: 12,
+      color: C.textMuted,
+      lineHeight: 18,
+    },
+
+    // Other Details
+    switchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+    },
+    switchLabel: {
+      fontSize: 14,
+      fontFamily: 'Inter_600SemiBold',
+      color: C.text,
+      marginBottom: 2,
+    },
+    switchSub: {
+      fontSize: 12,
+      color: C.textMuted,
+    },
+    faqItem: {
+      marginBottom: 12,
+    },
+    faqQ: {
+      fontSize: 13,
+      fontFamily: 'Inter_600SemiBold',
+      color: C.primaryLight,
+      marginBottom: 2,
+    },
+    faqA: {
+      fontSize: 12,
+      color: C.textSecondary,
+      lineHeight: 18,
+    },
+    contactBtn: {
+      marginTop: 10,
+      paddingVertical: 10,
+      backgroundColor: `${C.primary}20`,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: `${C.primary}45`,
+      alignItems: 'center',
+    },
+    contactBtnText: {
+      fontSize: 13,
+      fontFamily: 'Inter_600SemiBold',
+      color: C.primaryLight,
+    },
+    bulletPoint: {
+      fontSize: 13,
+      color: C.textSecondary,
+      lineHeight: 22,
+      marginBottom: 4,
+    },
+  otaHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    gap: 10,
+  },
+  otaSubText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    marginTop: 2,
+    maxWidth: 240,
+  },
+  otaInfoBox: {
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.07)',
+    marginBottom: 14,
+    gap: 10,
   },
-  privacySectionTitle: {
+  otaInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  otaLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+  },
+  otaValue: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  channelBadgeGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  channelChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  channelChipActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
+  channelChipText: {
     fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  channelChipTextActive: {
+    color: '#FFFFFF',
+  },
+  otaUpdateCard: {
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
+    marginBottom: 14,
+  },
+  updateCardHeader: {
+    marginBottom: 10,
+  },
+  updateCardTitle: {
+    fontSize: 15,
     fontFamily: 'Inter_700Bold',
-    color: C.primaryLight,
-    letterSpacing: 0.6,
+    color: '#6C63FF',
+    marginBottom: 4,
+  },
+  updateCardMeta: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: C.textSecondary,
+  },
+  changelogTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter_700Bold',
     marginBottom: 6,
   },
-  privacyGroupSubdesc: {
-    fontSize: 12,
-    color: C.textSecondary,
-    marginBottom: 10,
-    lineHeight: 18,
-  },
-  privacySwitchRow: {
+  changelogItem: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-  },
-  privacySwitchRowSub: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  privacySwitchLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
-    marginBottom: 3,
-  },
-  privacySwitchDesc: {
-    fontSize: 12,
-    color: C.textMuted,
-    lineHeight: 17,
-  },
-  securityActionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(108, 99, 255, 0.1)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: `${C.primary}35`,
-  },
-  securityItem: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  securityItemTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
+    alignItems: 'flex-start',
     marginBottom: 4,
+    gap: 6,
   },
-  securityItemDesc: {
-    fontSize: 12,
-    color: C.textMuted,
-    lineHeight: 18,
-  },
-
-  // Other Details
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-  },
-  switchLabel: {
+  bulletDot: {
     fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  switchSub: {
-    fontSize: 12,
-    color: C.textMuted,
-  },
-  faqItem: {
-    marginBottom: 12,
-  },
-  faqQ: {
-    fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
-    color: C.primaryLight,
-    marginBottom: 2,
-  },
-  faqA: {
-    fontSize: 12,
-    color: C.textSecondary,
+    color: C.primary,
     lineHeight: 18,
   },
-  contactBtn: {
+  changelogLine: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: 'Inter_400Regular',
+  },
+  progressContainer: {
     marginTop: 10,
-    paddingVertical: 10,
-    backgroundColor: `${C.primary}20`,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: `${C.primary}45`,
+    marginBottom: 10,
+  },
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#10B981',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+  btnDownloadOta: {
+    marginTop: 8,
+    paddingVertical: 12,
+    backgroundColor: C.primary,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  contactBtnText: {
+  btnDownloadOtaText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
+  },
+  btnApplyOta: {
+    marginTop: 8,
+    paddingVertical: 12,
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  btnApplyOtaText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF',
+  },
+  upToDateBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  upToDateIcon: {
+    fontSize: 18,
+  },
+  upToDateText: {
+    flex: 1,
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
-    color: C.primaryLight,
   },
-  bulletPoint: {
-    fontSize: 13,
-    color: C.textSecondary,
-    lineHeight: 22,
-    marginBottom: 4,
+  checkingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  simulatorDivider: {
+    marginTop: 16,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  simulatorDividerText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.5,
+  },
+  simulateButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  btnSimulate: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  btnSimulateText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    textAlign: 'center',
   },
   versionHeader: {
     flexDirection: 'row',
@@ -1442,7 +2851,7 @@ const styles = StyleSheet.create({
   versionNumber: {
     fontSize: 20,
     fontFamily: 'Inter_700Bold',
-    color: '#FFFFFF',
+    color: C.text,
   },
   versionBadge: {
     paddingHorizontal: 8,
@@ -1480,5 +2889,284 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
     color: C.textSecondary,
+  },
+  securityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  securityGroup: {
+    marginTop: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+  },
+  securityGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  securityGroupTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
+    color: C.primaryLight,
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  securityCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 7,
+    gap: 10,
+  },
+  securityCheckIcon: {
+    fontSize: 16,
+    marginTop: 1,
+  },
+  securityCheckLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 1,
+  },
+  securityCheckValue: {
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  securityLoadingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  securityLoadingText: {
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  securityEmptyText: {
+    fontSize: 12,
+    color: C.textMuted,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  sessionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  sessionDeviceName: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  sessionMeta: {
+    fontSize: 11,
+    color: C.textMuted,
+  },
+  sessionRevokeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  sessionRevokeBtnText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#EF4444',
+  },
+  otpBox: {
+    backgroundColor: 'rgba(108, 99, 255, 0.08)',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: `${C.primary}30`,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  otpTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  otpHint: {
+    fontSize: 13,
+    color: C.textSecondary,
+    marginBottom: 10,
+  },
+  otpCode: {
+    fontFamily: 'Inter_700Bold',
+    color: C.primaryLight,
+    letterSpacing: 2,
+  },
+  otpBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  otpBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  otpBtnCancel: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  otpBtnCancelText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: C.textSecondary,
+  },
+  otpBtnConfirm: {
+    backgroundColor: C.primary,
+  },
+  otpBtnConfirmText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
+  },
+  deleteAccountBtn: {
+    paddingVertical: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    alignItems: 'center',
+  },
+  deleteAccountBtnText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#EF4444',
+  },
+  deleteConfirmBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.06)',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  deleteConfirmTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold',
+    color: '#EF4444',
+    marginBottom: 8,
+  },
+  deleteConfirmDesc: {
+    fontSize: 12,
+    color: C.textSecondary,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  deleteConfirmActionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#EF4444',
+  },
+
+  // Notification details styles
+  notifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  notifyIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifyIcon: {
+    fontSize: 18,
+  },
+  notifyLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 2,
+  },
+  notifyDesc: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+  },
+  notifyAllOffBtn: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  notifyAllOffBtnText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+  },
+
+  // Language selection styles
+  langOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 10,
+    gap: 12,
+  },
+  langOptionFlag: {
+    fontSize: 26,
+  },
+  langOptionName: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 2,
+  },
+  langOptionDesc: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+  },
+  langOptionCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  langOptionCheckText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  // Accessibility preview styles
+  accessibilityPreview: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  accessibilityPreviewLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  accessibilityPreviewText: {
+    lineHeight: 22,
   },
 });

@@ -15,7 +15,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Colors } from '../constants/Colors';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -49,7 +48,7 @@ const Toast: React.FC<ToastProps> = ({
       case 'success': return '#10B981';
       case 'error':   return '#EF4444';
       case 'warning': return '#F59E0B';
-      default:        return Colors.dark.primary;
+      default:        return '#6C63FF';
     }
   };
 

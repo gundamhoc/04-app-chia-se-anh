@@ -1,57 +1,82 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet, View, Text } from 'react-native';
 import { Colors } from '../../constants/Colors';
+import { useTheme } from '../../context/ThemeContext';
+import { useI18n } from '../../utils/i18n';
 
-const C = Colors.dark;
-
-// Icon đơn giản dạng emoji/text (không cần icon library giai đoạn này)
-function TabIcon({ icon, label, focused }: { icon: string; label: string; focused: boolean }) {
+// Icon đơn giản dạng emoji/text
+function TabIcon({
+  icon,
+  focused,
+  primaryColor,
+}: {
+  icon: string;
+  focused: boolean;
+  primaryColor: string;
+}) {
   return (
-    <View style={[styles.tabIcon, focused && styles.tabIconFocused]}>
+    <View style={[styles.tabIcon, focused && { backgroundColor: `${primaryColor}22` }]}>
       <Text style={styles.iconText}>{icon}</Text>
-      {focused && <View style={styles.dot} />}
+      {focused && <View style={[styles.dot, { backgroundColor: primaryColor }]} />}
     </View>
   );
 }
 
 export default function TabsLayout() {
+  const { colors, isDark } = useTheme();
+  const { t } = useI18n();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: C.primary,
-        tabBarInactiveTintColor: C.tabIconDefault,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            backgroundColor: colors.card,
+            borderTopColor: colors.border,
+          },
+        ],
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.tabIconDefault,
         tabBarShowLabel: false,
-        sceneStyle: { backgroundColor: C.background },
+        sceneStyle: { backgroundColor: colors.background },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Trang chủ',
-          tabBarIcon: ({ focused }) => <TabIcon icon="🏠" label="Home" focused={focused} />,
+          title: t('home'),
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon="🏠" focused={focused} primaryColor={colors.primary} />
+          ),
         }}
       />
       <Tabs.Screen
         name="friends"
         options={{
-          title: 'Bạn bè',
-          tabBarIcon: ({ focused }) => <TabIcon icon="👥" label="Friends" focused={focused} />,
+          title: t('friends'),
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon="👥" focused={focused} primaryColor={colors.primary} />
+          ),
         }}
       />
       <Tabs.Screen
         name="messages"
         options={{
-          title: 'Trò chuyện',
-          tabBarIcon: ({ focused }) => <TabIcon icon="💬" label="Messages" focused={focused} />,
+          title: t('messages'),
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon="💬" focused={focused} primaryColor={colors.primary} />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Hồ sơ',
-          tabBarIcon: ({ focused }) => <TabIcon icon="👤" label="Profile" focused={focused} />,
+          title: t('profile'),
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon="👤" focused={focused} primaryColor={colors.primary} />
+          ),
         }}
       />
     </Tabs>
@@ -60,12 +85,10 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: C.card,
-    borderTopColor: C.border,
-    borderTopWidth: 1,
     height: 70,
     paddingBottom: 10,
     paddingTop: 8,
+    borderTopWidth: 1,
   },
   tabIcon: {
     alignItems: 'center',
@@ -74,9 +97,6 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
   },
-  tabIconFocused: {
-    backgroundColor: `${Colors.dark.primary}20`,
-  },
   iconText: {
     fontSize: 22,
   },
@@ -84,7 +104,6 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: C.primary,
     marginTop: 2,
   },
 });

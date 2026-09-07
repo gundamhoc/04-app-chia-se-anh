@@ -14,14 +14,20 @@ const pool = mysql.createPool({
   queueLimit: 0,
   charset: 'utf8mb4',
   timezone: '+07:00',
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
 });
 
-// Kiểm tra kết nối khi khởi động
+const { initDatabase } = require('./initDb');
+
+// Kiểm tra kết nối khi khởi động & tự động khởi tạo bảng
 const testConnection = async () => {
   try {
     const connection = await pool.getConnection();
     console.log('✅ MySQL connected successfully');
     connection.release();
+
+    // Tự động kiểm tra và tạo đủ 13 bảng nếu chưa có
+    await initDatabase(pool);
   } catch (error) {
     console.error('❌ MySQL connection failed:', error.message);
     process.exit(1);

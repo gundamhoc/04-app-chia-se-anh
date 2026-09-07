@@ -229,3 +229,19 @@ export interface UserPrivacySettings {
   searchable_by_email: boolean;
 }
 
+export interface SecurityStatus {
+  created_at: string;
+  last_password_changed: string | null;
+  two_factor_enabled: boolean;
+  remember_login: boolean;
+  active_session_count: number;
+}
+
+export interface LoginSession {
+  id: number;
+  device_name: string;
+  ip_address: string | null;
+  last_active: string;
+  created_at: string;
+  is_active: number;
+}

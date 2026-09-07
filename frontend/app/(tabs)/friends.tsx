@@ -13,12 +13,13 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/Colors';
+import { StatusBar } from 'expo-status-bar';
+import { ColorScheme } from '../../constants/Colors';
+import { useTheme } from '../../context/ThemeContext';
+import { useI18n } from '../../utils/i18n';
 import { friendService } from '../../services/friendService';
 import { Friend, FriendRequest, UserSearchResult, FriendshipStatus } from '../../types';
 import { useToast } from '../../hooks/useToast';
-
-const C = Colors.dark;
 
 type TabType = 'friends' | 'suggestions' | 'requests';
 
@@ -26,6 +27,9 @@ export default function FriendsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
+  const { colors: C, isDark } = useTheme();
+  const { t, language } = useI18n();
+  const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
 
   const [activeTab, setActiveTab] = useState<TabType>('friends');
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -94,8 +98,16 @@ export default function FriendsScreen() {
   }, [searchQuery]);
 
   // Nhắn tin với bạn bè
-  const handleChat = (friendId: number) => {
-    router.push(`/chat/${friendId}`);
+  const handleChat = (friend: Friend | UserSearchResult) => {
+    const friendName = friend.full_name || friend.username;
+    router.push({
+      pathname: '/chat/[id]',
+      params: {
+        id: friend.id.toString(),
+        name: friendName,
+        avatar: friend.avatar_url || '',
+      },
+    });
   };
 
   // Gửi lời mời kết bạn (dùng cho gợi ý hoặc tìm kiếm)
@@ -217,7 +229,7 @@ export default function FriendsScreen() {
               {displayName}
             </Text>
             <View style={styles.badgeFriend}>
-              <Text style={styles.badgeFriendText}>Bạn bè</Text>
+              <Text style={styles.badgeFriendText}>{t('friends')}</Text>
             </View>
           </View>
           <Text style={styles.username} numberOfLines={1}>
@@ -233,10 +245,10 @@ export default function FriendsScreen() {
         <View style={styles.friendActions}>
           <TouchableOpacity
             style={styles.btnChat}
-            onPress={() => handleChat(item.id)}
+            onPress={() => handleChat(item)}
             activeOpacity={0.7}
           >
-            <Text style={styles.btnChatText}>💬 Nhắn</Text>
+            <Text style={styles.btnChatText}>💬 {t('messages')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -248,7 +260,7 @@ export default function FriendsScreen() {
             {isBusy ? (
               <ActivityIndicator size="small" color={C.textMuted} />
             ) : (
-              <Text style={styles.btnUnfriendText}>Hủy</Text>
+              <Text style={styles.btnUnfriendText}>{t('unfriend')}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -290,11 +302,11 @@ export default function FriendsScreen() {
             onPress={() => handleSendRequest(item)}
             activeOpacity={0.7}
           >
-            <Text style={styles.btnAddFriendText}>+ Kết bạn</Text>
+            <Text style={styles.btnAddFriendText}>+ {t('add_friend')}</Text>
           </TouchableOpacity>
         ) : item.friendship_status === 'pending_sent' ? (
           <View style={styles.badgeSent}>
-            <Text style={styles.badgeSentText}>Đã gửi ✓</Text>
+            <Text style={styles.badgeSentText}>{t('request_sent')} ✓</Text>
           </View>
         ) : item.friendship_status === 'pending_received' ? (
           <TouchableOpacity
@@ -302,11 +314,11 @@ export default function FriendsScreen() {
             onPress={() => handleAcceptRequest(item.id)}
             activeOpacity={0.7}
           >
-            <Text style={styles.btnAcceptText}>Chấp nhận</Text>
+            <Text style={styles.btnAcceptText}>{t('accept')}</Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.badgeFriend}>
-            <Text style={styles.badgeFriendText}>Bạn bè</Text>
+            <Text style={styles.badgeFriendText}>{t('friends')}</Text>
           </View>
         )}
       </View>
@@ -333,7 +345,7 @@ export default function FriendsScreen() {
             @{item.username}
           </Text>
           <Text style={styles.timeText}>
-            {new Date(item.request_time).toLocaleDateString('vi-VN')}
+            {new Date(item.request_time).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')}
           </Text>
         </View>
         {isBusy ? (
@@ -344,13 +356,13 @@ export default function FriendsScreen() {
               style={styles.btnAccept}
               onPress={() => handleAcceptRequest(item.requester_id)}
             >
-              <Text style={styles.btnAcceptText}>Chấp nhận</Text>
+              <Text style={styles.btnAcceptText}>{t('accept')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.btnReject}
               onPress={() => handleRejectRequest(item.requester_id)}
             >
-              <Text style={styles.btnRejectText}>Xóa</Text>
+              <Text style={styles.btnRejectText}>{t('delete')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -360,9 +372,10 @@ export default function FriendsScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Bạn bè 👥</Text>
+        <Text style={styles.headerTitle}>{t('friends')} 👥</Text>
       </View>
 
       {/* Thanh Tìm Kiếm Bạn Bè: Tìm kết bạn & người bạn đã kết bạn */}
@@ -371,7 +384,7 @@ export default function FriendsScreen() {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm bạn bè hoặc tìm kết bạn mới..."
+            placeholder={t('search_friends_input')}
             placeholderTextColor={C.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -397,15 +410,15 @@ export default function FriendsScreen() {
           {matchedFriends.length === 0 && matchedNewUsers.length === 0 && !isSearching ? (
             <View style={styles.center}>
               <Text style={styles.emptyIcon}>🤷</Text>
-              <Text style={styles.emptyTitle}>Không tìm thấy kết quả</Text>
+              <Text style={styles.emptyTitle}>{t('no_results_for_query')}</Text>
               <Text style={styles.emptySub}>
-                Không có người bạn hoặc người dùng nào khớp với "{searchQuery}".
+                {t('no_users_match')} "{searchQuery}".
               </Text>
               <TouchableOpacity
                 style={styles.btnResetSearch}
                 onPress={() => setSearchQuery('')}
               >
-                <Text style={styles.btnResetSearchText}>✕ Xóa từ khóa</Text>
+                <Text style={styles.btnResetSearchText}>✕ {t('clear_search')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -415,7 +428,7 @@ export default function FriendsScreen() {
                 <View style={styles.searchSection}>
                   <View style={styles.sectionHeaderRow}>
                     <Text style={styles.sectionTitle}>
-                      👥 Bạn bè của bạn ({matchedFriends.length})
+                      👥 {t('your_friends_section')} ({matchedFriends.length})
                     </Text>
                   </View>
                   {matchedFriends.map((f) => renderFriendCard(f))}
@@ -427,7 +440,7 @@ export default function FriendsScreen() {
                 <View style={styles.searchSection}>
                   <View style={styles.sectionHeaderRow}>
                     <Text style={styles.sectionTitle}>
-                      ➕ Tìm kết bạn mới ({matchedNewUsers.length})
+                      ➕ {t('find_friends_section')} ({matchedNewUsers.length})
                     </Text>
                   </View>
                   {matchedNewUsers.map((u) => renderSuggestionCard(u))}
@@ -447,7 +460,7 @@ export default function FriendsScreen() {
               <Text
                 style={[styles.tabText, activeTab === 'friends' && styles.tabTextActive]}
               >
-                Bạn bè ({friends.length})
+                {t('friends')} ({friends.length})
               </Text>
             </TouchableOpacity>
 
@@ -458,7 +471,7 @@ export default function FriendsScreen() {
               <Text
                 style={[styles.tabText, activeTab === 'suggestions' && styles.tabTextActive]}
               >
-                Gợi ý kết bạn ({suggestions.length})
+                {t('tab_suggestions')} ({suggestions.length})
               </Text>
             </TouchableOpacity>
 
@@ -469,7 +482,7 @@ export default function FriendsScreen() {
               <Text
                 style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}
               >
-                Lời mời {requests.length > 0 ? `(${requests.length})` : ''}
+                {t('tab_requests')} {requests.length > 0 ? `(${requests.length})` : ''}
               </Text>
               {requests.length > 0 && <View style={styles.badgeDot} />}
             </TouchableOpacity>
@@ -484,15 +497,15 @@ export default function FriendsScreen() {
             friends.length === 0 ? (
               <View style={styles.center}>
                 <Text style={styles.emptyIcon}>👥</Text>
-                <Text style={styles.emptyTitle}>Chưa có bạn bè nào</Text>
+                <Text style={styles.emptyTitle}>{t('no_friends')}</Text>
                 <Text style={styles.emptySub}>
-                  Hãy khám phá tab "Gợi ý kết bạn" hoặc tìm kiếm để kết nối với những người bạn mới.
+                  {t('no_suggestions_desc')}
                 </Text>
                 <TouchableOpacity
                   style={styles.btnGoSuggestions}
                   onPress={() => setActiveTab('suggestions')}
                 >
-                  <Text style={styles.btnGoSuggestionsText}>✨ Xem gợi ý kết bạn</Text>
+                  <Text style={styles.btnGoSuggestionsText}>✨ {t('see_suggestions')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -510,9 +523,9 @@ export default function FriendsScreen() {
             suggestions.length === 0 ? (
               <View style={styles.center}>
                 <Text style={styles.emptyIcon}>✨</Text>
-                <Text style={styles.emptyTitle}>Chưa có gợi ý mới</Text>
+                <Text style={styles.emptyTitle}>{t('no_suggestions')}</Text>
                 <Text style={styles.emptySub}>
-                  Hiện tại không có đề xuất nào mới. Bạn có thể sử dụng thanh tìm kiếm phía trên để tìm bạn bè!
+                  {t('no_suggestions_desc')}
                 </Text>
               </View>
             ) : (
@@ -529,9 +542,9 @@ export default function FriendsScreen() {
           ) : requests.length === 0 ? (
             <View style={styles.center}>
               <Text style={styles.emptyIcon}>📩</Text>
-              <Text style={styles.emptyTitle}>Không có lời mời kết bạn nào</Text>
+              <Text style={styles.emptyTitle}>{t('no_requests')}</Text>
               <Text style={styles.emptySub}>
-                Các lời mời kết bạn mới gửi đến bạn sẽ hiển thị tại đây.
+                {t('no_requests_desc')}
               </Text>
             </View>
           ) : (
@@ -551,7 +564,7 @@ export default function FriendsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
@@ -576,7 +589,7 @@ const styles = StyleSheet.create({
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: C.inputBg,
     borderRadius: 22,
     paddingHorizontal: 14,
     height: 42,
