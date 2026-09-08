@@ -3,16 +3,33 @@ import api from './api';
 import { ApiResponse, Photo, PhotoReaction, PhotoPrivacy } from '../types';
 import { compressImage } from '../utils/imageCompressor';
 
+export interface PhotoFeedResponse {
+  photos: Photo[];
+  nextCursor: number | null;
+  hasMore: boolean;
+}
+
 export const photoService = {
-  // Lấy danh sách bài viết Locket Feed (hỗ trợ tìm kiếm theo caption, tác giả và phạm vi all/friends/public)
-  async getPhotoFeed(query?: string, scope: 'all' | 'friends' | 'public' = 'all'): Promise<Photo[]> {
-    const res = await api.get<ApiResponse<Photo[]>>('/photos/feed', {
+  // Lấy danh sách bài viết Locket Feed (hỗ trợ tìm kiếm, phạm vi all/friends/public và phân trang vô tận cursor)
+  async getPhotoFeed(
+    query?: string,
+    scope: 'all' | 'friends' | 'public' = 'all',
+    cursor?: number | null,
+    limit: number = 15
+  ): Promise<PhotoFeedResponse> {
+    const res = await api.get<ApiResponse<Photo[]> & { pagination?: { next_cursor: number | null; has_more: boolean } }>('/photos/feed', {
       params: {
         ...(query ? { q: query } : {}),
         scope,
+        ...(cursor ? { cursor } : {}),
+        limit,
       },
     });
-    return res.data.data || [];
+    return {
+      photos: res.data.data || [],
+      nextCursor: res.data.pagination?.next_cursor ?? null,
+      hasMore: Boolean(res.data.pagination?.has_more),
+    };
   },
 
   // Upload khoảnh khắc Locket mới

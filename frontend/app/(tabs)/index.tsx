@@ -61,10 +61,17 @@ export default function HomeScreen() {
   const [searchScope, setSearchScope] = useState<'all' | 'friends' | 'public'>('all');
   const [isSearchingBackend, setIsSearchingBackend] = useState(false);
 
+  // Phân trang vô tận (Infinite Scroll)
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   const fetchFeed = useCallback(async (query?: string, scope: 'all' | 'friends' | 'public' = searchScope) => {
     try {
-      const data = await photoService.getPhotoFeed(query, scope);
-      setPhotos(data);
+      const res = await photoService.getPhotoFeed(query, scope, null, 15);
+      setPhotos(res.photos);
+      setNextCursor(res.nextCursor);
+      setHasMore(res.hasMore);
     } catch (error: unknown) {
       console.warn('Fetch feed error:', error);
       showToast('error', 'Không thể tải bảng tin Locket.');
@@ -74,6 +81,25 @@ export default function HomeScreen() {
       setIsSearchingBackend(false);
     }
   }, [searchScope]);
+
+  const handleLoadMore = async () => {
+    if (!hasMore || loadingMore || !nextCursor || searchQuery.trim().length > 0) return;
+    try {
+      setLoadingMore(true);
+      const res = await photoService.getPhotoFeed(undefined, searchScope, nextCursor, 15);
+      setPhotos((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        const uniqueNew = res.photos.filter((p) => !existingIds.has(p.id));
+        return [...prev, ...uniqueNew];
+      });
+      setNextCursor(res.nextCursor);
+      setHasMore(res.hasMore);
+    } catch (err) {
+      console.warn('Load more feed error:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const handleSearchBackend = async (q: string, scope = searchScope) => {
     setIsSearchingBackend(true);
@@ -704,6 +730,20 @@ export default function HomeScreen() {
               tintColor={C.primary}
             />
           }
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.feedFooterLoading}>
+                <ActivityIndicator size="small" color={C.primary} />
+                <Text style={styles.feedFooterText}>Đang tải thêm bài viết...</Text>
+              </View>
+            ) : !hasMore && photos.length > 5 ? (
+              <View style={styles.feedFooterEnd}>
+                <Text style={styles.feedFooterEndText}>✨ Bạn đã xem hết tất cả khoảnh khắc</Text>
+              </View>
+            ) : null
+          }
         />
       )}
 
@@ -1292,5 +1332,27 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   topFilterTextActive: {
     color: C.primary,
     fontFamily: 'Inter_600SemiBold',
+  },
+  feedFooterLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 20,
+  },
+  feedFooterText: {
+    color: C.textMuted,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+  },
+  feedFooterEnd: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+  },
+  feedFooterEndText: {
+    color: C.textMuted,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
   },
 });

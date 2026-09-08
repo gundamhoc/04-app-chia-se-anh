@@ -272,7 +272,7 @@ export default function OtherUserProfileScreen() {
       return (
         <View style={styles.actionRow}>
           <TouchableOpacity
-            style={[styles.secondaryBtn, styles.fullBtn]}
+            style={[styles.secondaryBtn, styles.flexBtn]}
             onPress={handleCancelOrReject}
             disabled={actionLoading}
             activeOpacity={0.8}
@@ -280,8 +280,16 @@ export default function OtherUserProfileScreen() {
             {actionLoading ? (
               <ActivityIndicator size="small" color={C.text} />
             ) : (
-              <Text style={styles.secondaryBtnText}>Đã gửi lời mời (Hủy) ✕</Text>
+              <Text style={styles.secondaryBtnText}>Đã gửi lời mời ✕</Text>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, styles.flexBtn]}
+            onPress={handleOpenChat}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.primaryBtnText}>💬 Nhắn tin</Text>
           </TouchableOpacity>
         </View>
       );
@@ -319,7 +327,7 @@ export default function OtherUserProfileScreen() {
     return (
       <View style={styles.actionRow}>
         <TouchableOpacity
-          style={[styles.primaryBtn, styles.fullBtn]}
+          style={[styles.primaryBtn, styles.flexBtn]}
           onPress={handleSendRequest}
           disabled={actionLoading}
           activeOpacity={0.8}
@@ -329,6 +337,14 @@ export default function OtherUserProfileScreen() {
           ) : (
             <Text style={styles.primaryBtnText}>+ Thêm bạn bè</Text>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.outlineBtn, styles.flexBtn]}
+          onPress={handleOpenChat}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.outlineBtnText}>💬 Nhắn tin</Text>
         </TouchableOpacity>
       </View>
     );

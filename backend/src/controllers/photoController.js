@@ -301,22 +301,39 @@ const getPhotoFeed = async (req, res) => {
       queryParams.push(currentUserId, currentUserId);
     }
 
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 15, 1), 50);
+    const cursor = req.query.cursor ? parseInt(req.query.cursor, 10) : null;
+
     if (queryTerm) {
       querySql += ` AND (p.caption LIKE ? OR u.full_name LIKE ? OR u.username LIKE ?)`;
       const termPattern = `%${queryTerm}%`;
       queryParams.push(termPattern, termPattern, termPattern);
     }
 
-    querySql += ` ORDER BY p.created_at DESC LIMIT 50`;
+    if (cursor && !isNaN(cursor)) {
+      querySql += ` AND p.id < ?`;
+      queryParams.push(cursor);
+    }
 
-    // Query các bức ảnh của bản thân HOẶC của bạn bè đã accepted (có lọc theo từ khóa nếu có)
+    querySql += ` ORDER BY p.id DESC LIMIT ?`;
+    queryParams.push(limit);
+
+    // Query các bức ảnh theo phân trang con trỏ thời gian (Cursor-based Pagination)
     const [rows] = await pool.query(querySql, queryParams);
     const formattedPhotos = await enrichPhotosWithReactionsAndComments(rows, currentUserId, req);
+
+    const nextCursor = formattedPhotos.length === limit ? formattedPhotos[formattedPhotos.length - 1].id : null;
+    const hasMore = formattedPhotos.length === limit;
 
     return res.json({
       success: true,
       message: 'Lấy bảng tin Locket thành công.',
       data: formattedPhotos,
+      pagination: {
+        next_cursor: nextCursor,
+        has_more: hasMore,
+        limit,
+      },
     });
   } catch (error) {
     console.error('Get photo feed error:', error);
