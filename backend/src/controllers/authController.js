@@ -190,6 +190,26 @@ const getProfile = async (req, res) => {
       user.avatar_url = `${protocol}://${host}${user.avatar_url}`;
     }
 
+    // Thống kê chỉ số hồ sơ: Posts, Friends, Likes
+    const [postRows] = await pool.query(
+      'SELECT COUNT(*) as count FROM photos WHERE user_id = ?',
+      [req.user.id]
+    );
+    const [friendRows] = await pool.query(
+      "SELECT COUNT(*) as count FROM friendships WHERE (requester_id = ? OR receiver_id = ?) AND status = 'accepted'",
+      [req.user.id, req.user.id]
+    );
+    const [likeRows] = await pool.query(
+      'SELECT COUNT(*) as count FROM photo_reactions pr JOIN photos p ON pr.photo_id = p.id WHERE p.user_id = ?',
+      [req.user.id]
+    );
+
+    user.stats = {
+      posts_count: parseInt(postRows[0]?.count || 0, 10),
+      friends_count: parseInt(friendRows[0]?.count || 0, 10),
+      likes_count: parseInt(likeRows[0]?.count || 0, 10),
+    };
+
     return res.status(200).json({
       success: true,
       data: { user },
@@ -199,6 +219,57 @@ const getProfile = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Lỗi server.',
+    });
+  }
+};
+
+// ============================================================
+// UPDATE PROFILE (Full Name & Bio)
+// PUT /api/auth/profile (protected - cần JWT)
+// Body: { full_name, bio }
+// ============================================================
+const updateProfile = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const { full_name, bio } = req.body;
+
+    const trimmedFullName = typeof full_name === 'string' ? full_name.trim().slice(0, 100) : null;
+    const trimmedBio = typeof bio === 'string' ? bio.trim().slice(0, 500) : null;
+
+    await pool.query(
+      'UPDATE users SET full_name = ?, bio = ?, updated_at = NOW() WHERE id = ?',
+      [trimmedFullName, trimmedBio, currentUserId]
+    );
+
+    const [rows] = await pool.query(
+      'SELECT id, username, email, full_name, avatar_url, bio, created_at FROM users WHERE id = ?',
+      [currentUserId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng.',
+      });
+    }
+
+    const user = rows[0];
+    if (user.avatar_url && !user.avatar_url.startsWith('http')) {
+      const protocol = req.protocol;
+      const host = req.get('host');
+      user.avatar_url = `${protocol}://${host}${user.avatar_url}`;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật thông tin hồ sơ thành công!',
+      data: { user },
+    });
+  } catch (error) {
+    console.error('UpdateProfile error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi cập nhật hồ sơ.',
     });
   }
 };
@@ -914,6 +985,7 @@ module.exports = {
   register,
   login,
   getProfile,
+  updateProfile,
   updateAvatar,
   forgotPassword,
   updateUsername,

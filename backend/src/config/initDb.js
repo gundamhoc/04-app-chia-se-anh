@@ -221,6 +221,34 @@ const initDatabase = async (pool) => {
       PRIMARY KEY (id),
       KEY idx_ls_user (user_id),
       CONSTRAINT fk_ls_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    // 14. Bảng saved_photos (Lưu bài viết)
+    `CREATE TABLE IF NOT EXISTS saved_photos (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id INT UNSIGNED NOT NULL,
+      photo_id INT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY unique_user_saved_photo (user_id, photo_id),
+      KEY idx_saved_user (user_id),
+      KEY idx_saved_photo (photo_id),
+      CONSTRAINT fk_saved_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+      CONSTRAINT fk_saved_photo FOREIGN KEY (photo_id) REFERENCES photos (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    // 15. Bảng photo_reposts (Đăng lại)
+    `CREATE TABLE IF NOT EXISTS photo_reposts (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id INT UNSIGNED NOT NULL,
+      photo_id INT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY unique_user_repost (user_id, photo_id),
+      KEY idx_repost_user (user_id),
+      KEY idx_repost_photo (photo_id),
+      CONSTRAINT fk_repost_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+      CONSTRAINT fk_repost_photo FOREIGN KEY (photo_id) REFERENCES photos (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
   ];
 
@@ -228,7 +256,7 @@ const initDatabase = async (pool) => {
     for (const sql of queries) {
       await pool.query(sql);
     }
-    console.log('✅ [DB Init] Toàn bộ 13 bảng đã sẵn sàng & đồng bộ 100%!');
+    console.log('✅ [DB Init] Toàn bộ các bảng đã sẵn sàng & đồng bộ 100%!');
   } catch (err) {
     console.error('⚠️ [DB Init Error]:', err.message);
   }

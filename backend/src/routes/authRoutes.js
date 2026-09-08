@@ -4,6 +4,7 @@ const {
   register,
   login,
   getProfile,
+  updateProfile,
   updateAvatar,
   forgotPassword,
   updateUsername,
@@ -29,6 +30,7 @@ router.post('/forgot-password', forgotPassword);
 
 // Protected routes (yêu cầu JWT)
 router.get('/profile', authMiddleware, getProfile);
+router.put('/profile', authMiddleware, updateProfile);
 router.put('/avatar', authMiddleware, handleUploadSingle, updateAvatar);
 router.put('/username', authMiddleware, updateUsername);
 router.put('/email', authMiddleware, updateEmail);

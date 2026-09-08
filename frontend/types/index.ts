@@ -1,5 +1,13 @@
 // Types chung cho toàn bộ ứng dụng
 
+export interface UserStats {
+  posts_count: number;
+  friends_count: number;
+  likes_count: number;
+  saved_count?: number;
+  reposts_count?: number;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -8,6 +16,7 @@ export interface User {
   avatar_url: string | null;
   bio?: string | null;
   created_at?: string;
+  stats?: UserStats;
 }
 
 export interface AuthResponse {

@@ -22,9 +22,8 @@ import { storage } from '../../utils/storage';
 import { authService } from '../../services/authService';
 import { useI18n } from '../../utils/i18n';
 
-// URL Logo từ người dùng cung cấp
-const APP_LOGO_URL =
-  'https://media.discordapp.net/attachments/1530179133471064206/1530183010635485245/2023-09-18_thong.tri.dream_7280027751271140626_0000000000000000000011.jpeg?ex=6a9ea77b&is=6a9d55fb&hm=f13c882df25077f5cacba18c373b1564490262ee70d69db868f0feffedbcfbae&=&format=webp&width=640&height=640';
+// Logo Anime Raiden Shogun (Dùng trực tiếp asset local để hiển thị 100% trên cả Mobile và Web, không bị lỗi 404 do link Discord hết hạn)
+const APP_LOGO_IMAGE = require('../../assets/app_logo.webp');
 
 export default function LoginScreen() {
   const { colors: C, isDark } = useTheme();
@@ -148,11 +147,9 @@ export default function LoginScreen() {
         <View style={styles.header}>
           <View style={styles.logoCircleWrapper}>
             <Image
-              source={{ uri: APP_LOGO_URL }}
-              defaultSource={require('../../assets/app_logo.webp')}
+              source={APP_LOGO_IMAGE}
               style={styles.logoImage}
               resizeMode="cover"
-              {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}
             />
           </View>
           <Text style={styles.appName}>Masita</Text>

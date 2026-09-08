@@ -21,6 +21,7 @@ import { friendService } from '../services/friendService';
 import { Friend, PhotoPrivacy } from '../types';
 import { useToast } from '../hooks/useToast';
 import { WebCameraModal } from '../components/WebCameraModal';
+import { LoadingOverlay } from '../components/LoadingComponents';
 import { useI18n } from '../utils/i18n';
 
 export default function AddPhotoScreen() {
@@ -28,7 +29,7 @@ export default function AddPhotoScreen() {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const { colors: C, isDark } = useTheme();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
 
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -374,6 +375,13 @@ export default function AddPhotoScreen() {
           setImageUri(capturedUri);
           setShowWebCamera(false);
         }}
+      />
+
+      {/* Loading Overlay khi đang tải ảnh lên Google Drive */}
+      <LoadingOverlay
+        visible={submitting}
+        message={language === 'vi' ? 'Đang tải khoảnh khắc lên... 📸' : 'Uploading moment... 📸'}
+        subMessage={language === 'vi' ? 'Đang đồng bộ ảnh lên kho lưu trữ đám mây' : 'Syncing photo to cloud storage'}
       />
     </View>
   );

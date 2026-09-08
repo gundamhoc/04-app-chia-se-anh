@@ -137,5 +137,47 @@ export const photoService = {
     }
     return res.data.data;
   },
+
+  // Lấy danh sách ảnh do chính mình đăng (Grid 3x3 Profile)
+  async getMyPhotos(): Promise<Photo[]> {
+    const res = await api.get<ApiResponse<Photo[]>>('/photos/me');
+    return res.data.data || [];
+  },
+
+  // Lấy danh sách ảnh mình đã thả cảm xúc (Tab Liked Profile)
+  async getLikedPhotos(): Promise<Photo[]> {
+    const res = await api.get<ApiResponse<Photo[]>>('/photos/liked');
+    return res.data.data || [];
+  },
+
+  // Lấy danh sách bài viết đã lưu (Tab Lưu bài viết Profile)
+  async getSavedPhotos(): Promise<Photo[]> {
+    const res = await api.get<ApiResponse<Photo[]>>('/photos/saved');
+    return res.data.data || [];
+  },
+
+  // Lưu / Bỏ lưu bài viết
+  async toggleSavePhoto(photoId: number): Promise<{ is_saved: boolean }> {
+    const res = await api.post<ApiResponse<{ is_saved: boolean }>>(`/photos/${photoId}/save`);
+    if (!res.data.data) {
+      throw new Error(res.data.message || 'Không thể lưu bài viết.');
+    }
+    return res.data.data;
+  },
+
+  // Lấy danh sách bài viết đã đăng lại (Tab Đăng lại Profile)
+  async getRepostedPhotos(): Promise<Photo[]> {
+    const res = await api.get<ApiResponse<Photo[]>>('/photos/reposts');
+    return res.data.data || [];
+  },
+
+  // Đăng lại / Hủy đăng lại bài viết
+  async toggleRepost(photoId: number): Promise<{ is_reposted: boolean }> {
+    const res = await api.post<ApiResponse<{ is_reposted: boolean }>>(`/photos/${photoId}/repost`);
+    if (!res.data.data) {
+      throw new Error(res.data.message || 'Không thể đăng lại bài viết.');
+    }
+    return res.data.data;
+  },
 };
 

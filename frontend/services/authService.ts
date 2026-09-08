@@ -1,5 +1,7 @@
+import { Platform } from 'react-native';
 import api from './api';
-import { UserPrivacySettings, SecurityStatus, LoginSession } from '../types';
+import { UserPrivacySettings, SecurityStatus, LoginSession, User, ApiResponse } from '../types';
+import { compressImage } from '../utils/imageCompressor';
 
 export interface ForgotPasswordResponse {
   success: boolean;
@@ -180,6 +182,103 @@ export const authService = {
   generateOtp: async (): Promise<OtpResponse> => {
     const res = await api.post<OtpResponse>('/auth/generate-otp');
     return res.data;
+  },
+
+  /**
+   * Lấy thông tin cá nhân kèm thống kê chỉ số
+   * GET /api/auth/profile
+   */
+  getProfile: async (): Promise<{ user: User }> => {
+    const res = await api.get<ApiResponse<{ user: User }>>('/auth/profile');
+    if (!res.data.data) {
+      throw new Error(res.data.message || 'Không thể lấy thông tin hồ sơ.');
+    }
+    return res.data.data;
+  },
+
+  /**
+   * Cập nhật thông tin hồ sơ (Họ tên & Bio)
+   * PUT /api/auth/profile
+   */
+  updateProfile: async (full_name: string, bio: string): Promise<{ user: User }> => {
+    const res = await api.put<ApiResponse<{ user: User }>>('/auth/profile', {
+      full_name,
+      bio,
+    });
+    if (!res.data.data) {
+      throw new Error(res.data.message || 'Không thể cập nhật thông tin hồ sơ.');
+    }
+    return res.data.data;
+  },
+
+  /**
+   * Cập nhật ảnh đại diện (Avatar)
+   * PUT /api/auth/avatar
+   */
+  updateAvatar: async (imageUri: string): Promise<{ avatar_url: string }> => {
+    let processedUri = imageUri;
+    try {
+      processedUri = await compressImage(imageUri, { maxWidth: 800, quality: 0.85 });
+    } catch (compressErr) {
+      console.warn('Lỗi nén ảnh avatar, dùng ảnh gốc:', compressErr);
+    }
+
+    const formData = new FormData();
+    let filename = `avatar_${Date.now()}.jpg`;
+    let mimeType = 'image/jpeg';
+
+    if (processedUri.startsWith('data:')) {
+      const mimeMatch = processedUri.match(/^data:([^;]+);/);
+      if (mimeMatch && mimeMatch[1]) {
+        mimeType = mimeMatch[1];
+        const sub = mimeType.split('/')[1] || 'jpeg';
+        const safeExt = sub === 'jpeg' ? 'jpg' : sub;
+        filename = `avatar_${Date.now()}.${safeExt}`;
+      }
+    } else {
+      const cleanUri = processedUri.split('?')[0];
+      const rawName = cleanUri.split('/').pop() || `avatar_${Date.now()}`;
+      const safeBase = rawName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const extMatch = safeBase.match(/\.([a-zA-Z0-9]+)$/);
+      if (extMatch && extMatch[1]) {
+        const ext = extMatch[1].toLowerCase();
+        filename = safeBase;
+        mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+      } else {
+        filename = `${safeBase}.jpg`;
+        mimeType = 'image/jpeg';
+      }
+    }
+
+    if (Platform.OS === 'web') {
+      try {
+        const response = await fetch(processedUri);
+        const blob = await response.blob();
+        formData.append('image', blob, filename);
+      } catch (e) {
+        formData.append('image', {
+          uri: processedUri,
+          name: filename,
+          type: mimeType,
+        } as unknown as Blob);
+      }
+    } else {
+      formData.append('image', {
+        uri: processedUri,
+        name: filename,
+        type: mimeType,
+      } as unknown as Blob);
+    }
+
+    const res = await api.put<ApiResponse<{ avatar_url: string }>>('/auth/avatar', formData, {
+      timeout: 60000,
+    });
+
+    if (!res.data.data) {
+      throw new Error(res.data.message || 'Không thể cập nhật ảnh đại diện.');
+    }
+
+    return res.data.data;
   },
 };
 

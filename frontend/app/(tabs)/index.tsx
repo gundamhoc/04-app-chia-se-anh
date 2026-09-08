@@ -29,6 +29,7 @@ import { ShareModal } from '../../components/ShareModal';
 import { PostOptionsModal } from '../../components/PostOptionsModal';
 import { EditPostModal } from '../../components/EditPostModal';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
+import { FeedSkeleton } from '../../components/LoadingComponents';
 
 const EMOJIS = ['❤️', '🔥', '😂', '😮', '😢'];
 
@@ -559,10 +560,7 @@ export default function HomeScreen() {
 
       {/* Feed Stream */}
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={C.primary} />
-          <Text style={styles.loadingText}>{t('loading')}</Text>
-        </View>
+        <FeedSkeleton />
       ) : filteredPhotos.length === 0 ? (
         <View style={styles.centerContainer}>
           {searchQuery.trim().length > 0 ? (

@@ -11,7 +11,9 @@ import {
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
+import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { Colors, ColorScheme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
@@ -27,6 +29,7 @@ import { otaUpdateService, OtaUpdateInfo } from '../services/otaUpdateService';
 interface SettingsModalProps {
   visible: boolean;
   onClose: () => void;
+  onLogout?: () => void;
 }
 
 type DetailModalType =
@@ -63,11 +66,46 @@ export const maskEmail = (email?: string | null): string => {
   return `${userPrefix}***@***.com`;
 };
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
-  const { user } = useAuth();
+export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, onLogout }) => {
+  const { user, logout } = useAuth();
   const { updateUser } = useAuthStore();
   const { showToast } = useToast();
   const { t } = useI18n();
+
+  // Trạng thái xác nhận Đăng xuất trên Web
+  const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState(false);
+
+  const handleLogout = () => {
+    if (onLogout) {
+      onClose();
+      onLogout();
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      setShowLogoutConfirmModal(true);
+    } else {
+      Alert.alert(
+        t('logout'),
+        t('logout_confirm_msg'),
+        [
+          { text: t('cancel'), style: 'cancel' },
+          {
+            text: t('logout'),
+            style: 'destructive',
+            onPress: performLogout,
+          },
+        ]
+      );
+    }
+  };
+
+  const performLogout = async () => {
+    setShowLogoutConfirmModal(false);
+    onClose();
+    await logout();
+    router.replace('/(auth)/login');
+  };
 
   // Cài đặt hiển thị — lấy từ AppSettingsStore (persist vào SecureStore)
   const {
@@ -2185,6 +2223,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
             </TouchableOpacity>
           </View>
 
+          {/* ================= SECTION 4: ĐĂNG XUẤT (LOGOUT) ================= */}
+          <View style={styles.logoutCardWrapper}>
+            <TouchableOpacity
+              style={[
+                styles.logoutBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(255, 82, 82, 0.08)' : '#FEF2F2',
+                  borderColor: isDark ? 'rgba(255, 82, 82, 0.22)' : '#FECACA',
+                },
+              ]}
+              onPress={handleLogout}
+              activeOpacity={0.7}
+              accessibilityLabel="settings-logout-btn"
+            >
+              <View style={[styles.logoutIconBox, { backgroundColor: isDark ? 'rgba(255, 82, 82, 0.18)' : 'rgba(239, 68, 68, 0.12)' }]}>
+                <Text style={styles.logoutIcon}>🚪</Text>
+              </View>
+              <View style={styles.itemTextBox}>
+                <Text style={[styles.logoutTitle, { color: isDark ? '#FF6B6B' : '#DC2626' }]}>
+                  {t('logout')}
+                </Text>
+                <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]}>
+                  @{user?.username} ({maskEmail(user?.email)})
+                </Text>
+              </View>
+              <Text style={[styles.chevron, { color: isDark ? '#FF6B6B' : '#DC2626' }]}>›</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={{ height: 40 }} />
         </ScrollView>
 
@@ -2225,6 +2292,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
+        </Modal>
+
+        {/* Custom Web Logout Confirm Modal */}
+        <Modal
+          visible={showLogoutConfirmModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowLogoutConfirmModal(false)}
+        >
+          <View style={styles.logoutModalOverlay}>
+            <View style={[styles.logoutModalBox, {
+              backgroundColor: isDark ? '#181826' : '#FFFFFF',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#E5E7EB',
+            }]}>
+              <View style={[styles.logoutModalIconBox, { backgroundColor: isDark ? 'rgba(255, 82, 82, 0.18)' : 'rgba(239, 68, 68, 0.12)' }]}>
+                <Text style={{ fontSize: 24 }}>🚪</Text>
+              </View>
+              <Text style={[styles.logoutModalTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
+                {t('logout')}
+              </Text>
+              <Text style={[styles.logoutModalMessage, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+                {t('logout_confirm_msg')}
+              </Text>
+              <View style={styles.logoutModalButtons}>
+                <TouchableOpacity
+                  style={[styles.logoutModalBtn, {
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F3F4F6',
+                  }]}
+                  onPress={() => setShowLogoutConfirmModal(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.logoutModalBtnCancelText, { color: isDark ? C.textSecondary : '#4B5563' }]}>
+                    {t('cancel')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.logoutModalBtn, { backgroundColor: '#EF4444' }]}
+                  onPress={performLogout}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.logoutModalBtnConfirmText}>
+                    {t('logout')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
         </Modal>
       </View>
     </Modal>
@@ -3168,5 +3282,92 @@ const createStyles = (C: ColorScheme, isDark: boolean) =>
   },
   accessibilityPreviewText: {
     lineHeight: 22,
+  },
+
+  // Logout section styles
+  logoutCardWrapper: {
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+  },
+  logoutIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutIcon: {
+    fontSize: 20,
+  },
+  logoutTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 2,
+  },
+  logoutModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  logoutModalBox: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  logoutModalIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  logoutModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  logoutModalMessage: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  logoutModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  logoutModalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutModalBtnCancelText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  logoutModalBtnConfirmText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF',
   },
 });

@@ -5,6 +5,12 @@ const { handleUploadSingle } = require('../middlewares/upload');
 const {
   uploadPhoto,
   getPhotoFeed,
+  getMyPhotos,
+  getLikedPhotos,
+  getSavedPhotos,
+  toggleSavePhoto,
+  getRepostedPhotos,
+  toggleRepost,
   toggleReaction,
   deletePhoto,
   updatePhoto,
@@ -23,14 +29,20 @@ router.get('/drive/:fileId', getDriveImage);
 // Tất cả các route bên dưới đều yêu cầu xác thực JWT
 router.use(authMiddleware);
 
-// 1. Lấy Bảng tin Locket Feed
+// 1. Lấy Bảng tin Locket Feed & Ảnh cá nhân / Lưu / Đăng lại
 router.get('/feed', getPhotoFeed);
+router.get('/me', getMyPhotos);
+router.get('/liked', getLikedPhotos);
+router.get('/saved', getSavedPhotos);
+router.get('/reposts', getRepostedPhotos);
 
 // 2. Upload ảnh mới (Multer single 'image')
 router.post('/upload', handleUploadSingle, uploadPhoto);
 
-// 3. Thả / bỏ thả biểu tượng cảm xúc bài viết
+// 3. Thả / bỏ thả biểu tượng cảm xúc bài viết & Lưu / Đăng lại
 router.post('/:id/react', toggleReaction);
+router.post('/:id/save', toggleSavePhoto);
+router.post('/:id/repost', toggleRepost);
 
 // 4. Chỉnh sửa & Xóa ảnh
 router.put('/:id', updatePhoto);

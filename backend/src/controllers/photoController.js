@@ -18,6 +18,89 @@ function formatImageUrl(rawUrl, protocol, host) {
   return rawUrl;
 }
 
+// Helper bổ sung reactions, top 2 reactions và số lượng bình luận cho danh sách ảnh
+async function enrichPhotosWithReactionsAndComments(rows, currentUserId, req) {
+  const protocol = req.protocol;
+  const host = req.get('host');
+
+  const photoIds = rows.map((p) => p.id);
+  let reactionsMap = {};
+  let commentCountMap = {};
+
+  if (photoIds.length > 0) {
+    const [reactions] = await pool.query(
+      `
+      SELECT 
+        photo_id,
+        emoji,
+        COUNT(*) as count,
+        SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END) as user_reacted
+      FROM photo_reactions
+      WHERE photo_id IN (?)
+      GROUP BY photo_id, emoji
+      `,
+      [currentUserId, photoIds]
+    );
+
+    reactions.forEach((r) => {
+      if (!reactionsMap[r.photo_id]) {
+        reactionsMap[r.photo_id] = [];
+      }
+      reactionsMap[r.photo_id].push({
+        emoji: r.emoji,
+        count: parseInt(r.count, 10),
+        user_reacted: r.user_reacted > 0,
+      });
+    });
+
+    const [commentCounts] = await pool.query(
+      `
+      SELECT photo_id, COUNT(*) as count
+      FROM photo_comments
+      WHERE photo_id IN (?)
+      GROUP BY photo_id
+      `,
+      [photoIds]
+    );
+
+    commentCounts.forEach((c) => {
+      commentCountMap[c.photo_id] = parseInt(c.count, 10);
+    });
+  }
+
+  return rows.map((p) => {
+    let image_url = formatImageUrl(p.image_url, protocol, host);
+
+    let author_avatar = p.author_avatar;
+    if (author_avatar && !author_avatar.startsWith('http')) {
+      author_avatar = `${protocol}://${host}${author_avatar.startsWith('/') ? '' : '/'}${author_avatar}`;
+    }
+
+    const reactionsList = reactionsMap[p.id] || [];
+    const sortedReactions = [...reactionsList].sort((a, b) => b.count - a.count);
+    const top2Reactions = sortedReactions.slice(0, 2);
+    const totalReactionsCount = reactionsList.reduce((acc, r) => acc + r.count, 0);
+
+    return {
+      id: p.id,
+      user_id: p.user_id,
+      recipient_id: p.recipient_id,
+      image_url,
+      caption: p.caption,
+      privacy: p.privacy || 'friends',
+      created_at: p.created_at,
+      author_name: p.author_name || p.author_username,
+      author_username: p.author_username,
+      author_avatar,
+      recipient_name: p.recipient_name || null,
+      reactions: reactionsList,
+      top_reactions: top2Reactions,
+      total_reactions: totalReactionsCount,
+      comment_count: commentCountMap[p.id] || 0,
+    };
+  });
+}
+
 // ============================================================
 // Controller: Quản lý Ảnh Locket & Feed Bài viết & Reactions
 // Format response CHUẨN: { success, message, data }
@@ -194,88 +277,7 @@ const getPhotoFeed = async (req, res) => {
 
     // Query các bức ảnh của bản thân HOẶC của bạn bè đã accepted (có lọc theo từ khóa nếu có)
     const [rows] = await pool.query(querySql, queryParams);
-
-    const protocol = req.protocol;
-    const host = req.get('host');
-
-    // Lấy tất cả reactions và comment_count cho danh sách các bức ảnh thu được
-    const photoIds = rows.map((p) => p.id);
-    let reactionsMap = {};
-    let commentCountMap = {};
-
-    if (photoIds.length > 0) {
-      const [reactions] = await pool.query(
-        `
-        SELECT 
-          photo_id,
-          emoji,
-          COUNT(*) as count,
-          SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END) as user_reacted
-        FROM photo_reactions
-        WHERE photo_id IN (?)
-        GROUP BY photo_id, emoji
-        `,
-        [currentUserId, photoIds]
-      );
-
-      reactions.forEach((r) => {
-        if (!reactionsMap[r.photo_id]) {
-          reactionsMap[r.photo_id] = [];
-        }
-        reactionsMap[r.photo_id].push({
-          emoji: r.emoji,
-          count: parseInt(r.count, 10),
-          user_reacted: r.user_reacted > 0,
-        });
-      });
-
-      const [commentCounts] = await pool.query(
-        `
-        SELECT photo_id, COUNT(*) as count
-        FROM photo_comments
-        WHERE photo_id IN (?)
-        GROUP BY photo_id
-        `,
-        [photoIds]
-      );
-
-      commentCounts.forEach((c) => {
-        commentCountMap[c.photo_id] = parseInt(c.count, 10);
-      });
-    }
-
-    const formattedPhotos = rows.map((p) => {
-      let image_url = formatImageUrl(p.image_url, protocol, host);
-
-      let author_avatar = p.author_avatar;
-      if (author_avatar && !author_avatar.startsWith('http')) {
-        author_avatar = `${protocol}://${host}${author_avatar.startsWith('/') ? '' : '/'}${author_avatar}`;
-      }
-
-      const reactionsList = reactionsMap[p.id] || [];
-      // Sắp xếp các emoji theo count giảm dần và lấy đúng tối đa 2 emoji cao nhất
-      const sortedReactions = [...reactionsList].sort((a, b) => b.count - a.count);
-      const top2Reactions = sortedReactions.slice(0, 2);
-      const totalReactionsCount = reactionsList.reduce((acc, r) => acc + r.count, 0);
-
-      return {
-        id: p.id,
-        user_id: p.user_id,
-        recipient_id: p.recipient_id,
-        image_url,
-        caption: p.caption,
-        privacy: p.privacy || 'friends',
-        created_at: p.created_at,
-        author_name: p.author_name || p.author_username,
-        author_username: p.author_username,
-        author_avatar,
-        recipient_name: p.recipient_name || null,
-        reactions: reactionsList,
-        top_reactions: top2Reactions,
-        total_reactions: totalReactionsCount,
-        comment_count: commentCountMap[p.id] || 0,
-      };
-    });
+    const formattedPhotos = await enrichPhotosWithReactionsAndComments(rows, currentUserId, req);
 
     return res.json({
       success: true,
@@ -287,6 +289,281 @@ const getPhotoFeed = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Lỗi máy chủ khi lấy bảng tin.',
+    });
+  }
+};
+
+/**
+ * 2.1. Lấy danh sách ảnh do chính mình đăng (phục vụ Grid 3x3 Profile)
+ * GET /api/photos/me
+ */
+const getMyPhotos = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        p.id,
+        p.user_id,
+        p.recipient_id,
+        p.image_url,
+        p.caption,
+        p.privacy,
+        p.created_at,
+        u.full_name AS author_name,
+        u.username AS author_username,
+        u.avatar_url AS author_avatar
+      FROM photos p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.user_id = ?
+      ORDER BY p.created_at DESC
+      LIMIT 100
+      `,
+      [currentUserId]
+    );
+
+    const formattedPhotos = await enrichPhotosWithReactionsAndComments(rows, currentUserId, req);
+
+    return res.json({
+      success: true,
+      message: 'Lấy danh sách ảnh của tôi thành công.',
+      data: formattedPhotos,
+    });
+  } catch (error) {
+    console.error('Get my photos error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy danh sách ảnh của tôi.',
+    });
+  }
+};
+
+/**
+ * 2.2. Lấy danh sách ảnh mình đã thả cảm xúc (phục vụ Tab Liked Profile)
+ * GET /api/photos/liked
+ */
+const getLikedPhotos = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    const [rows] = await pool.query(
+      `
+      SELECT DISTINCT
+        p.id,
+        p.user_id,
+        p.recipient_id,
+        p.image_url,
+        p.caption,
+        p.privacy,
+        p.created_at,
+        u.full_name AS author_name,
+        u.username AS author_username,
+        u.avatar_url AS author_avatar
+      FROM photos p
+      JOIN users u ON p.user_id = u.id
+      JOIN photo_reactions pr ON p.id = pr.photo_id
+      WHERE pr.user_id = ?
+      ORDER BY p.created_at DESC
+      LIMIT 100
+      `,
+      [currentUserId]
+    );
+
+    const formattedPhotos = await enrichPhotosWithReactionsAndComments(rows, currentUserId, req);
+
+    return res.json({
+      success: true,
+      message: 'Lấy danh sách ảnh đã thích thành công.',
+      data: formattedPhotos,
+    });
+  } catch (error) {
+    console.error('Get liked photos error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy danh sách ảnh đã thích.',
+    });
+  }
+};
+
+/**
+ * 2.3. Lấy danh sách ảnh đã lưu (Saved / Bookmarks) của chính mình
+ * GET /api/photos/saved
+ */
+const getSavedPhotos = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        p.id,
+        p.user_id,
+        p.recipient_id,
+        p.image_url,
+        p.caption,
+        p.privacy,
+        p.created_at,
+        u.full_name AS author_name,
+        u.username AS author_username,
+        u.avatar_url AS author_avatar
+      FROM saved_photos sp
+      JOIN photos p ON sp.photo_id = p.id
+      JOIN users u ON p.user_id = u.id
+      WHERE sp.user_id = ?
+      ORDER BY sp.created_at DESC
+      LIMIT 100
+      `,
+      [currentUserId]
+    );
+
+    const formattedPhotos = await enrichPhotosWithReactionsAndComments(rows, currentUserId, req);
+
+    return res.json({
+      success: true,
+      message: 'Lấy danh sách bài viết đã lưu thành công.',
+      data: formattedPhotos,
+    });
+  } catch (error) {
+    console.error('Get saved photos error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy bài viết đã lưu.',
+    });
+  }
+};
+
+/**
+ * 2.4. Lưu / Bỏ lưu bài viết (Toggle Bookmark)
+ * POST /api/photos/:id/save
+ */
+const toggleSavePhoto = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const photoId = parseInt(req.params.id, 10);
+
+    if (!photoId || isNaN(photoId)) {
+      return res.status(400).json({ success: false, message: 'ID ảnh không hợp lệ.' });
+    }
+
+    const [existing] = await pool.query(
+      'SELECT id FROM saved_photos WHERE user_id = ? AND photo_id = ?',
+      [currentUserId, photoId]
+    );
+
+    let isSaved = false;
+    if (existing.length > 0) {
+      await pool.query('DELETE FROM saved_photos WHERE id = ?', [existing[0].id]);
+      isSaved = false;
+    } else {
+      await pool.query('INSERT INTO saved_photos (user_id, photo_id) VALUES (?, ?)', [
+        currentUserId,
+        photoId,
+      ]);
+      isSaved = true;
+    }
+
+    return res.json({
+      success: true,
+      message: isSaved ? 'Đã lưu bài viết vào mục Đã lưu! 🔖' : 'Đã bỏ lưu bài viết.',
+      data: { is_saved: isSaved },
+    });
+  } catch (error) {
+    console.error('Toggle save photo error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lưu bài viết.',
+    });
+  }
+};
+
+/**
+ * 2.5. Lấy danh sách ảnh đã đăng lại (Reposts) của chính mình
+ * GET /api/photos/reposts
+ */
+const getRepostedPhotos = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        p.id,
+        p.user_id,
+        p.recipient_id,
+        p.image_url,
+        p.caption,
+        p.privacy,
+        p.created_at,
+        u.full_name AS author_name,
+        u.username AS author_username,
+        u.avatar_url AS author_avatar
+      FROM photo_reposts prp
+      JOIN photos p ON prp.photo_id = p.id
+      JOIN users u ON p.user_id = u.id
+      WHERE prp.user_id = ?
+      ORDER BY prp.created_at DESC
+      LIMIT 100
+      `,
+      [currentUserId]
+    );
+
+    const formattedPhotos = await enrichPhotosWithReactionsAndComments(rows, currentUserId, req);
+
+    return res.json({
+      success: true,
+      message: 'Lấy danh sách bài viết đăng lại thành công.',
+      data: formattedPhotos,
+    });
+  } catch (error) {
+    console.error('Get reposted photos error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy bài viết đăng lại.',
+    });
+  }
+};
+
+/**
+ * 2.6. Đăng lại / Hủy đăng lại bài viết (Toggle Repost)
+ * POST /api/photos/:id/repost
+ */
+const toggleRepost = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const photoId = parseInt(req.params.id, 10);
+
+    if (!photoId || isNaN(photoId)) {
+      return res.status(400).json({ success: false, message: 'ID ảnh không hợp lệ.' });
+    }
+
+    const [existing] = await pool.query(
+      'SELECT id FROM photo_reposts WHERE user_id = ? AND photo_id = ?',
+      [currentUserId, photoId]
+    );
+
+    let isReposted = false;
+    if (existing.length > 0) {
+      await pool.query('DELETE FROM photo_reposts WHERE id = ?', [existing[0].id]);
+      isReposted = false;
+    } else {
+      await pool.query('INSERT INTO photo_reposts (user_id, photo_id) VALUES (?, ?)', [
+        currentUserId,
+        photoId,
+      ]);
+      isReposted = true;
+    }
+
+    return res.json({
+      success: true,
+      message: isReposted ? 'Đã đăng lại bài viết lên trang cá nhân! 🔁' : 'Đã hủy đăng lại bài viết.',
+      data: { is_reposted: isReposted },
+    });
+  } catch (error) {
+    console.error('Toggle repost photo error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi đăng lại bài viết.',
     });
   }
 };
@@ -526,6 +803,12 @@ const getDriveImage = async (req, res) => {
 module.exports = {
   uploadPhoto,
   getPhotoFeed,
+  getMyPhotos,
+  getLikedPhotos,
+  getSavedPhotos,
+  toggleSavePhoto,
+  getRepostedPhotos,
+  toggleRepost,
   toggleReaction,
   deletePhoto,
   updatePhoto,

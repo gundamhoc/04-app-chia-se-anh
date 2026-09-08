@@ -25,6 +25,7 @@ import { friendService } from '../../services/friendService';
 import { groupService } from '../../services/groupService';
 import { Conversation, Friend, Group } from '../../types';
 import { CreateGroupModal } from '../../components/CreateGroupModal';
+import { ConversationSkeleton } from '../../components/LoadingComponents';
 
 export default function MessagesScreen() {
   const router = useRouter();
@@ -470,10 +471,7 @@ export default function MessagesScreen() {
 
       {/* Danh sách cuộc trò chuyện */}
       {loading ? (
-        <View style={styles.centerBox}>
-          <ActivityIndicator size="large" color={C.primary} />
-          <Text style={styles.loadingText}>{t('loading')}</Text>
-        </View>
+        <ConversationSkeleton />
       ) : activeTab === 'groups' ? (
         <FlatList
           data={sortedGroups}

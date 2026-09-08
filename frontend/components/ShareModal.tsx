@@ -17,6 +17,8 @@ import { useToast } from '../hooks/useToast';
 import { savePhotoToDevice } from '../utils/mediaSaver';
 import { useI18n } from '../utils/i18n';
 
+import { photoService } from '../services/photoService';
+
 interface ShareModalProps {
   visible: boolean;
   photo: Photo | null;
@@ -91,6 +93,36 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     }
   };
 
+  // 4. Lưu bài viết (Bookmark trên Masita)
+  const handleToggleSave = async () => {
+    try {
+      const res = await photoService.toggleSavePhoto(photo.id);
+      showToast(
+        'success',
+        res.is_saved ? 'Đã lưu bài viết vào mục "Lưu bài viết"! 🔖' : 'Đã bỏ lưu bài viết.'
+      );
+      onClose();
+    } catch (err) {
+      console.warn('Lỗi lưu bài viết:', err);
+      showToast('error', 'Không thể lưu bài viết.');
+    }
+  };
+
+  // 5. Đăng lại (Repost trên Masita)
+  const handleToggleRepost = async () => {
+    try {
+      const res = await photoService.toggleRepost(photo.id);
+      showToast(
+        'success',
+        res.is_reposted ? 'Đã đăng lại bài viết lên trang cá nhân! 🔁' : 'Đã hủy đăng lại.'
+      );
+      onClose();
+    } catch (err) {
+      console.warn('Lỗi đăng lại:', err);
+      showToast('error', 'Không thể đăng lại bài viết.');
+    }
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -105,7 +137,37 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
           {/* Options List */}
           <View style={styles.optionsList}>
-            {/* Tùy chọn 1: Lưu ảnh */}
+            {/* Tùy chọn 1: Lưu bài viết trên Masita */}
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={handleToggleSave}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.optionIconBox, { backgroundColor: 'rgba(255, 193, 7, 0.15)' }]}>
+                <Text style={styles.optionIcon}>🔖</Text>
+              </View>
+              <View style={styles.optionTextBox}>
+                <Text style={styles.optionTitle}>Lưu bài viết</Text>
+                <Text style={styles.optionSubtitle}>Lưu vào mục "Lưu bài viết" trên trang cá nhân</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Tùy chọn 2: Đăng lại trên Masita */}
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={handleToggleRepost}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.optionIconBox, { backgroundColor: 'rgba(33, 150, 243, 0.15)' }]}>
+                <Text style={styles.optionIcon}>🔁</Text>
+              </View>
+              <View style={styles.optionTextBox}>
+                <Text style={styles.optionTitle}>Đăng lại</Text>
+                <Text style={styles.optionSubtitle}>Chia sẻ lại khoảnh khắc lên trang cá nhân của bạn</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Tùy chọn 3: Lưu ảnh về máy */}
             <TouchableOpacity
               style={styles.optionItem}
               onPress={handleSavePhoto}
@@ -125,7 +187,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </View>
             </TouchableOpacity>
 
-            {/* Tùy chọn 2: Sao chép đường link */}
+            {/* Tùy chọn 4: Sao chép đường link */}
             <TouchableOpacity
               style={styles.optionItem}
               onPress={handleCopyLink}
@@ -140,7 +202,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </View>
             </TouchableOpacity>
 
-            {/* Tùy chọn 3: Chia sẻ qua ứng dụng khác */}
+            {/* Tùy chọn 5: Chia sẻ qua ứng dụng khác */}
             <TouchableOpacity
               style={styles.optionItem}
               onPress={handleShareToApps}
