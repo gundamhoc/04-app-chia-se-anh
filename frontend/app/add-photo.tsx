@@ -199,7 +199,7 @@ export default function AddPhotoScreen() {
     try {
       if (mediaType === 'video') {
         await photoService.uploadVideoPost(mediaUri, thumbnailUri, caption, selectedRecipientId, privacy);
-        showToast('success', 'Đăng video khoảnh khắc thành công! 📹');
+        showToast('success', t('post_video_success'));
       } else {
         await photoService.uploadPhoto(mediaUri, caption, selectedRecipientId, privacy);
         showToast('success', t('post_success'));
@@ -209,7 +209,7 @@ export default function AddPhotoScreen() {
       }, 500);
     } catch (error: unknown) {
       console.warn('Upload post failed:', error);
-      let errMsg = mediaType === 'video' ? 'Không thể tải video lên.' : t('upload_photo_failed');
+      let errMsg = mediaType === 'video' ? t('upload_video_failed') : t('upload_photo_failed');
       if (error && typeof error === 'object') {
         const axErr = error as { response?: { data?: { message?: string } }; message?: string };
         if (axErr.response?.data?.message) {
@@ -283,7 +283,7 @@ export default function AddPhotoScreen() {
                     >
                       <Text style={styles.videoPlayIcon}>▶</Text>
                     </TouchableOpacity>
-                    <Text style={styles.videoPlayHint}>Chạm để xem trước video</Text>
+                    <Text style={styles.videoPlayHint}>{t('tap_to_preview_video')}</Text>
                   </View>
 
                   <View style={styles.videoTagBadge}>
@@ -304,7 +304,7 @@ export default function AddPhotoScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={styles.changePhotoText}>
-                  🔄 {mediaType === 'video' ? 'Đổi tệp tin' : t('change_photo')}
+                  🔄 {mediaType === 'video' ? t('change_file') : t('change_photo')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -313,7 +313,7 @@ export default function AddPhotoScreen() {
               <Text style={styles.placeholderIcon}>📸</Text>
               <Text style={styles.placeholderTitle}>{t('add_moment_title')}</Text>
               <Text style={styles.placeholderSub}>
-                Chia sẻ khoảnh khắc thú vị với ảnh hoặc video
+                {t('add_moment_sub')}
               </Text>
 
               <View style={styles.choiceButtonsContainer}>
@@ -340,8 +340,8 @@ export default function AddPhotoScreen() {
                     <Text style={styles.choiceIcon}>🎥</Text>
                   </View>
                   <View style={styles.choiceTextBox}>
-                    <Text style={styles.choiceTitle}>Quay video mới</Text>
-                    <Text style={styles.choiceDesc}>Ghi lại video ngắn lên tới 60 giây</Text>
+                    <Text style={styles.choiceTitle}>{t('record_new_video')}</Text>
+                    <Text style={styles.choiceDesc}>{t('record_video_desc')}</Text>
                   </View>
                 </TouchableOpacity>
 
@@ -354,8 +354,8 @@ export default function AddPhotoScreen() {
                     <Text style={styles.choiceIcon}>🖼️</Text>
                   </View>
                   <View style={styles.choiceTextBox}>
-                    <Text style={styles.choiceTitle}>Chọn ảnh / video từ thư viện</Text>
-                    <Text style={styles.choiceDesc}>Chọn từ bộ sưu tập trên thiết bị</Text>
+                    <Text style={styles.choiceTitle}>{t('choose_media_library')}</Text>
+                    <Text style={styles.choiceDesc}>{t('choose_media_library_desc')}</Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -370,12 +370,12 @@ export default function AddPhotoScreen() {
               onPress={mediaType === 'video' ? recordVideoWithCamera : takeWithCamera}
             >
               <Text style={styles.pickerIcon}>{mediaType === 'video' ? '🎥' : '📷'}</Text>
-              <Text style={styles.pickerText}>{mediaType === 'video' ? 'Quay lại video' : t('retake_photo')}</Text>
+              <Text style={styles.pickerText}>{mediaType === 'video' ? t('retake_video') : t('retake_photo')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.pickerBtn} onPress={pickFromLibrary}>
               <Text style={styles.pickerIcon}>🖼️</Text>
-              <Text style={styles.pickerText}>Đổi tệp khác</Text>
+              <Text style={styles.pickerText}>{t('change_other_file')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -460,15 +460,15 @@ export default function AddPhotoScreen() {
           </View>
           <Text style={styles.privacyDesc}>
             {privacy === 'public'
-              ? t('privacy_public_desc')
+              ? `🌐 ${t('public_desc')}`
               : privacy === 'friends'
-              ? t('privacy_friends_desc')
-              : t('privacy_private_desc')}
+              ? `👥 ${t('friends_desc')}`
+              : `🔒 ${t('private_desc')}`}
           </Text>
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>{t('send_to_friends_label')}</Text>
+          <Text style={styles.label}>{t('send_private_to_friends')}</Text>
           {loadingFriends ? (
             <ActivityIndicator size="small" color={C.primary} style={{ marginVertical: 12 }} />
           ) : (
@@ -516,7 +516,7 @@ export default function AddPhotoScreen() {
         visible={previewVideoModalVisible}
         videoUrl={mediaType === 'video' ? mediaUri : null}
         thumbnailUrl={thumbnailUri}
-        fileName="Xem trước video"
+        fileName={t('preview_video')}
         onClose={() => setPreviewVideoModalVisible(false)}
       />
 
