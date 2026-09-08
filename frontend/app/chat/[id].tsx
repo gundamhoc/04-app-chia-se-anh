@@ -844,8 +844,35 @@ export default function ChatScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
+
+      {/* Hình nền cuộc trò chuyện toàn màn hình (đồng bộ cả Header và Bottom Bar) */}
+      {chatBackground ? (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Image
+            source={{ uri: chatBackground }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}
+          />
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: isDark ? 'rgba(15, 15, 26, 0.68)' : 'rgba(245, 247, 250, 0.68)' },
+            ]}
+          />
+        </View>
+      ) : null}
+
       {/* 1. Header Bar cố định trên đỉnh */}
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          Boolean(chatBackground) && {
+            backgroundColor: isDark ? 'rgba(26, 26, 46, 0.82)' : 'rgba(255, 255, 255, 0.85)',
+            borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+          },
+        ]}
+      >
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => router.back()}
@@ -912,7 +939,15 @@ export default function ChatScreen() {
 
       {/* 1.5. Thanh Tìm Kiếm Tin Nhắn In-Chat */}
       {showSearchBar && (
-        <View style={styles.chatSearchBar}>
+        <View
+          style={[
+            styles.chatSearchBar,
+            Boolean(chatBackground) && {
+              backgroundColor: isDark ? 'rgba(22, 22, 38, 0.88)' : 'rgba(255, 255, 255, 0.90)',
+              borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+            },
+          ]}
+        >
           <Text style={styles.chatSearchIcon}>🔍</Text>
           <TextInput
             style={styles.chatSearchInput}
@@ -967,23 +1002,6 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 54 : 0}
       >
-        {/* Hình nền cuộc trò chuyện nếu có kèm lớp phủ tối tương phản */}
-        {chatBackground ? (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Image
-              source={{ uri: chatBackground }}
-              style={StyleSheet.absoluteFill}
-              resizeMode="cover"
-              {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}
-            />
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: 'rgba(15, 15, 26, 0.72)' },
-              ]}
-            />
-          </View>
-        ) : null}
         {/* Danh sách tin nhắn */}
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -1032,7 +1050,15 @@ export default function ChatScreen() {
 
         {/* Xem trước tệp tin đính kèm trước khi gửi */}
         {selectedFile && (
-          <View style={styles.attachmentPreviewBar}>
+          <View
+            style={[
+              styles.attachmentPreviewBar,
+              Boolean(chatBackground) && {
+                backgroundColor: isDark ? 'rgba(26, 26, 46, 0.85)' : 'rgba(255, 255, 255, 0.88)',
+                borderTopColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+              },
+            ]}
+          >
             <View style={styles.previewImageContainer}>
               {selectedFile.isImage ? (
                 <Image source={{ uri: selectedFile.uri }} style={styles.previewThumbnail} />
@@ -1062,7 +1088,15 @@ export default function ChatScreen() {
 
         {/* Menu chọn Chụp ảnh / Thư viện / Tệp tin khi bấm nút (+) */}
         {showActionMenu && (
-          <View style={styles.actionMenuContainer}>
+          <View
+            style={[
+              styles.actionMenuContainer,
+              Boolean(chatBackground) && {
+                backgroundColor: isDark ? 'rgba(30, 30, 52, 0.92)' : 'rgba(255, 255, 255, 0.95)',
+                borderTopColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+              },
+            ]}
+          >
             {/* 1. Chụp ảnh */}
             <TouchableOpacity
               style={styles.actionOption}
@@ -1106,6 +1140,10 @@ export default function ChatScreen() {
           style={[
             styles.bottomBar,
             { paddingBottom: isKeyboardVisible ? 10 : Math.max(insets.bottom, 10) },
+            Boolean(chatBackground) && {
+              backgroundColor: isDark ? 'rgba(26, 26, 46, 0.85)' : 'rgba(255, 255, 255, 0.88)',
+              borderTopColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+            },
           ]}
         >
           {/* Nút (+) gộp gọn chức năng Chụp ảnh, Thư viện, Tệp tin */}

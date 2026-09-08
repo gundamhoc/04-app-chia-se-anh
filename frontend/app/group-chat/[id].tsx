@@ -100,6 +100,9 @@ export default function GroupChatScreen() {
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
 
+  // Trạng thái bàn phím
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -177,6 +180,27 @@ export default function GroupChatScreen() {
       socket.off('group_members_updated', handleGroupUpdated);
     };
   }, [socket, groupId, user?.id, loadGroupData]);
+
+  // Lắng nghe sự kiện bàn phím
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setIsKeyboardVisible(true);
+      setShowPlusMenu(false);
+      setTimeout(() => scrollToBottom(true), 100);
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setIsKeyboardVisible(false);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Cuộn danh sách xuống cuối
   const scrollToBottom = (animated = true) => {
@@ -766,8 +790,36 @@ export default function GroupChatScreen() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <ToastComponent />
 
+      {/* Hình nền phòng chat toàn màn hình (Theme Background) đồng bộ cả Header và Bottom Bar */}
+      {Boolean(group?.background_url) && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Image
+            source={{ uri: group!.background_url! }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}
+          />
+          {/* Lớp phủ mờ tối bảo vệ độ tương phản chữ và tin nhắn */}
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: isDark ? 'rgba(15, 15, 26, 0.68)' : 'rgba(245, 247, 250, 0.68)' },
+            ]}
+          />
+        </View>
+      )}
+
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: insets.top + 8 },
+          Boolean(group?.background_url) && {
+            backgroundColor: isDark ? 'rgba(26, 26, 46, 0.82)' : 'rgba(255, 255, 255, 0.85)',
+            borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+          },
+        ]}
+      >
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backBtnText}>‹</Text>
         </TouchableOpacity>
@@ -812,7 +864,15 @@ export default function GroupChatScreen() {
 
       {/* 1.5. Thanh Tìm Kiếm Tin Nhắn In-Chat */}
       {showSearchBar && (
-        <View style={styles.chatSearchBar}>
+        <View
+          style={[
+            styles.chatSearchBar,
+            Boolean(group?.background_url) && {
+              backgroundColor: isDark ? 'rgba(22, 22, 38, 0.88)' : 'rgba(255, 255, 255, 0.90)',
+              borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+            },
+          ]}
+        >
           <Text style={styles.chatSearchIcon}>🔍</Text>
           <TextInput
             style={styles.chatSearchInput}
@@ -867,18 +927,6 @@ export default function GroupChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
       >
-        {/* Hình nền phòng chat (Theme Background) */}
-        {Boolean(group?.background_url) && (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Image
-              source={{ uri: group!.background_url! }}
-              style={StyleSheet.absoluteFill}
-              resizeMode="cover"
-            />
-            {/* Lớp phủ mờ tối bảo vệ độ tương phản chữ và tin nhắn */}
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 15, 26, 0.72)' }]} />
-          </View>
-        )}
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={C.primary} />
@@ -914,7 +962,15 @@ export default function GroupChatScreen() {
 
         {/* Attachment preview bar */}
         {selectedFile && (
-          <View style={styles.attachmentPreviewBar}>
+          <View
+            style={[
+              styles.attachmentPreviewBar,
+              Boolean(group?.background_url) && {
+                backgroundColor: isDark ? 'rgba(26, 26, 46, 0.85)' : 'rgba(255, 255, 255, 0.88)',
+                borderTopColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+              },
+            ]}
+          >
             <View style={styles.previewThumbBox}>
               {selectedFile.isImage ? (
                 <Image source={{ uri: selectedFile.uri }} style={styles.previewImage} />
@@ -934,7 +990,15 @@ export default function GroupChatScreen() {
 
         {/* Plus Action Menu Popup */}
         {showPlusMenu && (
-          <View style={styles.plusMenuPopup}>
+          <View
+            style={[
+              styles.plusMenuPopup,
+              Boolean(group?.background_url) && {
+                backgroundColor: isDark ? 'rgba(30, 30, 52, 0.92)' : 'rgba(255, 255, 255, 0.95)',
+                borderTopColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+              },
+            ]}
+          >
             <TouchableOpacity style={styles.plusMenuItem} onPress={handlePickCamera}>
               <View style={[styles.plusMenuIconBox, { backgroundColor: '#FF6B6B' }]}>
                 <Text style={styles.plusMenuEmoji}>📷</Text>
@@ -959,7 +1023,16 @@ export default function GroupChatScreen() {
         )}
 
         {/* Bottom Input Row */}
-        <View style={styles.inputRow}>
+        <View
+          style={[
+            styles.inputRow,
+            { paddingBottom: isKeyboardVisible ? 8 : Math.max(insets.bottom, 8) },
+            Boolean(group?.background_url) && {
+              backgroundColor: isDark ? 'rgba(26, 26, 46, 0.85)' : 'rgba(255, 255, 255, 0.88)',
+              borderTopColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+            },
+          ]}
+        >
           <TouchableOpacity
             style={[styles.plusBtn, showPlusMenu && styles.plusBtnActive]}
             onPress={() => setShowPlusMenu(!showPlusMenu)}
