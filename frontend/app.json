@@ -2,7 +2,7 @@
   "expo": {
     "name": "Masita",
     "slug": "masita",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "masita",
@@ -26,6 +26,7 @@
         "backgroundColor": "#6C63FF"
       },
       "package": "com.masita.app",
+      "versionCode": 2,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
