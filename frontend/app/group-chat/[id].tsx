@@ -13,6 +13,7 @@ import {
   Modal,
   Alert,
   Keyboard,
+  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1107,7 +1108,12 @@ export default function GroupChatScreen() {
 
         {/* Plus Action Menu Popup */}
         {showPlusMenu && (
-          <View
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            bounces={true}
+            overScrollMode="always"
+            contentContainerStyle={styles.plusMenuScrollContent}
             style={[
               styles.plusMenuPopup,
               Boolean(group?.background_url) && {
@@ -1150,7 +1156,7 @@ export default function GroupChatScreen() {
               </View>
               <Text style={styles.plusMenuLabel}>{t('choose_file')}</Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         )}
 
         {/* Bottom Input Row */}
@@ -1900,16 +1906,21 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     marginTop: 2,
   },
   plusMenuPopup: {
-    flexDirection: 'row',
     backgroundColor: C.surface,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: '#26263A',
-    justifyContent: 'space-around',
+    maxHeight: 115,
+  },
+  plusMenuScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 18,
   },
   plusMenuItem: {
     alignItems: 'center',
+    width: 68,
   },
   plusMenuIconBox: {
     width: 46,
@@ -1925,6 +1936,7 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   plusMenuLabel: {
     fontSize: 12,
     color: C.text,
+    textAlign: 'center',
   },
   inputRow: {
     flexDirection: 'row',

@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Keyboard,
   Modal,
+  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1220,7 +1221,12 @@ export default function ChatScreen() {
 
         {/* Menu chọn Chụp ảnh / Thư viện / Tệp tin khi bấm nút (+) */}
         {showActionMenu && (
-          <View
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            bounces={true}
+            overScrollMode="always"
+            contentContainerStyle={styles.actionMenuScrollContent}
             style={[
               styles.actionMenuContainer,
               Boolean(chatBackground) && {
@@ -1288,7 +1294,7 @@ export default function ChatScreen() {
               </View>
               <Text style={styles.actionTitle}>{t('choose_file')}</Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         )}
 
         {/* 3. Bottom Input Bar */}
@@ -2065,17 +2071,21 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     marginTop: 2,
   },
   actionMenuContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
     backgroundColor: C.card,
     borderTopWidth: 1,
     borderTopColor: C.border,
-    gap: 28,
+    maxHeight: 115,
+  },
+  actionMenuScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 18,
   },
   actionOption: {
     alignItems: 'center',
+    width: 68,
     gap: 6,
   },
   actionIconCircle: {
@@ -2097,6 +2107,7 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_500Medium',
     color: C.text,
+    textAlign: 'center',
   },
   bottomBar: {
     flexDirection: 'row',
