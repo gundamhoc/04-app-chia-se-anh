@@ -37,14 +37,20 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
 }) => {
   const { token } = useAuth();
 
-  // Xác định URL video (Stream HTTP 206 hoặc direct URL)
+  // Xác định URL video (Luôn sử dụng stream HTTP 206 backend cho Google Drive & nội bộ)
   const videoSourceUrl = useMemo(() => {
-    if (!post.video_url) return '';
-    if (post.video_url.startsWith('http')) {
+    if (!post.video_url && post.media_type !== 'video') return '';
+    // Nếu là direct link mp4 ngoài không phải google drive
+    if (
+      post.video_url &&
+      post.video_url.startsWith('http') &&
+      !post.video_url.includes('googleusercontent.com') &&
+      !post.video_url.includes('drive.google.com')
+    ) {
       return post.video_url;
     }
     return photoService.getPhotoVideoStreamUrl(post.id, token);
-  }, [post.id, post.video_url, token]);
+  }, [post.id, post.video_url, post.media_type, token]);
 
   const shouldPlay = isActive && isScreenFocused && !isModalOpen;
 
@@ -65,11 +71,24 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
     }
   }, [isMuted, player]);
 
+  // Cập nhật khi source URL thay đổi
+  useEffect(() => {
+    if (!player || !videoSourceUrl) return;
+    try {
+      if (typeof player.replace === 'function') {
+        player.replace(videoSourceUrl);
+      }
+    } catch (e) {
+      // Ignored
+    }
+  }, [videoSourceUrl, player]);
+
   // Điều khiển phát / tạm dừng tự động theo tầm nhìn màn hình
   useEffect(() => {
-    if (!player) return;
+    if (!player || !videoSourceUrl) return;
     try {
       if (shouldPlay) {
+        player.muted = isMuted;
         player.play();
       } else {
         player.pause();
@@ -77,7 +96,7 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
     } catch (e) {
       console.warn('Feed video autoplay error:', e);
     }
-  }, [shouldPlay, player]);
+  }, [shouldPlay, player, isMuted, videoSourceUrl]);
 
   const thumbnailUrl = post.image_url;
 
@@ -103,33 +122,35 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
         activeOpacity={0.96}
         onPress={onExpand}
       >
-        {shouldPlay ? (
-          <VideoView
-            style={styles.videoPlayer}
-            player={player}
-            contentFit="contain"
-            nativeControls={false}
-          />
-        ) : (
-          thumbnailUrl && (
+        <View style={styles.videoPlayerWrapper}>
+          {videoSourceUrl ? (
+            <VideoView
+              style={styles.videoPlayer}
+              player={player}
+              contentFit="contain"
+              nativeControls={false}
+            />
+          ) : null}
+
+          {!shouldPlay && thumbnailUrl ? (
             <Image
               source={{ uri: thumbnailUrl }}
               style={styles.thumbnailImage}
               resizeMode="contain"
               {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
             />
-          )
-        )}
+          ) : null}
 
-        {/* Nút Play trung tâm khi video chưa active */}
-        {!shouldPlay && (
-          <View style={styles.centerPlayOverlay}>
-            <View style={styles.centerPlayCircle}>
-              <Text style={styles.centerPlayIcon}>▶</Text>
+          {/* Nút Play trung tâm khi video chưa active */}
+          {!shouldPlay && (
+            <View style={styles.centerPlayOverlay}>
+              <View style={styles.centerPlayCircle}>
+                <Text style={styles.centerPlayIcon}>▶</Text>
+              </View>
+              <Text style={styles.centerPlayHint}>Lướt tới để tự phát</Text>
             </View>
-            <Text style={styles.centerPlayHint}>Lướt tới để tự phát</Text>
-          </View>
-        )}
+          )}
+        </View>
       </TouchableOpacity>
 
       {/* 3. Huy hiệu Video góc trên bên trái */}
@@ -196,11 +217,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  videoPlayerWrapper: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   videoPlayer: {
     width: '100%',
     height: '100%',
   },
   thumbnailImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
     height: '100%',
   },
