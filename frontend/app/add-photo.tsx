@@ -11,10 +11,11 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { ColorScheme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
 import { photoService } from '../services/photoService';
@@ -22,6 +23,7 @@ import { friendService } from '../services/friendService';
 import { Friend, PhotoPrivacy } from '../types';
 import { useToast } from '../hooks/useToast';
 import { WebCameraModal } from '../components/WebCameraModal';
+import { VideoPlayerModal } from '../components/VideoPlayerModal';
 import { LoadingOverlay } from '../components/LoadingComponents';
 import { useI18n } from '../utils/i18n';
 
@@ -42,7 +44,11 @@ export default function AddPhotoScreen() {
     }, 120);
   };
 
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [mediaUri, setMediaUri] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
+  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
+  const [previewVideoModalVisible, setPreviewVideoModalVisible] = useState(false);
+
   const [caption, setCaption] = useState('');
   const [privacy, setPrivacy] = useState<PhotoPrivacy>('friends');
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -67,33 +73,50 @@ export default function AddPhotoScreen() {
     }
   };
 
-  // Mở thư viện ảnh
+  // Mở thư viện ảnh & video
   const pickFromLibrary = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        showToast('warning', 'Quyền truy cập thư viện ảnh bị từ chối.');
+        showToast('warning', 'Quyền truy cập thư viện đa phương tiện bị từ chối.');
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ['images', 'videos'],
         allowsEditing: false,
-        quality: 0.8,
+        quality: 0.85,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        const isVideo = asset.type === 'video' || asset.uri.endsWith('.mp4') || asset.uri.endsWith('.mov');
+        setMediaUri(asset.uri);
+        setMediaType(isVideo ? 'video' : 'image');
+
+        if (isVideo) {
+          try {
+            const thumb = await VideoThumbnails.getThumbnailAsync(asset.uri, {
+              time: 500,
+              quality: 0.8,
+            });
+            setThumbnailUri(thumb.uri);
+          } catch (thumbErr) {
+            console.warn('Không thể tạo thumbnail video:', thumbErr);
+            setThumbnailUri(null);
+          }
+        } else {
+          setThumbnailUri(null);
+        }
       }
     } catch (error) {
-      console.warn('Image picker error:', error);
+      console.warn('Image/Video picker error:', error);
     }
   };
 
   // Mở Camera chụp ảnh trực tiếp
   const takeWithCamera = async () => {
     if (Platform.OS === 'web') {
-      // Trên Web: Mở Web Camera Modal với live stream và chụp ảnh
       setShowWebCamera(true);
       return;
     }
@@ -105,41 +128,88 @@ export default function AddPhotoScreen() {
         return;
       }
 
-      // allowsEditing: false BẮT BUỘC trên Android để mở trực tiếp Camera native của điện thoại,
-      // tránh Android chuyển hướng sang bộ chọn tệp / crop
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
-        quality: 0.8,
+        quality: 0.85,
         cameraType: ImagePicker.CameraType.back,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setImageUri(result.assets[0].uri);
+        setMediaUri(result.assets[0].uri);
+        setMediaType('image');
+        setThumbnailUri(null);
       }
     } catch (error) {
-      console.warn('Camera error:', error);
+      console.warn('Camera photo error:', error);
       showToast('error', t('camera_error'));
+    }
+  };
+
+  // Mở Camera quay Video trực tiếp
+  const recordVideoWithCamera = async () => {
+    if (Platform.OS === 'web') {
+      showToast('info', 'Quay video trực tiếp trên trình duyệt đang được tối ưu. Vui lòng chọn tệp video từ máy tính.');
+      return;
+    }
+
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('warning', 'Quyền truy cập Máy ảnh (Camera) bị từ chối.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: false,
+        videoMaxDuration: 60,
+        cameraType: ImagePicker.CameraType.back,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setMediaUri(asset.uri);
+        setMediaType('video');
+        try {
+          const thumb = await VideoThumbnails.getThumbnailAsync(asset.uri, {
+            time: 500,
+            quality: 0.8,
+          });
+          setThumbnailUri(thumb.uri);
+        } catch (thumbErr) {
+          console.warn('Không thể tạo thumbnail video quay trực tiếp:', thumbErr);
+          setThumbnailUri(null);
+        }
+      }
+    } catch (error) {
+      console.warn('Record video error:', error);
+      showToast('error', 'Không thể khởi động máy quay video.');
     }
   };
 
   // Thực hiện đăng bài
   const handleUpload = async () => {
-    if (!imageUri) {
-      showToast('warning', t('select_photo_first'));
+    if (!mediaUri) {
+      showToast('warning', 'Vui lòng chọn ảnh hoặc video để chia sẻ.');
       return;
     }
 
     setSubmitting(true);
     try {
-      await photoService.uploadPhoto(imageUri, caption, selectedRecipientId, privacy);
-      showToast('success', t('post_success'));
+      if (mediaType === 'video') {
+        await photoService.uploadVideoPost(mediaUri, thumbnailUri, caption, selectedRecipientId, privacy);
+        showToast('success', 'Đăng video khoảnh khắc thành công! 📹');
+      } else {
+        await photoService.uploadPhoto(mediaUri, caption, selectedRecipientId, privacy);
+        showToast('success', t('post_success'));
+      }
       setTimeout(() => {
         router.replace('/(tabs)');
       }, 500);
     } catch (error: unknown) {
-      console.warn('Upload photo failed:', error);
-      let errMsg = t('upload_photo_failed');
+      console.warn('Upload post failed:', error);
+      let errMsg = mediaType === 'video' ? 'Không thể tải video lên.' : t('upload_photo_failed');
       if (error && typeof error === 'object') {
         const axErr = error as { response?: { data?: { message?: string } }; message?: string };
         if (axErr.response?.data?.message) {
@@ -157,7 +227,6 @@ export default function AddPhotoScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      {/* Header Bar */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.closeBtn}
@@ -165,11 +234,13 @@ export default function AddPhotoScreen() {
         >
           <Text style={styles.closeText}>✕</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('new_moment')} 📸</Text>
+        <Text style={styles.headerTitle}>
+          {mediaType === 'video' ? 'Chia sẻ Video 📹' : `${t('new_moment')} 📸`}
+        </Text>
         <TouchableOpacity
-          style={[styles.btnPost, (!imageUri || submitting) && styles.btnPostDisabled]}
+          style={[styles.btnPost, (!mediaUri || submitting) && styles.btnPostDisabled]}
           onPress={handleUpload}
-          disabled={!imageUri || submitting}
+          disabled={!mediaUri || submitting}
         >
           {submitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
@@ -191,17 +262,50 @@ export default function AddPhotoScreen() {
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
-        {/* Preview & Choice Container */}
         <View style={styles.imagePreviewContainer}>
-          {imageUri ? (
+          {mediaUri ? (
             <View style={styles.previewWrapper}>
-              <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
+              {mediaType === 'video' ? (
+                <>
+                  {thumbnailUri ? (
+                    <Image source={{ uri: thumbnailUri }} style={styles.previewImage} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.previewImage, { backgroundColor: '#181920', justifyContent: 'center', alignItems: 'center' }]}>
+                      <Text style={{ fontSize: 44 }}>📹</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.videoPreviewOverlay}>
+                    <TouchableOpacity
+                      style={styles.videoPlayCenterBtn}
+                      onPress={() => setPreviewVideoModalVisible(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.videoPlayIcon}>▶</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.videoPlayHint}>Chạm để xem trước video</Text>
+                  </View>
+
+                  <View style={styles.videoTagBadge}>
+                    <Text style={styles.videoTagText}>📹 Video</Text>
+                  </View>
+                </>
+              ) : (
+                <Image source={{ uri: mediaUri }} style={styles.previewImage} resizeMode="cover" />
+              )}
+
               <TouchableOpacity
                 style={styles.changePhotoBtn}
-                onPress={() => setImageUri(null)}
+                onPress={() => {
+                  setMediaUri(null);
+                  setThumbnailUri(null);
+                  setMediaType('image');
+                }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.changePhotoText}>🔄 {t('change_photo')}</Text>
+                <Text style={styles.changePhotoText}>
+                  🔄 {mediaType === 'video' ? 'Đổi tệp tin' : t('change_photo')}
+                </Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -209,7 +313,7 @@ export default function AddPhotoScreen() {
               <Text style={styles.placeholderIcon}>📸</Text>
               <Text style={styles.placeholderTitle}>{t('add_moment_title')}</Text>
               <Text style={styles.placeholderSub}>
-                {t('add_moment_sub')}
+                Chia sẻ khoảnh khắc thú vị với ảnh hoặc video
               </Text>
 
               <View style={styles.choiceButtonsContainer}>
@@ -229,6 +333,20 @@ export default function AddPhotoScreen() {
 
                 <TouchableOpacity
                   style={styles.choiceBtn}
+                  onPress={recordVideoWithCamera}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.choiceIconBox, { backgroundColor: 'rgba(255, 87, 34, 0.2)' }]}>
+                    <Text style={styles.choiceIcon}>🎥</Text>
+                  </View>
+                  <View style={styles.choiceTextBox}>
+                    <Text style={styles.choiceTitle}>Quay video mới</Text>
+                    <Text style={styles.choiceDesc}>Ghi lại video ngắn lên tới 60 giây</Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.choiceBtn}
                   onPress={pickFromLibrary}
                   activeOpacity={0.8}
                 >
@@ -236,8 +354,8 @@ export default function AddPhotoScreen() {
                     <Text style={styles.choiceIcon}>🖼️</Text>
                   </View>
                   <View style={styles.choiceTextBox}>
-                    <Text style={styles.choiceTitle}>{t('choose_from_library')}</Text>
-                    <Text style={styles.choiceDesc}>{t('choose_from_library_desc')}</Text>
+                    <Text style={styles.choiceTitle}>Chọn ảnh / video từ thư viện</Text>
+                    <Text style={styles.choiceDesc}>Chọn từ bộ sưu tập trên thiết bị</Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -245,21 +363,23 @@ export default function AddPhotoScreen() {
           )}
         </View>
 
-        {imageUri && (
+        {mediaUri && (
           <View style={styles.photoPickerBar}>
-            <TouchableOpacity style={styles.pickerBtn} onPress={takeWithCamera}>
-              <Text style={styles.pickerIcon}>📷</Text>
-              <Text style={styles.pickerText}>{t('retake_photo')}</Text>
+            <TouchableOpacity
+              style={styles.pickerBtn}
+              onPress={mediaType === 'video' ? recordVideoWithCamera : takeWithCamera}
+            >
+              <Text style={styles.pickerIcon}>{mediaType === 'video' ? '🎥' : '📷'}</Text>
+              <Text style={styles.pickerText}>{mediaType === 'video' ? 'Quay lại video' : t('retake_photo')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.pickerBtn} onPress={pickFromLibrary}>
               <Text style={styles.pickerIcon}>🖼️</Text>
-              <Text style={styles.pickerText}>{t('change_photo')}</Text>
+              <Text style={styles.pickerText}>Đổi tệp khác</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Caption Input */}
         <View style={styles.inputGroup}>
           <View style={styles.labelRow}>
             <Text style={[styles.label, { marginBottom: 0 }]}>{t('caption_label')}</Text>
@@ -278,7 +398,6 @@ export default function AddPhotoScreen() {
           />
         </View>
 
-        {/* Quyền riêng tư bài viết */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>{t('post_privacy')}</Text>
           <View style={styles.privacyRow}>
@@ -341,18 +460,17 @@ export default function AddPhotoScreen() {
           </View>
           <Text style={styles.privacyDesc}>
             {privacy === 'public'
-              ? `🌐 ${t('public_desc')}`
+              ? t('privacy_public_desc')
               : privacy === 'friends'
-              ? `👥 ${t('friends_desc')}`
-              : `🔒 ${t('private_desc')}`}
+              ? t('privacy_friends_desc')
+              : t('privacy_private_desc')}
           </Text>
         </View>
 
-        {/* Audience / Recipient Selector */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>{t('send_private_to_friends')}</Text>
+          <Text style={styles.label}>{t('send_to_friends_label')}</Text>
           {loadingFriends ? (
-            <ActivityIndicator size="small" color={C.primary} style={{ alignSelf: 'flex-start' }} />
+            <ActivityIndicator size="small" color={C.primary} style={{ marginVertical: 12 }} />
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recipientList}>
               <TouchableOpacity
@@ -394,21 +512,37 @@ export default function AddPhotoScreen() {
       </ScrollView>
     </KeyboardAvoidingView>
 
-      {/* Web Camera Modal cho môi trường Web browser */}
+      <VideoPlayerModal
+        visible={previewVideoModalVisible}
+        videoUrl={mediaType === 'video' ? mediaUri : null}
+        thumbnailUrl={thumbnailUri}
+        fileName="Xem trước video"
+        onClose={() => setPreviewVideoModalVisible(false)}
+      />
+
       <WebCameraModal
         visible={showWebCamera}
         onClose={() => setShowWebCamera(false)}
         onCapture={(capturedUri) => {
-          setImageUri(capturedUri);
+          setMediaUri(capturedUri);
+          setMediaType('image');
+          setThumbnailUri(null);
           setShowWebCamera(false);
         }}
       />
 
-      {/* Loading Overlay khi đang tải ảnh lên Google Drive */}
       <LoadingOverlay
         visible={submitting}
-        message={language === 'vi' ? 'Đang tải khoảnh khắc lên... 📸' : 'Uploading moment... 📸'}
-        subMessage={language === 'vi' ? 'Đang đồng bộ ảnh lên kho lưu trữ đám mây' : 'Syncing photo to cloud storage'}
+        message={
+          mediaType === 'video'
+            ? 'Đang tải video khoảnh khắc lên... 📹'
+            : language === 'vi' ? 'Đang tải khoảnh khắc lên... 📸' : 'Uploading moment... 📸'
+        }
+        subMessage={
+          mediaType === 'video'
+            ? 'Đang xử lý và đồng bộ video chất lượng cao lên Google Drive'
+            : language === 'vi' ? 'Đang đồng bộ ảnh lên kho lưu trữ đám mây' : 'Syncing photo to cloud storage'
+        }
       />
     </View>
   );
@@ -501,6 +635,61 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
     color: C.text,
+  },
+  videoPreviewOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoPlayCenterBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.75)',
+    marginBottom: 10,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+  },
+  videoPlayIcon: {
+    fontSize: 26,
+    color: '#FFFFFF',
+    marginLeft: 4,
+  },
+  videoPlayHint: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  videoTagBadge: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  videoTagText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
   },
   placeholderContainer: {
     padding: 20,

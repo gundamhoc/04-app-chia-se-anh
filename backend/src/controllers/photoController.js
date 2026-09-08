@@ -2,6 +2,8 @@ const { pool } = require('../config/db');
 const { uploadFileToDrive, getDriveClient } = require('../utils/googleDrive');
 const { sendNotificationToUser, broadcastToUsers } = require('../sockets/socketHandler');
 const fs = require('fs');
+const path = require('path');
+const jwt = require('jsonwebtoken');
 
 // Helper chuẩn hóa link ảnh: chuyển link Google Drive sang proxy route backend để tránh lỗi Google 429 trên Web
 function formatImageUrl(rawUrl, protocol, host) {
@@ -107,6 +109,8 @@ async function enrichPhotosWithReactionsAndComments(rows, currentUserId, req) {
       user_id: p.user_id,
       recipient_id: p.recipient_id,
       image_url,
+      video_url: p.video_url || null,
+      media_type: p.media_type || (p.video_url ? 'video' : 'image'),
       caption: p.caption,
       privacy: p.privacy || 'friends',
       created_at: p.created_at,
@@ -247,6 +251,142 @@ const uploadPhoto = async (req, res) => {
 };
 
 /**
+ * 1.1. Upload video bài viết Locket mới
+ * POST /api/photos/upload-video
+ * Multipart form: video (file), thumbnail (file, optional), caption (text), recipient_id (optional), privacy (optional)
+ */
+const uploadVideoPost = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+
+    if (!req.videoFile) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng chọn 1 video để tải lên.',
+      });
+    }
+
+    const { caption, recipient_id, privacy } = req.body;
+    let recipientId = null;
+
+    if (recipient_id && !isNaN(recipient_id)) {
+      recipientId = parseInt(recipient_id, 10);
+    }
+    const validPrivacy = ['public', 'friends', 'private'].includes(privacy) ? privacy : 'friends';
+
+    let finalVideoUrl = `/uploads/${req.videoFile.filename}`;
+    let finalThumbnailUrl = null;
+
+    if (req.thumbnailFile) {
+      finalThumbnailUrl = `/uploads/${req.thumbnailFile.filename}`;
+    }
+
+    // Upload video lên Google Drive nếu cấu hình credentials
+    try {
+      const driveResult = await uploadFileToDrive(req.videoFile.path, req.videoFile.mimetype, req.videoFile.filename);
+      if (driveResult && driveResult.directUrl) {
+        finalVideoUrl = driveResult.directUrl;
+        if (fs.existsSync(req.videoFile.path)) {
+          fs.unlinkSync(req.videoFile.path);
+        }
+      }
+    } catch (driveErr) {
+      console.warn('⚠️ Gặp sự cố upload Video Google Drive, fallback sang lưu file nội bộ:', driveErr.message);
+    }
+
+    // Upload ảnh bìa thumbnail lên Google Drive nếu có
+    if (req.thumbnailFile) {
+      try {
+        const driveThumbResult = await uploadFileToDrive(req.thumbnailFile.path, req.thumbnailFile.mimetype, req.thumbnailFile.filename);
+        if (driveThumbResult && driveThumbResult.directUrl) {
+          finalThumbnailUrl = driveThumbResult.directUrl;
+          if (fs.existsSync(req.thumbnailFile.path)) {
+            fs.unlinkSync(req.thumbnailFile.path);
+          }
+        }
+      } catch (driveThumbErr) {
+        console.warn('⚠️ Gặp sự cố upload Thumbnail Google Drive, fallback sang lưu file nội bộ:', driveThumbErr.message);
+      }
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO photos (user_id, recipient_id, image_url, video_url, media_type, caption, privacy) VALUES (?, ?, ?, ?, 'video', ?, ?)`,
+      [currentUserId, recipientId, finalThumbnailUrl, finalVideoUrl, caption ? caption.trim() : null, validPrivacy]
+    );
+
+    const photoId = result.insertId;
+
+    // Lấy thông tin bài viết vừa tạo kèm thông tin tác giả
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        p.id,
+        p.user_id,
+        p.recipient_id,
+        p.image_url,
+        p.video_url,
+        p.media_type,
+        p.caption,
+        p.privacy,
+        p.created_at,
+        u.full_name AS author_name,
+        u.username AS author_username,
+        u.avatar_url AS author_avatar
+      FROM photos p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.id = ?
+      `,
+      [photoId]
+    );
+
+    const protocol = req.protocol;
+    const host = req.get('host');
+
+    const createdPhoto = rows[0];
+    createdPhoto.image_url = formatImageUrl(createdPhoto.image_url, protocol, host);
+    if (createdPhoto.author_avatar && !createdPhoto.author_avatar.startsWith('http')) {
+      createdPhoto.author_avatar = `${protocol}://${host}${createdPhoto.author_avatar.startsWith('/') ? '' : '/'}${createdPhoto.author_avatar}`;
+    }
+
+    // Gửi socket notification tới bạn bè realtime
+    try {
+      const [friends] = await pool.query(
+        `
+        SELECT 
+          CASE WHEN requester_id = ? THEN receiver_id ELSE requester_id END AS friend_id
+        FROM friendships
+        WHERE (requester_id = ? OR receiver_id = ?) AND status = 'accepted'
+        `,
+        [currentUserId, currentUserId, currentUserId]
+      );
+
+      const friendIds = friends.map((f) => f.friend_id);
+      if (friendIds.length > 0 && req.io && validPrivacy !== 'private') {
+        broadcastToUsers(req.io, friendIds, 'new_photo_posted', {
+          photo: createdPhoto,
+          author_name: createdPhoto.author_name || createdPhoto.author_username,
+          message: `📹 ${createdPhoto.author_name || createdPhoto.author_username} vừa chia sẻ một video khoảnh khắc mới!`,
+        });
+      }
+    } catch (socketErr) {
+      console.warn('⚠️ Lỗi gửi socket notification cho video photo:', socketErr.message);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Đăng video khoảnh khắc thành công! 📹',
+      data: createdPhoto,
+    });
+  } catch (error) {
+    console.error('Upload video post error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi đăng video.',
+    });
+  }
+};
+
+/**
  * 2. Lấy Bảng tin (Locket Feed) kèm danh sách Reactions
  * GET /api/photos/feed
  */
@@ -262,6 +402,8 @@ const getPhotoFeed = async (req, res) => {
         p.user_id,
         p.recipient_id,
         p.image_url,
+        p.video_url,
+        p.media_type,
         p.caption,
         p.privacy,
         p.created_at,
@@ -359,6 +501,8 @@ const getMyPhotos = async (req, res) => {
         p.user_id,
         p.recipient_id,
         p.image_url,
+        p.video_url,
+        p.media_type,
         p.caption,
         p.privacy,
         p.created_at,
@@ -405,6 +549,8 @@ const getLikedPhotos = async (req, res) => {
         p.user_id,
         p.recipient_id,
         p.image_url,
+        p.video_url,
+        p.media_type,
         p.caption,
         p.privacy,
         p.created_at,
@@ -452,6 +598,8 @@ const getSavedPhotos = async (req, res) => {
         p.user_id,
         p.recipient_id,
         p.image_url,
+        p.video_url,
+        p.media_type,
         p.caption,
         p.privacy,
         p.created_at,
@@ -560,6 +708,8 @@ const getRepostedPhotos = async (req, res) => {
         p.user_id,
         p.recipient_id,
         p.image_url,
+        p.video_url,
+        p.media_type,
         p.caption,
         p.privacy,
         p.created_at,
@@ -885,8 +1035,189 @@ const getDriveImage = async (req, res) => {
   }
 };
 
+/**
+ * 7. Stream video bài viết Locket chuẩn HTTP 206 Partial Content (YouTube progressive buffer streaming)
+ * GET /api/photos/video-stream/:photoId
+ * Hỗ trợ Query param: ?token=... hoặc Header Authorization
+ * Hỗ trợ Header Range: bytes=start-end
+ */
+const streamPhotoVideo = async (req, res) => {
+  try {
+    const photoId = parseInt(req.params.photoId, 10);
+    if (isNaN(photoId)) {
+      return res.status(400).json({ success: false, message: 'ID bài viết không hợp lệ.' });
+    }
+
+    // Xác thực token (qua Authorization header hoặc query param ?token=...)
+    let userId = req.user ? req.user.id : null;
+    if (!userId && req.query.token) {
+      try {
+        const decoded = jwt.verify(req.query.token, process.env.JWT_SECRET);
+        userId = decoded.id;
+      } catch (tokenErr) {
+        return res.status(401).json({ success: false, message: 'Token xác thực không hợp lệ.' });
+      }
+    }
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Vui lòng đăng nhập để xem video.' });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, user_id, recipient_id, video_url, media_type, privacy FROM photos WHERE id = ?`,
+      [photoId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy bài viết.' });
+    }
+
+    const photo = rows[0];
+    const targetUrl = photo.video_url;
+    if (!targetUrl) {
+      return res.status(404).json({ success: false, message: 'Bài viết này không có tệp video.' });
+    }
+
+    // Kiểm tra quyền xem bài viết
+    if (photo.user_id !== userId) {
+      if (photo.privacy === 'private') {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền xem video riêng tư này.' });
+      }
+      if (photo.privacy === 'friends') {
+        const [friends] = await pool.query(
+          `SELECT id FROM friendships WHERE ((requester_id = ? AND receiver_id = ?) OR (requester_id = ? AND receiver_id = ?)) AND status = 'accepted'`,
+          [photo.user_id, userId, userId, photo.user_id]
+        );
+        if (friends.length === 0) {
+          return res.status(403).json({ success: false, message: 'Chỉ bạn bè mới có quyền xem video này.' });
+        }
+      }
+      if (photo.recipient_id && photo.recipient_id !== userId) {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền xem video gửi riêng này.' });
+      }
+    }
+
+    const mimeType = 'video/mp4';
+
+    // 1. Nếu video lưu trên Google Drive
+    const match = targetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      const fileId = match[1];
+      const drive = getDriveClient();
+      if (!drive) {
+        return res.status(500).json({ success: false, message: 'Google Drive client chưa sẵn sàng.' });
+      }
+
+      let totalSize = null;
+      try {
+        const meta = await drive.files.get({ fileId, fields: 'size, mimeType' });
+        if (meta.data.size) {
+          totalSize = parseInt(meta.data.size, 10);
+        }
+      } catch (mErr) {
+        console.warn('Lỗi đọc size video photo từ Google Drive:', mErr.message);
+      }
+
+      const range = req.headers.range;
+      if (range && totalSize) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+        const chunkSize = end - start + 1;
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': mimeType,
+          'Cache-Control': 'no-cache',
+        });
+
+        const driveStream = await drive.files.get(
+          { fileId, alt: 'media' },
+          {
+            responseType: 'stream',
+            headers: {
+              Range: `bytes=${start}-${end}`,
+            },
+          }
+        );
+
+        driveStream.data.on('error', (streamErr) => {
+          if (!res.headersSent) res.status(500).end();
+        });
+
+        return driveStream.data.pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Accept-Ranges': 'bytes',
+          'Content-Type': mimeType,
+          ...(totalSize ? { 'Content-Length': totalSize } : {}),
+        });
+
+        const driveStream = await drive.files.get(
+          { fileId, alt: 'media' },
+          { responseType: 'stream' }
+        );
+
+        driveStream.data.on('error', (streamErr) => {
+          if (!res.headersSent) res.status(500).end();
+        });
+
+        return driveStream.data.pipe(res);
+      }
+    }
+
+    // 2. Nếu video lưu cục bộ trong /uploads/
+    if (targetUrl.includes('/uploads/')) {
+      const matchLocal = targetUrl.match(/\/uploads\/([a-zA-Z0-9_.-]+)/);
+      const fname = matchLocal ? matchLocal[1] : path.basename(targetUrl);
+      const localPath = path.join(__dirname, '../../uploads', fname);
+
+      if (fs.existsSync(localPath)) {
+        const stat = fs.statSync(localPath);
+        const fileSize = stat.size;
+        const range = req.headers.range;
+
+        if (range) {
+          const parts = range.replace(/bytes=/, '').split('-');
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+          const chunkSize = end - start + 1;
+
+          res.writeHead(206, {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunkSize,
+            'Content-Type': mimeType,
+          });
+
+          const fileStream = fs.createReadStream(localPath, { start, end });
+          return fileStream.pipe(res);
+        } else {
+          res.writeHead(200, {
+            'Content-Length': fileSize,
+            'Accept-Ranges': 'bytes',
+            'Content-Type': mimeType,
+          });
+          return fs.createReadStream(localPath).pipe(res);
+        }
+      }
+    }
+
+    // Fallback chuyển hướng đến file gốc
+    return res.redirect(targetUrl);
+  } catch (error) {
+    console.error('Stream photo video error:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi phát luồng video bài viết.' });
+    }
+  }
+};
+
 module.exports = {
   uploadPhoto,
+  uploadVideoPost,
   getPhotoFeed,
   getMyPhotos,
   getLikedPhotos,
@@ -898,6 +1229,7 @@ module.exports = {
   deletePhoto,
   updatePhoto,
   getDriveImage,
+  streamPhotoVideo,
   formatImageUrl,
   enrichPhotosWithReactionsAndComments,
 };

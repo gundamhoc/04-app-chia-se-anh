@@ -596,7 +596,7 @@ const getUserProfile = async (req, res) => {
     if (isSelf) {
       const [rows] = await pool.query(
         `SELECT 
-           p.id, p.user_id, p.recipient_id, p.image_url, p.caption, p.privacy, p.created_at,
+           p.id, p.user_id, p.recipient_id, p.image_url, p.video_url, p.media_type, p.caption, p.privacy, p.created_at,
            u.full_name AS author_name, u.username AS author_username, u.avatar_url AS author_avatar
          FROM photos p
          JOIN users u ON p.user_id = u.id
@@ -609,7 +609,7 @@ const getUserProfile = async (req, res) => {
     } else if (friendship_status === 'accepted') {
       const [rows] = await pool.query(
         `SELECT 
-           p.id, p.user_id, p.recipient_id, p.image_url, p.caption, p.privacy, p.created_at,
+           p.id, p.user_id, p.recipient_id, p.image_url, p.video_url, p.media_type, p.caption, p.privacy, p.created_at,
            u.full_name AS author_name, u.username AS author_username, u.avatar_url AS author_avatar
          FROM photos p
          JOIN users u ON p.user_id = u.id
@@ -629,7 +629,7 @@ const getUserProfile = async (req, res) => {
       } else {
         const [rows] = await pool.query(
           `SELECT 
-             p.id, p.user_id, p.recipient_id, p.image_url, p.caption, p.privacy, p.created_at,
+             p.id, p.user_id, p.recipient_id, p.image_url, p.video_url, p.media_type, p.caption, p.privacy, p.created_at,
              u.full_name AS author_name, u.username AS author_username, u.avatar_url AS author_avatar
            FROM photos p
            JOIN users u ON p.user_id = u.id

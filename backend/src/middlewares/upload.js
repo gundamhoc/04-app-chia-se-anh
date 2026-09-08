@@ -113,4 +113,46 @@ const handleUploadAnyFile = (req, res, next) => {
   });
 };
 
-module.exports = { handleUploadSingle, handleUploadAnyFile, uploadMultiple };
+// Multer instance cho upload video bài đăng Locket (hỗ trợ file video và thumbnail ảnh bìa)
+const uploadPostVideo = multer({
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+}).fields([
+  { name: 'video', maxCount: 1 },
+  { name: 'thumbnail', maxCount: 1 },
+]);
+
+// Middleware wrapper xử lý upload video bài đăng
+const handleUploadPostVideo = (req, res, next) => {
+  uploadPostVideo(req, res, (err) => {
+    if (err) {
+      console.warn('⚠️ Multer upload post video error:', err.message);
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({
+            success: false,
+            message: `Video quá lớn. Tối đa ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
+          });
+        }
+        return res.status(400).json({ success: false, message: err.message });
+      }
+      return res.status(400).json({ success: false, message: err.message });
+    }
+
+    if (req.files && req.files['video'] && req.files['video'][0]) {
+      req.videoFile = req.files['video'][0];
+    }
+    if (req.files && req.files['thumbnail'] && req.files['thumbnail'][0]) {
+      req.thumbnailFile = req.files['thumbnail'][0];
+    }
+
+    next();
+  });
+};
+
+module.exports = {
+  handleUploadSingle,
+  handleUploadAnyFile,
+  handleUploadPostVideo,
+  uploadMultiple,
+};

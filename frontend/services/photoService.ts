@@ -196,5 +196,97 @@ export const photoService = {
     }
     return res.data.data;
   },
+
+  // Upload video khoảnh khắc Locket mới (hỗ trợ kèm ảnh bìa thumbnail)
+  async uploadVideoPost(
+    videoUri: string,
+    thumbnailUri?: string | null,
+    caption?: string,
+    recipientId?: number | null,
+    privacy: PhotoPrivacy = 'friends'
+  ): Promise<Photo> {
+    const formData = new FormData();
+
+    const cleanUri = videoUri.split('?')[0];
+    const rawName = cleanUri.split('/').pop() || `video_${Date.now()}.mp4`;
+    let safeBase = rawName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    if (!safeBase.endsWith('.mp4') && !safeBase.endsWith('.mov') && !safeBase.endsWith('.m4v')) {
+      safeBase = `${safeBase}.mp4`;
+    }
+
+    if (Platform.OS === 'web') {
+      try {
+        const response = await fetch(videoUri);
+        const blob = await response.blob();
+        formData.append('video', blob, safeBase);
+      } catch (e) {
+        console.warn('Lỗi chuyển đổi video URI sang blob trên web:', e);
+        formData.append('video', {
+          uri: videoUri,
+          name: safeBase,
+          type: 'video/mp4',
+        } as unknown as Blob);
+      }
+    } else {
+      formData.append('video', {
+        uri: videoUri,
+        name: safeBase,
+        type: 'video/mp4',
+      } as unknown as Blob);
+    }
+
+    // Đính kèm thumbnail ảnh bìa nếu có
+    if (thumbnailUri) {
+      const thumbName = `thumb_${Date.now()}.jpg`;
+      if (Platform.OS === 'web') {
+        try {
+          const thumbRes = await fetch(thumbnailUri);
+          const thumbBlob = await thumbRes.blob();
+          formData.append('thumbnail', thumbBlob, thumbName);
+        } catch {
+          formData.append('thumbnail', {
+            uri: thumbnailUri,
+            name: thumbName,
+            type: 'image/jpeg',
+          } as unknown as Blob);
+        }
+      } else {
+        formData.append('thumbnail', {
+          uri: thumbnailUri,
+          name: thumbName,
+          type: 'image/jpeg',
+        } as unknown as Blob);
+      }
+    }
+
+    if (caption && caption.trim().length > 0) {
+      formData.append('caption', caption.trim());
+    }
+
+    if (recipientId && !isNaN(recipientId)) {
+      formData.append('recipient_id', recipientId.toString());
+    }
+
+    if (privacy) {
+      formData.append('privacy', privacy);
+    }
+
+    const res = await api.post<ApiResponse<Photo>>('/photos/upload-video', formData, {
+      timeout: 120000,
+    });
+
+    if (!res.data.data) {
+      throw new Error(res.data.message || 'Không thể đăng video.');
+    }
+
+    return res.data.data;
+  },
+
+  // Lấy URL phát luồng video bài viết chuẩn HTTP 206 (YouTube Progressive Buffer Streaming)
+  getPhotoVideoStreamUrl(photoId: number, token?: string | null): string {
+    const baseURL = api.defaults.baseURL || '';
+    const cleanBase = baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL;
+    return `${cleanBase}/photos/video-stream/${photoId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
 };
 

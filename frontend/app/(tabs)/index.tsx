@@ -29,13 +29,14 @@ import { ShareModal } from '../../components/ShareModal';
 import { PostOptionsModal } from '../../components/PostOptionsModal';
 import { EditPostModal } from '../../components/EditPostModal';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
+import { VideoPlayerModal } from '../../components/VideoPlayerModal';
 import { FeedSkeleton } from '../../components/LoadingComponents';
 
 const EMOJIS = ['❤️', '🔥', '😂', '😮', '😢'];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { isConnected, socket } = useSocket();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
@@ -54,6 +55,7 @@ export default function HomeScreen() {
   const [activeOptionsPhoto, setActiveOptionsPhoto] = useState<Photo | null>(null);
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
   const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<Photo | null>(null);
+  const [selectedVideoPost, setSelectedVideoPost] = useState<Photo | null>(null);
 
   // Search & Filter bài viết / bài đăng
   const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -335,31 +337,78 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Photo Image (Chạm để mở chế độ xem toàn màn hình và phóng to/thu nhỏ) */}
-        <TouchableOpacity
-          style={styles.imageContainer}
-          activeOpacity={0.92}
-          onPress={() => setSelectedViewerPhoto(item)}
-        >
-          <Image
-            source={{ uri: item.image_url }}
-            style={styles.photoImage}
-            resizeMode="cover"
-            {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
-          />
+        {/* Media (Video kiểu Facebook/Zalo với Blurred Backdrop hoặc Ảnh thông thường) */}
+        {item.media_type === 'video' || item.video_url ? (
+          <TouchableOpacity
+            style={styles.videoPostContainer}
+            activeOpacity={0.92}
+            onPress={() => setSelectedVideoPost(item)}
+          >
+            {/* Lớp nền mờ (Blurred Backdrop) tự động tương thích kích thước khung hình */}
+            {item.image_url ? (
+              <Image
+                source={{ uri: item.image_url }}
+                style={StyleSheet.absoluteFill}
+                blurRadius={Platform.OS === 'ios' ? 25 : 18}
+                resizeMode="cover"
+                {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
+              />
+            ) : null}
 
-          {/* Biểu tượng góc bên phải: hiện số lượt thẻ emoji nhiều nhất và giới hạn 2 emoji */}
-          {top2Reactions.length > 0 && (
-            <View style={styles.topEmojiFloatBadge}>
-              <Text style={styles.topEmojiFloatIcons}>
-                {top2Reactions.map((r) => r.emoji).join(' ')}
-              </Text>
-              <Text style={styles.topEmojiFloatCount}>
-                {totalReactionsCount}
-              </Text>
+            {/* Lớp phủ tương phản tối */}
+            <View style={styles.videoBackdropDarkOverlay} />
+
+            {/* Nút Play trung tâm kính mờ Glassmorphism */}
+            <View style={styles.videoCenterPlayContainer}>
+              <View style={styles.videoPlayCircle}>
+                <Text style={styles.videoPlayTriangle}>▶</Text>
+              </View>
+              <Text style={styles.videoTapToPlayLabel}>Nhấn để phát video</Text>
             </View>
-          )}
-        </TouchableOpacity>
+
+            {/* Huy hiệu Video góc trên */}
+            <View style={styles.videoTopLeftBadge}>
+              <Text style={styles.videoTopLeftText}>📹 Video</Text>
+            </View>
+
+            {/* Biểu tượng góc bên phải: hiện số lượt thẻ emoji nhiều nhất */}
+            {top2Reactions.length > 0 && (
+              <View style={styles.topEmojiFloatBadge}>
+                <Text style={styles.topEmojiFloatIcons}>
+                  {top2Reactions.map((r) => r.emoji).join(' ')}
+                </Text>
+                <Text style={styles.topEmojiFloatCount}>
+                  {totalReactionsCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.imageContainer}
+            activeOpacity={0.92}
+            onPress={() => setSelectedViewerPhoto(item)}
+          >
+            <Image
+              source={{ uri: item.image_url }}
+              style={styles.photoImage}
+              resizeMode="cover"
+              {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
+            />
+
+            {/* Biểu tượng góc bên phải: hiện số lượt thẻ emoji nhiều nhất và giới hạn 2 emoji */}
+            {top2Reactions.length > 0 && (
+              <View style={styles.topEmojiFloatBadge}>
+                <Text style={styles.topEmojiFloatIcons}>
+                  {top2Reactions.map((r) => r.emoji).join(' ')}
+                </Text>
+                <Text style={styles.topEmojiFloatCount}>
+                  {totalReactionsCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
 
         {/* Caption */}
         {item.caption ? (
@@ -810,6 +859,15 @@ export default function HomeScreen() {
         photo={selectedViewerPhoto}
         onClose={() => setSelectedViewerPhoto(null)}
       />
+
+      {/* VideoPlayerModal (Xem video với luồng phát HTTP 206) */}
+      <VideoPlayerModal
+        visible={!!selectedVideoPost}
+        videoUrl={selectedVideoPost ? photoService.getPhotoVideoStreamUrl(selectedVideoPost.id, token) : null}
+        thumbnailUrl={selectedVideoPost?.image_url}
+        fileName={selectedVideoPost?.caption || `Video của ${selectedVideoPost?.author_name || 'bạn bè'}`}
+        onClose={() => setSelectedVideoPost(null)}
+      />
     </View>
   );
 }
@@ -982,6 +1040,74 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     width: '100%',
     height: 380,
     backgroundColor: '#000000',
+  },
+  videoPostContainer: {
+    width: '100%',
+    height: 380,
+    backgroundColor: '#0A0A10',
+    overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoBackdropDarkOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.45)' : 'rgba(0, 0, 0, 0.35)',
+  },
+  videoCenterPlayContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+  },
+  videoPlayCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.85)',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    marginBottom: 8,
+  },
+  videoPlayTriangle: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    marginLeft: 4,
+  },
+  videoTapToPlayLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  videoTopLeftBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    zIndex: 2,
+  },
+  videoTopLeftText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFFFFF',
   },
   photoImage: {
     width: '100%',

@@ -269,6 +269,27 @@ const initDatabase = async (pool) => {
       console.warn('⚠️ [DB Init] Kiểm tra cột cover_url:', colErr.message);
     }
 
+    // Tự động kiểm tra và thêm cột video_url và media_type vào bảng photos (Locket Feed) nếu chưa có
+    try {
+      const [videoCols] = await pool.query("SHOW COLUMNS FROM photos LIKE 'video_url'");
+      if (videoCols.length === 0) {
+        await pool.query("ALTER TABLE photos ADD COLUMN video_url VARCHAR(500) DEFAULT NULL AFTER image_url");
+        console.log('✅ [DB Init] Đã bổ sung cột video_url vào bảng photos.');
+      }
+    } catch (colErr) {
+      console.warn('⚠️ [DB Init] Kiểm tra cột video_url:', colErr.message);
+    }
+
+    try {
+      const [mediaTypeCols] = await pool.query("SHOW COLUMNS FROM photos LIKE 'media_type'");
+      if (mediaTypeCols.length === 0) {
+        await pool.query("ALTER TABLE photos ADD COLUMN media_type ENUM('image', 'video') NOT NULL DEFAULT 'image' AFTER video_url");
+        console.log('✅ [DB Init] Đã bổ sung cột media_type vào bảng photos.');
+      }
+    } catch (colErr) {
+      console.warn('⚠️ [DB Init] Kiểm tra cột media_type:', colErr.message);
+    }
+
     console.log('✅ [DB Init] Toàn bộ các bảng đã sẵn sàng & đồng bộ 100%!');
   } catch (err) {
     console.error('⚠️ [DB Init Error]:', err.message);

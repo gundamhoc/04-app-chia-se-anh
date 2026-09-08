@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware } = require('../middlewares/auth');
-const { handleUploadSingle } = require('../middlewares/upload');
+const { handleUploadSingle, handleUploadPostVideo } = require('../middlewares/upload');
 const {
   uploadPhoto,
+  uploadVideoPost,
   getPhotoFeed,
   getMyPhotos,
   getLikedPhotos,
@@ -15,6 +16,7 @@ const {
   deletePhoto,
   updatePhoto,
   getDriveImage,
+  streamPhotoVideo,
 } = require('../controllers/photoController');
 const {
   getComments,
@@ -26,6 +28,9 @@ const {
 // Phục vụ ảnh Google Drive trực tiếp (public endpoint cho thẻ <Image /> / <img> không cần JWT header)
 router.get('/drive/:fileId', getDriveImage);
 
+// Phục vụ stream video bài viết chuẩn HTTP 206 (xác thực qua token query hoặc Bearer)
+router.get('/video-stream/:photoId', streamPhotoVideo);
+
 // Tất cả các route bên dưới đều yêu cầu xác thực JWT
 router.use(authMiddleware);
 
@@ -36,8 +41,9 @@ router.get('/liked', getLikedPhotos);
 router.get('/saved', getSavedPhotos);
 router.get('/reposts', getRepostedPhotos);
 
-// 2. Upload ảnh mới (Multer single 'image')
+// 2. Upload bài viết mới (Ảnh hoặc Video kèm Thumbnail)
 router.post('/upload', handleUploadSingle, uploadPhoto);
+router.post('/upload-video', handleUploadPostVideo, uploadVideoPost);
 
 // 3. Thả / bỏ thả biểu tượng cảm xúc bài viết & Lưu / Đăng lại
 router.post('/:id/react', toggleReaction);

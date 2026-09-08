@@ -25,9 +25,11 @@ import { useToast } from '../../hooks/useToast';
 import { useAuthStore } from '../../store/authStore';
 import { useSocket } from '../../hooks/useSocket';
 import { friendService } from '../../services/friendService';
+import { photoService } from '../../services/photoService';
 import { BASE_URL } from '../../services/api';
 import { Photo, OtherUserProfile, FriendshipStatus } from '../../types';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
+import { VideoPlayerModal } from '../../components/VideoPlayerModal';
 
 const getAvatarUrl = (avatarUrl?: string | null): string | null => {
   if (!avatarUrl) return null;
@@ -59,8 +61,9 @@ export default function OtherUserProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Modal xem ảnh toàn màn hình
+  // Modal xem ảnh & video toàn màn hình
   const [selectedPhotoForView, setSelectedPhotoForView] = useState<Photo | null>(null);
+  const [selectedVideoForView, setSelectedVideoForView] = useState<Photo | null>(null);
 
   // Kích thước ô lưới ảnh (3 cột)
   const gridItemSize = useMemo(() => {
@@ -527,26 +530,34 @@ export default function OtherUserProfileScreen() {
                   keyExtractor={(item) => `photo_${item.id}`}
                   numColumns={3}
                   scrollEnabled={false}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
-                      onPress={() => setSelectedPhotoForView(item)}
-                      activeOpacity={0.8}
-                    >
-                      <Image
-                        source={{ uri: item.image_url }}
-                        style={styles.gridImage}
-                        resizeMode="cover"
-                      />
-                      {(item.total_reactions ?? 0) > 0 && (
-                        <View style={styles.reactionOverlay}>
-                          <Text style={styles.reactionOverlayText}>
-                            ❤️ {item.total_reactions}
-                          </Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  )}
+                  renderItem={({ item }) => {
+                    const isVideo = item.media_type === 'video' || Boolean(item.video_url);
+                    return (
+                      <TouchableOpacity
+                        style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
+                        onPress={() => (isVideo ? setSelectedVideoForView(item) : setSelectedPhotoForView(item))}
+                        activeOpacity={0.8}
+                      >
+                        <Image
+                          source={{ uri: item.image_url }}
+                          style={styles.gridImage}
+                          resizeMode="cover"
+                        />
+                        {isVideo && (
+                          <View style={styles.gridVideoBadge}>
+                            <Text style={styles.gridVideoBadgeText}>▶</Text>
+                          </View>
+                        )}
+                        {(item.total_reactions ?? 0) > 0 && (
+                          <View style={styles.reactionOverlay}>
+                            <Text style={styles.reactionOverlayText}>
+                              ❤️ {item.total_reactions}
+                            </Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
                 />
               </View>
             )}
@@ -565,6 +576,15 @@ export default function OtherUserProfileScreen() {
         visible={!!selectedPhotoForView}
         photo={selectedPhotoForView}
         onClose={() => setSelectedPhotoForView(null)}
+      />
+
+      {/* VideoPlayerModal (Xem video) */}
+      <VideoPlayerModal
+        visible={Boolean(selectedVideoForView)}
+        videoUrl={selectedVideoForView ? photoService.getPhotoVideoStreamUrl(selectedVideoForView.id, useAuthStore.getState().token) : null}
+        thumbnailUrl={selectedVideoForView?.image_url}
+        fileName={selectedVideoForView?.caption || 'Video'}
+        onClose={() => setSelectedVideoForView(null)}
       />
     </View>
   );
@@ -961,5 +981,23 @@ const createStyles = (C: ColorScheme, isDark: boolean, windowWidth: number) =>
       color: '#FFFFFF',
       fontSize: 11,
       fontWeight: '600',
+    },
+    gridVideoBadge: {
+      position: 'absolute',
+      top: 4,
+      left: 4,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.4)',
+    },
+    gridVideoBadgeText: {
+      fontSize: 10,
+      color: '#FFFFFF',
+      marginLeft: 1,
     },
   });

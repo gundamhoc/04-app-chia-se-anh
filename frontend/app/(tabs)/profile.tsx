@@ -31,6 +31,7 @@ import { Photo, Friend, User } from '../../types';
 import { SettingsModal, maskEmail } from '../../components/SettingsModal';
 import { EditProfileModal } from '../../components/EditProfileModal';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
+import { VideoPlayerModal } from '../../components/VideoPlayerModal';
 
 type ProfileTab = 'posts' | 'liked' | 'saved' | 'reposts';
 
@@ -56,6 +57,7 @@ export default function ProfileScreen() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [selectedPhotoForView, setSelectedPhotoForView] = useState<Photo | null>(null);
+  const [selectedVideoForView, setSelectedVideoForView] = useState<Photo | null>(null);
 
   // Tabs state: posts | liked | saved | reposts
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
@@ -496,26 +498,34 @@ export default function ProfileScreen() {
                       keyExtractor={(item) => `photo_${item.id}`}
                       numColumns={3}
                       scrollEnabled={false}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
-                          onPress={() => setSelectedPhotoForView(item)}
-                          activeOpacity={0.8}
-                        >
-                          <Image
-                            source={{ uri: item.image_url }}
-                            style={styles.gridImage}
-                            resizeMode="cover"
-                          />
-                          {(item.total_reactions ?? 0) > 0 && (
-                            <View style={styles.reactionOverlay}>
-                              <Text style={styles.reactionOverlayText}>
-                                ❤️ {item.total_reactions}
-                              </Text>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      )}
+                      renderItem={({ item }) => {
+                        const isVideo = item.media_type === 'video' || Boolean(item.video_url);
+                        return (
+                          <TouchableOpacity
+                            style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
+                            onPress={() => (isVideo ? setSelectedVideoForView(item) : setSelectedPhotoForView(item))}
+                            activeOpacity={0.8}
+                          >
+                            <Image
+                              source={{ uri: item.image_url }}
+                              style={styles.gridImage}
+                              resizeMode="cover"
+                            />
+                            {isVideo && (
+                              <View style={styles.gridVideoBadge}>
+                                <Text style={styles.gridVideoBadgeText}>▶</Text>
+                              </View>
+                            )}
+                            {(item.total_reactions ?? 0) > 0 && (
+                              <View style={styles.reactionOverlay}>
+                                <Text style={styles.reactionOverlayText}>
+                                  ❤️ {item.total_reactions}
+                                </Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      }}
                     />
                   ) : (
                     <View style={styles.emptyCard}>
@@ -545,22 +555,30 @@ export default function ProfileScreen() {
                       keyExtractor={(item) => `liked_${item.id}`}
                       numColumns={3}
                       scrollEnabled={false}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
-                          onPress={() => setSelectedPhotoForView(item)}
-                          activeOpacity={0.8}
-                        >
-                          <Image
-                            source={{ uri: item.image_url }}
-                            style={styles.gridImage}
-                            resizeMode="cover"
-                          />
-                          <View style={styles.likedHeartBadge}>
-                            <Text style={styles.likedHeartText}>❤️</Text>
-                          </View>
-                        </TouchableOpacity>
-                      )}
+                      renderItem={({ item }) => {
+                        const isVideo = item.media_type === 'video' || Boolean(item.video_url);
+                        return (
+                          <TouchableOpacity
+                            style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
+                            onPress={() => (isVideo ? setSelectedVideoForView(item) : setSelectedPhotoForView(item))}
+                            activeOpacity={0.8}
+                          >
+                            <Image
+                              source={{ uri: item.image_url }}
+                              style={styles.gridImage}
+                              resizeMode="cover"
+                            />
+                            {isVideo && (
+                              <View style={styles.gridVideoBadge}>
+                                <Text style={styles.gridVideoBadgeText}>▶</Text>
+                              </View>
+                            )}
+                            <View style={styles.likedHeartBadge}>
+                              <Text style={styles.likedHeartText}>❤️</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      }}
                     />
                   ) : (
                     <View style={styles.emptyCard}>
@@ -590,22 +608,30 @@ export default function ProfileScreen() {
                       keyExtractor={(item) => `saved_${item.id}`}
                       numColumns={3}
                       scrollEnabled={false}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
-                          onPress={() => setSelectedPhotoForView(item)}
-                          activeOpacity={0.8}
-                        >
-                          <Image
-                            source={{ uri: item.image_url }}
-                            style={styles.gridImage}
-                            resizeMode="cover"
-                          />
-                          <View style={styles.savedBadge}>
-                            <Text style={styles.badgeEmoji}>🔖</Text>
-                          </View>
-                        </TouchableOpacity>
-                      )}
+                      renderItem={({ item }) => {
+                        const isVideo = item.media_type === 'video' || Boolean(item.video_url);
+                        return (
+                          <TouchableOpacity
+                            style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
+                            onPress={() => (isVideo ? setSelectedVideoForView(item) : setSelectedPhotoForView(item))}
+                            activeOpacity={0.8}
+                          >
+                            <Image
+                              source={{ uri: item.image_url }}
+                              style={styles.gridImage}
+                              resizeMode="cover"
+                            />
+                            {isVideo && (
+                              <View style={styles.gridVideoBadge}>
+                                <Text style={styles.gridVideoBadgeText}>▶</Text>
+                              </View>
+                            )}
+                            <View style={styles.savedBadge}>
+                              <Text style={styles.badgeEmoji}>🔖</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      }}
                     />
                   ) : (
                     <View style={styles.emptyCard}>
@@ -635,22 +661,30 @@ export default function ProfileScreen() {
                       keyExtractor={(item) => `repost_${item.id}`}
                       numColumns={3}
                       scrollEnabled={false}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity
-                          style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
-                          onPress={() => setSelectedPhotoForView(item)}
-                          activeOpacity={0.8}
-                        >
-                          <Image
-                            source={{ uri: item.image_url }}
-                            style={styles.gridImage}
-                            resizeMode="cover"
-                          />
-                          <View style={styles.repostBadge}>
-                            <Text style={styles.badgeEmoji}>🔁</Text>
-                          </View>
-                        </TouchableOpacity>
-                      )}
+                      renderItem={({ item }) => {
+                        const isVideo = item.media_type === 'video' || Boolean(item.video_url);
+                        return (
+                          <TouchableOpacity
+                            style={[styles.gridCell, { width: gridItemSize, height: gridItemSize }]}
+                            onPress={() => (isVideo ? setSelectedVideoForView(item) : setSelectedPhotoForView(item))}
+                            activeOpacity={0.8}
+                          >
+                            <Image
+                              source={{ uri: item.image_url }}
+                              style={styles.gridImage}
+                              resizeMode="cover"
+                            />
+                            {isVideo && (
+                              <View style={styles.gridVideoBadge}>
+                                <Text style={styles.gridVideoBadgeText}>▶</Text>
+                              </View>
+                            )}
+                            <View style={styles.repostBadge}>
+                              <Text style={styles.badgeEmoji}>🔁</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      }}
                     />
                   ) : (
                     <View style={styles.emptyCard}>
@@ -697,6 +731,15 @@ export default function ProfileScreen() {
         visible={Boolean(selectedPhotoForView)}
         photo={selectedPhotoForView}
         onClose={() => setSelectedPhotoForView(null)}
+      />
+
+      {/* VideoPlayerModal (Xem video) */}
+      <VideoPlayerModal
+        visible={Boolean(selectedVideoForView)}
+        videoUrl={selectedVideoForView ? photoService.getPhotoVideoStreamUrl(selectedVideoForView.id, useAuthStore.getState().token) : null}
+        thumbnailUrl={selectedVideoForView?.image_url}
+        fileName={selectedVideoForView?.caption || 'Video'}
+        onClose={() => setSelectedVideoForView(null)}
       />
     </View>
   );
@@ -1146,6 +1189,24 @@ const createStyles = (C: ColorScheme, isDark: boolean, windowWidth: number) =>
       borderRadius: 11,
       justifyContent: 'center',
       alignItems: 'center',
+    },
+    gridVideoBadge: {
+      position: 'absolute',
+      top: 4,
+      left: 4,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.4)',
+    },
+    gridVideoBadgeText: {
+      fontSize: 10,
+      color: '#FFFFFF',
+      marginLeft: 1,
     },
     repostBadge: {
       position: 'absolute',

@@ -117,6 +117,8 @@ export interface Photo {
   user_id: number;
   recipient_id: number | null;
   image_url: string;
+  video_url?: string | null;
+  media_type?: 'image' | 'video';
   caption: string | null;
   privacy?: PhotoPrivacy;
   created_at: string;
