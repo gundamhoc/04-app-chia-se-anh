@@ -146,13 +146,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             nativeControls={true}
           />
         </View>
-
-        {/* Dòng hướng dẫn dưới cùng */}
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <Text style={styles.footerHint}>
-            ⚡ Tải tới đâu phát tới đó • Không lưu bộ nhớ máy
-          </Text>
-        </View>
       </View>
     </Modal>
   );
@@ -162,7 +155,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-    justifyContent: 'space-between',
   },
   header: {
     flexDirection: 'row',
@@ -229,14 +221,5 @@ const styles = StyleSheet.create({
   videoPlayer: {
     width: '100%',
     height: '100%',
-  },
-  footer: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  footerHint: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 12,
   },
 });
