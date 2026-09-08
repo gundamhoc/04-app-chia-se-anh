@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, View, Text } from 'react-native';
-import { Colors } from '../../constants/Colors';
+import { StyleSheet, View, Text, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useI18n } from '../../utils/i18n';
 
@@ -23,20 +23,38 @@ function TabIcon({
 }
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const { t } = useI18n();
+
+  // Đảm bảo khoảng đệm an toàn chuẩn xác:
+  // - Android: 3 nút điều hướng hệ thống (||| O <) hoặc thanh vuốt cử chỉ (insets.bottom)
+  // - iOS: Home indicator bar (insets.bottom)
+  const bottomInset = insets.bottom;
+  const bottomPadding = bottomInset > 0 ? bottomInset + 2 : (Platform.OS === 'android' ? 10 : 8);
+  const tabHeight = 56 + bottomPadding;
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: [
-          styles.tabBar,
-          {
-            backgroundColor: colors.card,
-            borderTopColor: colors.border,
-          },
-        ],
+        tabBarStyle: {
+          height: tabHeight,
+          paddingBottom: bottomPadding,
+          paddingTop: 6,
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: isDark ? 0.3 : 0.05,
+          shadowRadius: 4,
+        },
+        tabBarItemStyle: {
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.tabIconDefault,
         tabBarShowLabel: false,
@@ -84,12 +102,6 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  tabBar: {
-    height: 70,
-    paddingBottom: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-  },
   tabIcon: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -107,3 +119,4 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 });
+

@@ -50,7 +50,7 @@ export default function ChatScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const { socket, isConnected } = useSocket();
+  const { socket, isConnected, isUserOnline } = useSocket();
   const { showToast } = useToast();
   const { colors: C, isDark } = useTheme();
   const { t, language } = useI18n();
@@ -854,7 +854,16 @@ export default function ChatScreen() {
           <Text style={styles.backArrow}>←</Text>
         </TouchableOpacity>
 
-        <View style={styles.headerProfile}>
+        <TouchableOpacity
+          style={styles.headerProfile}
+          onPress={() =>
+            router.push({
+              pathname: '/user/[id]',
+              params: { id: friendId.toString() },
+            })
+          }
+          activeOpacity={0.7}
+        >
           <View style={styles.headerAvatarContainer}>
             <Image
               source={
@@ -865,7 +874,7 @@ export default function ChatScreen() {
               style={styles.headerAvatar}
               {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}
             />
-            {isConnected && <View style={styles.headerOnlineDot} />}
+            {isUserOnline(friendId) && <View style={styles.headerOnlineDot} />}
           </View>
 
           <View style={styles.headerInfo}>
@@ -879,12 +888,12 @@ export default function ChatScreen() {
             <Text style={[styles.headerStatus, isFriendTyping && styles.headerStatusTyping]}>
               {isFriendTyping
                 ? t('typing_status')
-                : isConnected
+                : isUserOnline(friendId)
                 ? t('online')
                 : t('offline')}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Nút Cài Đặt Cuộc Trò Chuyện (Bánh răng ⚙️ gom 4 chức năng) */}
         <TouchableOpacity

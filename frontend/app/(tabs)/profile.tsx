@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
 import { ColorScheme } from '../../constants/Colors';
 import { useTheme } from '../../context/ThemeContext';
 import { useI18n } from '../../utils/i18n';
@@ -129,6 +130,41 @@ export default function ProfileScreen() {
     loadProfileData();
   };
 
+  const [updatingCover, setUpdatingCover] = useState(false);
+
+  // Chọn và cập nhật ảnh bìa hồ sơ
+  const handlePickCover = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('warning', 'Quyền truy cập thư viện ảnh bị từ chối.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setUpdatingCover(true);
+        showToast('info', 'Đang tải ảnh bìa lên... ⏳');
+        const res = await authService.updateCover(result.assets[0].uri);
+        if (res?.cover_url && user) {
+          updateUser({ ...user, cover_url: res.cover_url });
+          showToast('success', 'Cập nhật ảnh bìa thành công! ✨');
+        }
+      }
+    } catch (error) {
+      console.warn('Pick cover error:', error);
+      showToast('error', 'Không thể cập nhật ảnh bìa.');
+    } finally {
+      setUpdatingCover(false);
+    }
+  };
+
   // Chia sẻ hồ sơ
   const handleShareProfile = async () => {
     const profileUrl = `https://masita.app/u/${user?.username}`;
@@ -193,8 +229,40 @@ export default function ProfileScreen() {
 
         {/* 2. Profile Hero Section */}
         <View style={styles.heroCard}>
-          {/* Avatar with Verified Badge & Quick Edit Button */}
-          <View style={styles.avatarRow}>
+          {/* Cover Banner (Ảnh bìa nằm ngang) */}
+          <View style={styles.coverContainer}>
+            {(() => {
+              const coverUri = getAvatarUrl(user?.cover_url);
+              return coverUri ? (
+                <Image source={{ uri: coverUri }} style={styles.coverImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.defaultCover}>
+                  <Text style={styles.defaultCoverEmoji}>✨ 📸 🌟</Text>
+                </View>
+              );
+            })()}
+
+            {/* Nút Đổi ảnh bìa 📷 */}
+            <TouchableOpacity
+              style={styles.editCoverButton}
+              onPress={handlePickCover}
+              disabled={updatingCover}
+              activeOpacity={0.8}
+            >
+              {updatingCover ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Text style={styles.editCoverIcon}>📷</Text>
+                  <Text style={styles.editCoverText}>Đổi ảnh bìa</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.heroContent}>
+            {/* Avatar with Verified Badge & Quick Edit Button (Đè 50% lên ảnh bìa) */}
+            <View style={styles.avatarRow}>
             <View style={styles.avatarContainer}>
               {(() => {
                 const avatarUri = getAvatarUrl(user?.avatar_url);
@@ -361,6 +429,7 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
         </View>
+      </View>
 
         {/* 6. Horizontal Sub-Tabs Bar (Bài viết | Đã thích | Lưu bài viết | Đăng lại) */}
         <View style={styles.tabsBar}>
@@ -679,10 +748,9 @@ const createStyles = (C: ColorScheme, isDark: boolean, windowWidth: number) =>
       backgroundColor: C.card,
       marginHorizontal: 16,
       borderRadius: 24,
-      padding: 20,
+      overflow: 'hidden',
       borderWidth: 1,
       borderColor: C.border,
-      alignItems: 'center',
       marginBottom: 16,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
@@ -690,28 +758,79 @@ const createStyles = (C: ColorScheme, isDark: boolean, windowWidth: number) =>
       shadowRadius: 10,
       elevation: 4,
     },
+    coverContainer: {
+      width: '100%',
+      height: 140,
+      backgroundColor: isDark ? '#221D38' : '#ECE8FF',
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    coverImage: {
+      width: '100%',
+      height: '100%',
+    },
+    defaultCover: {
+      width: '100%',
+      height: '100%',
+      backgroundColor: isDark ? '#221D38' : '#ECE8FF',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    defaultCoverEmoji: {
+      fontSize: 26,
+      letterSpacing: 6,
+      opacity: 0.5,
+    },
+    editCoverButton: {
+      position: 'absolute',
+      bottom: 10,
+      right: 12,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    editCoverIcon: {
+      fontSize: 14,
+    },
+    editCoverText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontFamily: 'Inter_600SemiBold',
+    },
+    heroContent: {
+      paddingHorizontal: 20,
+      paddingBottom: 20,
+      alignItems: 'center',
+      width: '100%',
+    },
     avatarRow: {
+      marginTop: -48,
       marginBottom: 14,
+      zIndex: 10,
     },
     avatarContainer: {
       position: 'relative',
     },
     avatarImage: {
-      width: 92,
-      height: 92,
-      borderRadius: 46,
-      borderWidth: 3,
-      borderColor: C.primary,
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      borderWidth: 4,
+      borderColor: C.card,
     },
     avatarPlaceholder: {
-      width: 92,
-      height: 92,
-      borderRadius: 46,
+      width: 96,
+      height: 96,
+      borderRadius: 48,
       backgroundColor: C.primary,
       justifyContent: 'center',
       alignItems: 'center',
-      borderWidth: 3,
-      borderColor: 'rgba(255, 255, 255, 0.2)',
+      borderWidth: 4,
+      borderColor: C.card,
       shadowColor: C.primary,
       shadowOffset: { width: 0, height: 6 },
       shadowOpacity: 0.4,

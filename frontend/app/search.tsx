@@ -164,20 +164,31 @@ export default function SearchScreen() {
 
     return (
       <View style={styles.userCard}>
-        <Image source={avatarUri} style={styles.avatar} />
-        <View style={styles.userInfo}>
-          <Text style={styles.fullName} numberOfLines={1}>
-            {item.full_name || item.username}
-          </Text>
-          <Text style={styles.username} numberOfLines={1}>
-            @{item.username}
-          </Text>
-          {item.bio ? (
-            <Text style={styles.bio} numberOfLines={1}>
-              {item.bio}
+        <TouchableOpacity
+          style={styles.userCardMainTouch}
+          onPress={() =>
+            router.push({
+              pathname: '/user/[id]',
+              params: { id: item.id.toString() },
+            })
+          }
+          activeOpacity={0.7}
+        >
+          <Image source={avatarUri} style={styles.avatar} />
+          <View style={styles.userInfo}>
+            <Text style={styles.fullName} numberOfLines={1}>
+              {item.full_name || item.username}
             </Text>
-          ) : null}
-        </View>
+            <Text style={styles.username} numberOfLines={1}>
+              @{item.username}
+            </Text>
+            {item.bio ? (
+              <Text style={styles.bio} numberOfLines={1}>
+                {item.bio}
+              </Text>
+            ) : null}
+          </View>
+        </TouchableOpacity>
         <View style={styles.actionContainer}>{renderActionButton(item)}</View>
       </View>
     );
@@ -335,6 +346,11 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: C.border,
+  },
+  userCardMainTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   avatar: {
     width: 52,

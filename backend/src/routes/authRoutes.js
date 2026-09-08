@@ -6,6 +6,7 @@ const {
   getProfile,
   updateProfile,
   updateAvatar,
+  updateCover,
   forgotPassword,
   updateUsername,
   updateEmail,
@@ -32,6 +33,7 @@ router.post('/forgot-password', forgotPassword);
 router.get('/profile', authMiddleware, getProfile);
 router.put('/profile', authMiddleware, updateProfile);
 router.put('/avatar', authMiddleware, handleUploadSingle, updateAvatar);
+router.put('/cover', authMiddleware, handleUploadSingle, updateCover);
 router.put('/username', authMiddleware, updateUsername);
 router.put('/email', authMiddleware, updateEmail);
 router.put('/change-password', authMiddleware, changePassword);

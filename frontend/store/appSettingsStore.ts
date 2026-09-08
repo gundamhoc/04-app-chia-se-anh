@@ -58,7 +58,7 @@ interface AppSettingsState extends AppSettings {
 const STORAGE_KEY = 'app_settings_v1';
 
 const DEFAULT_SETTINGS: AppSettings = {
-  themeMode: 'dark',
+  themeMode: 'light',
   notifyMessages: true,
   notifyPosts: true,
   notifyInteractions: true,
@@ -66,7 +66,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   highContrast: false,
   reduceMotion: false,
   largeText: false,
-  appVersion: '1.2.0',
+  appVersion: '1.2.7',
   otaChannel: 'production',
   autoCheckOta: true,
   lastOtaCheckTime: null,

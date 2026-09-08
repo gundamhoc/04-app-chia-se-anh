@@ -280,6 +280,76 @@ export const authService = {
 
     return res.data.data;
   },
+
+  /**
+   * Cập nhật ảnh bìa hồ sơ (Cover Banner)
+   * PUT /api/auth/cover
+   */
+  updateCover: async (imageUri: string): Promise<{ cover_url: string }> => {
+    let processedUri = imageUri;
+    try {
+      processedUri = await compressImage(imageUri, { maxWidth: 1200, quality: 0.85 });
+    } catch (compressErr) {
+      console.warn('Lỗi nén ảnh bìa, dùng ảnh gốc:', compressErr);
+    }
+
+    const formData = new FormData();
+    let filename = `cover_${Date.now()}.jpg`;
+    let mimeType = 'image/jpeg';
+
+    if (processedUri.startsWith('data:')) {
+      const mimeMatch = processedUri.match(/^data:([^;]+);/);
+      if (mimeMatch && mimeMatch[1]) {
+        mimeType = mimeMatch[1];
+        const sub = mimeType.split('/')[1] || 'jpeg';
+        const safeExt = sub === 'jpeg' ? 'jpg' : sub;
+        filename = `cover_${Date.now()}.${safeExt}`;
+      }
+    } else {
+      const cleanUri = processedUri.split('?')[0];
+      const rawName = cleanUri.split('/').pop() || `cover_${Date.now()}`;
+      const safeBase = rawName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const extMatch = safeBase.match(/\.([a-zA-Z0-9]+)$/);
+      if (extMatch && extMatch[1]) {
+        const ext = extMatch[1].toLowerCase();
+        filename = safeBase;
+        mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+      } else {
+        filename = `${safeBase}.jpg`;
+        mimeType = 'image/jpeg';
+      }
+    }
+
+    if (Platform.OS === 'web') {
+      try {
+        const response = await fetch(processedUri);
+        const blob = await response.blob();
+        formData.append('image', blob, filename);
+      } catch (e) {
+        formData.append('image', {
+          uri: processedUri,
+          name: filename,
+          type: mimeType,
+        } as unknown as Blob);
+      }
+    } else {
+      formData.append('image', {
+        uri: processedUri,
+        name: filename,
+        type: mimeType,
+      } as unknown as Blob);
+    }
+
+    const res = await api.put<ApiResponse<{ cover_url: string }>>('/auth/cover', formData, {
+      timeout: 60000,
+    });
+
+    if (!res.data.data) {
+      throw new Error(res.data.message || 'Không thể cập nhật ảnh bìa.');
+    }
+
+    return res.data.data;
+  },
 };
 
 export default authService;

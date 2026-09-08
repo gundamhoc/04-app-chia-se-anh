@@ -19,6 +19,7 @@ const initDatabase = async (pool) => {
       password_hash VARCHAR(255) NOT NULL,
       full_name VARCHAR(100) DEFAULT NULL,
       avatar_url VARCHAR(500) DEFAULT NULL,
+      cover_url VARCHAR(500) DEFAULT NULL,
       bio TEXT DEFAULT NULL,
       is_active TINYINT(1) NOT NULL DEFAULT 1,
       is_private_account TINYINT(1) NOT NULL DEFAULT 0,
@@ -256,6 +257,18 @@ const initDatabase = async (pool) => {
     for (const sql of queries) {
       await pool.query(sql);
     }
+
+    // Tự động kiểm tra và thêm cột cover_url vào bảng users nếu chưa có
+    try {
+      const [cols] = await pool.query("SHOW COLUMNS FROM users LIKE 'cover_url'");
+      if (cols.length === 0) {
+        await pool.query("ALTER TABLE users ADD COLUMN cover_url VARCHAR(500) DEFAULT NULL AFTER avatar_url");
+        console.log('✅ [DB Init] Đã bổ sung cột cover_url vào bảng users.');
+      }
+    } catch (colErr) {
+      console.warn('⚠️ [DB Init] Kiểm tra cột cover_url:', colErr.message);
+    }
+
     console.log('✅ [DB Init] Toàn bộ các bảng đã sẵn sàng & đồng bộ 100%!');
   } catch (err) {
     console.error('⚠️ [DB Init Error]:', err.message);

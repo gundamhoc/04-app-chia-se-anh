@@ -30,7 +30,7 @@ import { ConversationSkeleton } from '../../components/LoadingComponents';
 export default function MessagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isConnected, socket } = useSocket();
+  const { isConnected, socket, isUserOnline } = useSocket();
   const { colors: C, isDark } = useTheme();
   const { t, formatTime: formatTimeI18n } = useI18n();
   const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
@@ -250,7 +250,7 @@ export default function MessagesScreen() {
             style={styles.avatar}
             {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}
           />
-          {isConnected && <View style={styles.onlineBadge} />}
+          {isUserOnline(item.friend_id) && <View style={styles.onlineBadge} />}
         </View>
 
         <View style={styles.convDetails}>
@@ -457,7 +457,7 @@ export default function MessagesScreen() {
                       style={styles.quickAvatar}
                       {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}
                     />
-                    {isConnected && <View style={styles.quickOnlineDot} />}
+                    {isUserOnline(f.id) && <View style={styles.quickOnlineDot} />}
                   </View>
                   <Text style={styles.quickFriendName} numberOfLines={1}>
                     {f.full_name || f.username}

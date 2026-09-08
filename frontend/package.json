@@ -38,8 +38,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:apk": "eas build -p android --profile preview",
-    "update:ota": "eas update --branch preview --message \"OTA update\" --environment preview"
+    "build:apk": "npx -y eas-cli build -p android --profile preview",
+    "update:ota": "npx -y eas-cli update --branch preview --message \"OTA update\" --environment preview"
   },
   "private": true
 }

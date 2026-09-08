@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
-const { sendNotificationToUser } = require('../sockets/socketHandler');
+const { sendNotificationToUser, isUserOnline } = require('../sockets/socketHandler');
+const { enrichPhotosWithReactionsAndComments, formatImageUrl } = require('./photoController');
 
 // ============================================================
 // Controller: Quản lý Bạn bè
@@ -88,6 +89,7 @@ const searchUsers = async (req, res) => {
         avatar_url,
         bio: u.bio,
         friendship_status,
+        is_online: isUserOnline(u.id),
       };
     });
 
@@ -356,6 +358,7 @@ const getFriendsList = async (req, res) => {
         avatar_url,
         bio: u.bio,
         friendship_date: u.friendship_date,
+        is_online: isUserOnline(u.id),
       };
     });
 
@@ -484,6 +487,7 @@ const getSuggestions = async (req, res) => {
         avatar_url,
         bio: u.bio,
         friendship_status: 'none',
+        is_online: isUserOnline(u.id),
       };
     });
 
@@ -501,6 +505,181 @@ const getSuggestions = async (req, res) => {
   }
 };
 
+/**
+ * 8. Xem trang cá nhân người khác
+ * GET /api/friends/profile/:id
+ */
+const getUserProfile = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const targetUserId = parseInt(req.params.id, 10);
+
+    if (!targetUserId || isNaN(targetUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID người dùng không hợp lệ.',
+      });
+    }
+
+    const protocol = req.protocol;
+    const host = req.get('host');
+
+    // 1. Lấy thông tin tài khoản người dùng
+    const [userRows] = await pool.query(
+      `SELECT id, username, email, full_name, avatar_url, cover_url, bio, is_active, is_private_account, created_at 
+       FROM users 
+       WHERE id = ?`,
+      [targetUserId]
+    );
+
+    if (userRows.length === 0 || userRows[0].is_active === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng này hoặc tài khoản đã bị vô hiệu hóa.',
+      });
+    }
+
+    const targetUser = userRows[0];
+    const formattedAvatar = formatImageUrl(targetUser.avatar_url, protocol, host);
+    const formattedCover = formatImageUrl(targetUser.cover_url, protocol, host);
+
+    // 2. Xác định mối quan hệ kết bạn giữa currentUserId và targetUserId
+    let friendship_status = 'none';
+    let friendship_id = null;
+    const isSelf = currentUserId === targetUserId;
+
+    if (isSelf) {
+      friendship_status = 'self';
+    } else {
+      const [fRows] = await pool.query(
+        `SELECT id, requester_id, receiver_id, status 
+         FROM friendships 
+         WHERE (requester_id = ? AND receiver_id = ?) OR (requester_id = ? AND receiver_id = ?)`,
+        [currentUserId, targetUserId, targetUserId, currentUserId]
+      );
+
+      if (fRows.length > 0) {
+        const f = fRows[0];
+        friendship_id = f.id;
+        if (f.status === 'accepted') {
+          friendship_status = 'accepted';
+        } else if (f.status === 'pending') {
+          friendship_status = f.requester_id === currentUserId ? 'pending_sent' : 'pending_received';
+        }
+      }
+    }
+
+    // 3. Tính toán thống kê người dùng (Bài viết, Bạn bè, Tổng lượt thích)
+    const [postCountRows] = await pool.query(
+      'SELECT COUNT(*) as count FROM photos WHERE user_id = ?',
+      [targetUserId]
+    );
+    const [friendCountRows] = await pool.query(
+      "SELECT COUNT(*) as count FROM friendships WHERE (requester_id = ? OR receiver_id = ?) AND status = 'accepted'",
+      [targetUserId, targetUserId]
+    );
+    const [likeCountRows] = await pool.query(
+      'SELECT COUNT(*) as count FROM photo_reactions pr JOIN photos p ON pr.photo_id = p.id WHERE p.user_id = ?',
+      [targetUserId]
+    );
+
+    const stats = {
+      posts_count: parseInt(postCountRows[0]?.count || 0, 10),
+      friends_count: parseInt(friendCountRows[0]?.count || 0, 10),
+      likes_count: parseInt(likeCountRows[0]?.count || 0, 10),
+    };
+
+    // 4. Lấy danh sách ảnh hiển thị theo quyền riêng tư và quan hệ kết bạn
+    let photosRows = [];
+    let isLocked = false;
+
+    if (isSelf) {
+      const [rows] = await pool.query(
+        `SELECT 
+           p.id, p.user_id, p.recipient_id, p.image_url, p.caption, p.privacy, p.created_at,
+           u.full_name AS author_name, u.username AS author_username, u.avatar_url AS author_avatar
+         FROM photos p
+         JOIN users u ON p.user_id = u.id
+         WHERE p.user_id = ?
+         ORDER BY p.created_at DESC
+         LIMIT 60`,
+        [targetUserId]
+      );
+      photosRows = rows;
+    } else if (friendship_status === 'accepted') {
+      const [rows] = await pool.query(
+        `SELECT 
+           p.id, p.user_id, p.recipient_id, p.image_url, p.caption, p.privacy, p.created_at,
+           u.full_name AS author_name, u.username AS author_username, u.avatar_url AS author_avatar
+         FROM photos p
+         JOIN users u ON p.user_id = u.id
+         WHERE p.user_id = ? 
+           AND p.privacy IN ('public', 'friends') 
+           AND (p.recipient_id IS NULL OR p.recipient_id = ? OR p.recipient_id = ?)
+         ORDER BY p.created_at DESC
+         LIMIT 60`,
+        [targetUserId, currentUserId, targetUserId]
+      );
+      photosRows = rows;
+    } else {
+      // Không phải bạn bè
+      if (targetUser.is_private_account) {
+        isLocked = true;
+        photosRows = [];
+      } else {
+        const [rows] = await pool.query(
+          `SELECT 
+             p.id, p.user_id, p.recipient_id, p.image_url, p.caption, p.privacy, p.created_at,
+             u.full_name AS author_name, u.username AS author_username, u.avatar_url AS author_avatar
+           FROM photos p
+           JOIN users u ON p.user_id = u.id
+           WHERE p.user_id = ? 
+             AND p.privacy = 'public' 
+             AND p.recipient_id IS NULL
+           ORDER BY p.created_at DESC
+           LIMIT 60`,
+          [targetUserId]
+        );
+        photosRows = rows;
+      }
+    }
+
+    const formattedPhotos = photosRows.length > 0
+      ? await enrichPhotosWithReactionsAndComments(photosRows, currentUserId, req)
+      : [];
+
+    return res.json({
+      success: true,
+      message: 'Lấy thông tin trang cá nhân thành công.',
+      data: {
+        user: {
+          id: targetUser.id,
+          username: targetUser.username,
+          email: targetUser.email,
+          full_name: targetUser.full_name,
+          avatar_url: formattedAvatar,
+          cover_url: formattedCover,
+          bio: targetUser.bio,
+          is_private_account: Boolean(targetUser.is_private_account),
+          created_at: targetUser.created_at,
+          stats,
+          friendship_status,
+          friendship_id,
+          is_online: isUserOnline(targetUserId),
+        },
+        photos: formattedPhotos,
+        is_locked: isLocked,
+      },
+    });
+  } catch (error) {
+    console.error('Get user profile error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy thông tin trang cá nhân.',
+    });
+  }
+};
+
 module.exports = {
   searchUsers,
   sendFriendRequest,
@@ -509,4 +688,5 @@ module.exports = {
   getFriendsList,
   getPendingRequests,
   getSuggestions,
+  getUserProfile,
 };

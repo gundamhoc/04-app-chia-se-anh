@@ -11,6 +11,9 @@ import {
   ScrollView,
   Platform,
   KeyboardAvoidingView,
+  Keyboard,
+  KeyboardEvent,
+  useWindowDimensions,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,22 +50,92 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const { t } = useI18n();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
   const scrollViewRef = useRef<ScrollView>(null);
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [focusedField, setFocusedField] = useState<'name' | 'bio' | null>(null);
+
+  // Lắng nghe sự kiện bàn phím trên cả iOS và Android
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = (e: KeyboardEvent) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    };
+    const onHide = () => {
+      setKeyboardHeight(0);
+    };
+
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Reset trạng thái khi đóng modal
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardHeight(0);
+      setFocusedField(null);
+    }
+  }, [visible]);
+
   const handleNameFocus = () => {
-    // Cuộn nhẹ để đưa ô Tên hiển thị vào tầm nhìn tối ưu trên bàn phím
+    setFocusedField('name');
     setTimeout(() => {
-      scrollViewRef.current?.scrollTo({ y: 120, animated: true });
-    }, 120);
+      scrollViewRef.current?.scrollTo({ y: 140, animated: true });
+    }, 80);
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: 140, animated: true });
+    }, 280);
   };
 
   const handleBioFocus = () => {
-    // Cuộn xuống cuối để toàn bộ ô Bio và bộ đếm ký tự nổi lên trên bàn phím
+    setFocusedField('bio');
+    // Cuộn ngay tức thì và cuộn lại sau khi bàn phím đã bật lên hoàn toàn
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 120);
+    }, 80);
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 280);
   };
+
+  // Đảm bảo khi bàn phím xuất hiện với chiều cao thực tế, tự động cuộn đến đúng trường đang focus
+  useEffect(() => {
+    if (keyboardHeight > 0) {
+      if (focusedField === 'bio') {
+        const timer = setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+        return () => clearTimeout(timer);
+      } else if (focusedField === 'name') {
+        const timer = setTimeout(() => {
+          scrollViewRef.current?.scrollTo({ y: 140, animated: true });
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [keyboardHeight, focusedField]);
+
+  const handleClose = () => {
+    Keyboard.dismiss();
+    onClose();
+  };
+
+  // Chiều cao tối đa an toàn của Modal khi có bàn phím
+  const maxModalHeight = useMemo(() => {
+    if (keyboardHeight > 0) {
+      return Math.max(260, windowHeight - keyboardHeight - Math.max(insets.top, 24) - 10);
+    }
+    return windowHeight * 0.9;
+  }, [windowHeight, keyboardHeight, insets.top]);
 
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [bio, setBio] = useState(user?.bio || '');
@@ -164,7 +237,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       if (onSuccess) {
         onSuccess(updatedUser);
       }
-      onClose();
+      handleClose();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Cập nhật hồ sơ thất bại.';
       showToast('error', message);
@@ -178,170 +251,187 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
       statusBarTranslucent
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.overlay}
       >
         <TouchableOpacity
           style={styles.backdrop}
           activeOpacity={1}
-          onPress={onClose}
+          onPress={handleClose}
         />
-        <View style={[styles.modalBox, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>{t('edit_profile') || 'Chỉnh sửa hồ sơ'}</Text>
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={onClose}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                disabled={submitting}
-              >
-                <Text style={styles.closeIcon}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              ref={scrollViewRef}
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
+        <View
+          style={[
+            styles.modalBox,
+            {
+              maxHeight: maxModalHeight,
+              marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
+              paddingBottom: keyboardHeight > 0 ? 16 : Math.max(insets.bottom, 16),
+            },
+          ]}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>{t('edit_profile') || 'Chỉnh sửa hồ sơ'}</Text>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={handleClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              disabled={submitting}
             >
-              {/* Avatar Section */}
-              <View style={styles.avatarSection}>
-                <View style={styles.avatarWrapper}>
-                  {newAvatarUri ? (
-                    <Image source={{ uri: newAvatarUri }} style={styles.avatarImg} />
-                  ) : (() => {
-                    const avatarUri = getAvatarUrl(user?.avatar_url);
-                    return avatarUri ? (
-                      <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
-                    ) : (
-                      <View style={styles.avatarPlaceholder}>
-                        <Text style={styles.avatarInitial}>
-                          {(fullName || user?.username || 'U')[0]?.toUpperCase()}
-                        </Text>
-                      </View>
-                    );
-                  })()}
-
-                  <TouchableOpacity
-                    style={styles.cameraIconBadge}
-                    onPress={pickFromLibrary}
-                    activeOpacity={0.8}
-                    disabled={submitting}
-                  >
-                    <Text style={styles.cameraBadgeText}>📷</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Avatar Action Pills */}
-                <View style={styles.avatarActionsRow}>
-                  <TouchableOpacity
-                    style={styles.avatarActionPill}
-                    onPress={takeWithCamera}
-                    disabled={submitting}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.avatarActionPillIcon}>📷</Text>
-                    <Text style={styles.avatarActionPillText}>Chụp ảnh</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.avatarActionPill}
-                    onPress={pickFromLibrary}
-                    disabled={submitting}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.avatarActionPillIcon}>🖼️</Text>
-                    <Text style={styles.avatarActionPillText}>Thư viện</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Form Fields */}
-              <View style={styles.formCard}>
-                {/* Full Name */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Tên hiển thị</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={fullName}
-                    onChangeText={setFullName}
-                    placeholder="Nhập tên hiển thị của bạn..."
-                    placeholderTextColor={C.textMuted}
-                    maxLength={100}
-                    editable={!submitting}
-                    onFocus={handleNameFocus}
-                  />
-                </View>
-
-                {/* Username (Read-only) */}
-                <View style={styles.fieldGroup}>
-                  <View style={styles.labelWithBadge}>
-                    <Text style={styles.fieldLabel}>Tên người dùng (@username)</Text>
-                    <Text style={styles.badgeReadonly}>Cố định</Text>
-                  </View>
-                  <View style={[styles.input, styles.inputDisabled]}>
-                    <Text style={styles.disabledInputText}>@{user?.username}</Text>
-                  </View>
-                  <Text style={styles.fieldHelper}>
-                    Có thể đổi username trong Cài đặt &gt; Tài khoản.
-                  </Text>
-                </View>
-
-                {/* Bio */}
-                <View style={styles.fieldGroup}>
-                  <View style={styles.labelWithBadge}>
-                    <Text style={styles.fieldLabel}>Tiểu sử (Bio)</Text>
-                    <Text style={styles.charCounter}>{bio.length}/150</Text>
-                  </View>
-                  <TextInput
-                    style={[styles.input, styles.bioInput]}
-                    value={bio}
-                    onChangeText={setBio}
-                    placeholder="Mô tả ngắn về bạn, châm ngôn hoặc sở thích..."
-                    placeholderTextColor={C.textMuted}
-                    multiline
-                    numberOfLines={3}
-                    maxLength={150}
-                    editable={!submitting}
-                    onFocus={handleBioFocus}
-                  />
-                </View>
-              </View>
-            </ScrollView>
-
-            {/* Bottom Actions */}
-            <View style={styles.footer}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={onClose}
-                disabled={submitting}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.cancelBtnText}>Hủy</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.saveBtn, submitting && styles.btnDisabled]}
-                onPress={handleSave}
-                disabled={submitting}
-                activeOpacity={0.8}
-              >
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.saveBtnText}>Lưu thay đổi</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+              <Text style={styles.closeIcon}>✕</Text>
+            </TouchableOpacity>
           </View>
+
+          <ScrollView
+            ref={scrollViewRef}
+            style={[
+              styles.scrollView,
+              keyboardHeight > 0 && { maxHeight: Math.max(160, maxModalHeight - 140) },
+            ]}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: keyboardHeight > 0 ? 80 : 32 },
+            ]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            {/* Avatar Section */}
+            <View style={styles.avatarSection}>
+              <View style={styles.avatarWrapper}>
+                {newAvatarUri ? (
+                  <Image source={{ uri: newAvatarUri }} style={styles.avatarImg} />
+                ) : (() => {
+                  const avatarUri = getAvatarUrl(user?.avatar_url);
+                  return avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarInitial}>
+                        {(fullName || user?.username || 'U')[0]?.toUpperCase()}
+                      </Text>
+                    </View>
+                  );
+                })()}
+
+                <TouchableOpacity
+                  style={styles.cameraIconBadge}
+                  onPress={pickFromLibrary}
+                  activeOpacity={0.8}
+                  disabled={submitting}
+                >
+                  <Text style={styles.cameraBadgeText}>📷</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Avatar Action Pills */}
+              <View style={styles.avatarActionsRow}>
+                <TouchableOpacity
+                  style={styles.avatarActionPill}
+                  onPress={takeWithCamera}
+                  disabled={submitting}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.avatarActionPillIcon}>📷</Text>
+                  <Text style={styles.avatarActionPillText}>Chụp ảnh</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.avatarActionPill}
+                  onPress={pickFromLibrary}
+                  disabled={submitting}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.avatarActionPillIcon}>🖼️</Text>
+                  <Text style={styles.avatarActionPillText}>Thư viện</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Form Fields */}
+            <View style={styles.formCard}>
+              {/* Full Name */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Tên hiển thị</Text>
+                <TextInput
+                  style={styles.input}
+                  value={fullName}
+                  onChangeText={setFullName}
+                  placeholder="Nhập tên hiển thị của bạn..."
+                  placeholderTextColor={C.textMuted}
+                  maxLength={100}
+                  editable={!submitting}
+                  onFocus={handleNameFocus}
+                  onBlur={() => setFocusedField((prev) => (prev === 'name' ? null : prev))}
+                />
+              </View>
+
+              {/* Username (Read-only) */}
+              <View style={styles.fieldGroup}>
+                <View style={styles.labelWithBadge}>
+                  <Text style={styles.fieldLabel}>Tên người dùng (@username)</Text>
+                  <Text style={styles.badgeReadonly}>Cố định</Text>
+                </View>
+                <View style={[styles.input, styles.inputDisabled]}>
+                  <Text style={styles.disabledInputText}>@{user?.username}</Text>
+                </View>
+                <Text style={styles.fieldHelper}>
+                  Có thể đổi username trong Cài đặt &gt; Tài khoản.
+                </Text>
+              </View>
+
+              {/* Bio */}
+              <View style={styles.fieldGroup}>
+                <View style={styles.labelWithBadge}>
+                  <Text style={styles.fieldLabel}>Tiểu sử (Bio)</Text>
+                  <Text style={styles.charCounter}>{bio.length}/150</Text>
+                </View>
+                <TextInput
+                  style={[styles.input, styles.bioInput]}
+                  value={bio}
+                  onChangeText={setBio}
+                  placeholder="Mô tả ngắn về bạn, châm ngôn hoặc sở thích..."
+                  placeholderTextColor={C.textMuted}
+                  multiline
+                  numberOfLines={3}
+                  maxLength={150}
+                  editable={!submitting}
+                  onFocus={handleBioFocus}
+                  onBlur={() => setFocusedField((prev) => (prev === 'bio' ? null : prev))}
+                />
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* Bottom Actions */}
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={handleClose}
+              disabled={submitting}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelBtnText}>Hủy</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, submitting && styles.btnDisabled]}
+              onPress={handleSave}
+              disabled={submitting}
+              activeOpacity={0.8}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.saveBtnText}>Lưu thay đổi</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
         {/* Web Camera Modal */}
         {Platform.OS === 'web' && (
           <WebCameraModal

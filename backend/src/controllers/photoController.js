@@ -26,6 +26,8 @@ async function enrichPhotosWithReactionsAndComments(rows, currentUserId, req) {
   const photoIds = rows.map((p) => p.id);
   let reactionsMap = {};
   let commentCountMap = {};
+  let savedMap = {};
+  let repostMap = {};
 
   if (photoIds.length > 0) {
     const [reactions] = await pool.query(
@@ -66,6 +68,25 @@ async function enrichPhotosWithReactionsAndComments(rows, currentUserId, req) {
     commentCounts.forEach((c) => {
       commentCountMap[c.photo_id] = parseInt(c.count, 10);
     });
+
+    // Lấy trạng thái đã lưu & đã đăng lại của người dùng hiện tại
+    if (currentUserId) {
+      const [savedRows] = await pool.query(
+        'SELECT photo_id FROM saved_photos WHERE user_id = ? AND photo_id IN (?)',
+        [currentUserId, photoIds]
+      );
+      savedRows.forEach((s) => {
+        savedMap[s.photo_id] = true;
+      });
+
+      const [repostRows] = await pool.query(
+        'SELECT photo_id FROM photo_reposts WHERE user_id = ? AND photo_id IN (?)',
+        [currentUserId, photoIds]
+      );
+      repostRows.forEach((rp) => {
+        repostMap[rp.photo_id] = true;
+      });
+    }
   }
 
   return rows.map((p) => {
@@ -97,6 +118,8 @@ async function enrichPhotosWithReactionsAndComments(rows, currentUserId, req) {
       top_reactions: top2Reactions,
       total_reactions: totalReactionsCount,
       comment_count: commentCountMap[p.id] || 0,
+      is_saved: Boolean(savedMap[p.id]),
+      is_reposted: Boolean(repostMap[p.id]),
     };
   });
 }
@@ -441,6 +464,7 @@ const toggleSavePhoto = async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const photoId = parseInt(req.params.id, 10);
+    const { action } = req.body || {}; // 'save' | 'unsave' | undefined
 
     if (!photoId || isNaN(photoId)) {
       return res.status(400).json({ success: false, message: 'ID ảnh không hợp lệ.' });
@@ -452,15 +476,31 @@ const toggleSavePhoto = async (req, res) => {
     );
 
     let isSaved = false;
-    if (existing.length > 0) {
-      await pool.query('DELETE FROM saved_photos WHERE id = ?', [existing[0].id]);
+    if (action === 'save') {
+      if (existing.length === 0) {
+        await pool.query('INSERT INTO saved_photos (user_id, photo_id) VALUES (?, ?)', [
+          currentUserId,
+          photoId,
+        ]);
+      }
+      isSaved = true;
+    } else if (action === 'unsave') {
+      if (existing.length > 0) {
+        await pool.query('DELETE FROM saved_photos WHERE id = ?', [existing[0].id]);
+      }
       isSaved = false;
     } else {
-      await pool.query('INSERT INTO saved_photos (user_id, photo_id) VALUES (?, ?)', [
-        currentUserId,
-        photoId,
-      ]);
-      isSaved = true;
+      // Toggle
+      if (existing.length > 0) {
+        await pool.query('DELETE FROM saved_photos WHERE id = ?', [existing[0].id]);
+        isSaved = false;
+      } else {
+        await pool.query('INSERT INTO saved_photos (user_id, photo_id) VALUES (?, ?)', [
+          currentUserId,
+          photoId,
+        ]);
+        isSaved = true;
+      }
     }
 
     return res.json({
@@ -532,6 +572,7 @@ const toggleRepost = async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const photoId = parseInt(req.params.id, 10);
+    const { action } = req.body || {}; // 'repost' | 'unrepost' | undefined
 
     if (!photoId || isNaN(photoId)) {
       return res.status(400).json({ success: false, message: 'ID ảnh không hợp lệ.' });
@@ -543,15 +584,31 @@ const toggleRepost = async (req, res) => {
     );
 
     let isReposted = false;
-    if (existing.length > 0) {
-      await pool.query('DELETE FROM photo_reposts WHERE id = ?', [existing[0].id]);
+    if (action === 'repost') {
+      if (existing.length === 0) {
+        await pool.query('INSERT INTO photo_reposts (user_id, photo_id) VALUES (?, ?)', [
+          currentUserId,
+          photoId,
+        ]);
+      }
+      isReposted = true;
+    } else if (action === 'unrepost') {
+      if (existing.length > 0) {
+        await pool.query('DELETE FROM photo_reposts WHERE id = ?', [existing[0].id]);
+      }
       isReposted = false;
     } else {
-      await pool.query('INSERT INTO photo_reposts (user_id, photo_id) VALUES (?, ?)', [
-        currentUserId,
-        photoId,
-      ]);
-      isReposted = true;
+      // Toggle
+      if (existing.length > 0) {
+        await pool.query('DELETE FROM photo_reposts WHERE id = ?', [existing[0].id]);
+        isReposted = false;
+      } else {
+        await pool.query('INSERT INTO photo_reposts (user_id, photo_id) VALUES (?, ?)', [
+          currentUserId,
+          photoId,
+        ]);
+        isReposted = true;
+      }
     }
 
     return res.json({
@@ -813,5 +870,7 @@ module.exports = {
   deletePhoto,
   updatePhoto,
   getDriveImage,
+  formatImageUrl,
+  enrichPhotosWithReactionsAndComments,
 };
 

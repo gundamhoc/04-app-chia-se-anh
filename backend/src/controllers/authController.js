@@ -172,7 +172,7 @@ const login = async (req, res) => {
 const getProfile = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT id, username, email, full_name, avatar_url, bio, created_at FROM users WHERE id = ?',
+      'SELECT id, username, email, full_name, avatar_url, cover_url, bio, created_at FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -184,10 +184,13 @@ const getProfile = async (req, res) => {
     }
 
     const user = rows[0];
+    const protocol = req.protocol;
+    const host = req.get('host');
     if (user.avatar_url && !user.avatar_url.startsWith('http')) {
-      const protocol = req.protocol;
-      const host = req.get('host');
       user.avatar_url = `${protocol}://${host}${user.avatar_url}`;
+    }
+    if (user.cover_url && !user.cover_url.startsWith('http')) {
+      user.cover_url = `${protocol}://${host}${user.cover_url}`;
     }
 
     // Thống kê chỉ số hồ sơ: Posts, Friends, Likes
@@ -242,7 +245,7 @@ const updateProfile = async (req, res) => {
     );
 
     const [rows] = await pool.query(
-      'SELECT id, username, email, full_name, avatar_url, bio, created_at FROM users WHERE id = ?',
+      'SELECT id, username, email, full_name, avatar_url, cover_url, bio, created_at FROM users WHERE id = ?',
       [currentUserId]
     );
 
@@ -254,10 +257,13 @@ const updateProfile = async (req, res) => {
     }
 
     const user = rows[0];
+    const protocol = req.protocol;
+    const host = req.get('host');
     if (user.avatar_url && !user.avatar_url.startsWith('http')) {
-      const protocol = req.protocol;
-      const host = req.get('host');
       user.avatar_url = `${protocol}://${host}${user.avatar_url}`;
+    }
+    if (user.cover_url && !user.cover_url.startsWith('http')) {
+      user.cover_url = `${protocol}://${host}${user.cover_url}`;
     }
 
     return res.status(200).json({
@@ -320,6 +326,56 @@ const updateAvatar = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Lỗi server.',
+    });
+  }
+};
+
+// ============================================================
+// UPDATE COVER BANNER
+// PUT /api/auth/cover  (protected - cần JWT + Multer)
+// ============================================================
+const updateCover = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: 'Vui lòng chọn file ảnh bìa.',
+    });
+  }
+
+  try {
+    let coverUrl = `/uploads/${req.file.filename}`;
+
+    try {
+      const driveResult = await uploadFileToDrive(req.file.path, req.file.mimetype, req.file.filename);
+      if (driveResult && driveResult.directUrl) {
+        coverUrl = driveResult.directUrl;
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      }
+    } catch (driveErr) {
+      console.warn('⚠️ Gặp sự cố upload Google Drive cho ảnh bìa, fallback sang lưu nội bộ:', driveErr.message);
+    }
+
+    await pool.query('UPDATE users SET cover_url = ? WHERE id = ?', [
+      coverUrl,
+      req.user.id,
+    ]);
+
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const finalCoverUrl = coverUrl.startsWith('http') ? coverUrl : `${protocol}://${host}${coverUrl}`;
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật ảnh bìa thành công!',
+      data: { cover_url: finalCoverUrl },
+    });
+  } catch (error) {
+    console.error('UpdateCover error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi cập nhật ảnh bìa.',
     });
   }
 };
@@ -987,6 +1043,7 @@ module.exports = {
   getProfile,
   updateProfile,
   updateAvatar,
+  updateCover,
   forgotPassword,
   updateUsername,
   updateEmail,

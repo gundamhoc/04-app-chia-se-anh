@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { getSocket, pingServer } from '../services/socketService';
 import { useToast } from '../context/ToastContext';
 import { useAppSettings } from '../store/appSettingsStore';
+import { usePresenceStore } from '../store/presenceStore';
 
 /**
  * Hook để sử dụng Socket.io trong components
@@ -11,6 +12,15 @@ export const useSocket = () => {
   const socket = getSocket();
   const { showToast } = useToast();
   const { notifyMessages, notifyPosts, notifyInteractions } = useAppSettings();
+  const onlineUserIds = usePresenceStore((state) => state.onlineUserIds);
+
+  const isUserOnline = useCallback(
+    (userId: number | undefined | null) => {
+      if (!userId) return false;
+      return onlineUserIds.includes(Number(userId));
+    },
+    [onlineUserIds]
+  );
 
   useEffect(() => {
     if (!socket) return;
@@ -88,5 +98,5 @@ export const useSocket = () => {
     pingServer(callback);
   };
 
-  return { socket, isConnected, ping };
+  return { socket, isConnected, ping, onlineUserIds, isUserOnline };
 };

@@ -20,6 +20,7 @@ import { useI18n } from '../../utils/i18n';
 import { friendService } from '../../services/friendService';
 import { Friend, FriendRequest, UserSearchResult, FriendshipStatus } from '../../types';
 import { useToast } from '../../hooks/useToast';
+import { useSocket } from '../../hooks/useSocket';
 
 type TabType = 'friends' | 'suggestions' | 'requests';
 
@@ -27,6 +28,7 @@ export default function FriendsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
+  const { isUserOnline } = useSocket();
   const { colors: C, isDark } = useTheme();
   const { t, language } = useI18n();
   const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
@@ -222,25 +224,39 @@ export default function FriendsScreen() {
 
     return (
       <View key={`friend-${item.id}`} style={styles.card}>
-        <Image source={avatarUri} style={styles.avatar} />
-        <View style={styles.info}>
-          <View style={styles.nameRow}>
-            <Text style={styles.fullName} numberOfLines={1}>
-              {displayName}
-            </Text>
-            <View style={styles.badgeFriend}>
-              <Text style={styles.badgeFriendText}>{t('friends')}</Text>
-            </View>
+        <TouchableOpacity
+          style={styles.cardMainTouch}
+          onPress={() =>
+            router.push({
+              pathname: '/user/[id]',
+              params: { id: item.id.toString() },
+            })
+          }
+          activeOpacity={0.7}
+        >
+          <View style={styles.avatarWrapper}>
+            <Image source={avatarUri} style={styles.avatar} />
+            {isUserOnline(item.id) && <View style={styles.onlineBadge} />}
           </View>
-          <Text style={styles.username} numberOfLines={1}>
-            @{item.username}
-          </Text>
-          {item.bio ? (
-            <Text style={styles.bio} numberOfLines={1}>
-              {item.bio}
+          <View style={styles.info}>
+            <View style={styles.nameRow}>
+              <Text style={styles.fullName} numberOfLines={1}>
+                {displayName}
+              </Text>
+              <View style={styles.badgeFriend}>
+                <Text style={styles.badgeFriendText}>{t('friends')}</Text>
+              </View>
+            </View>
+            <Text style={styles.username} numberOfLines={1}>
+              @{item.username}
             </Text>
-          ) : null}
-        </View>
+            {item.bio ? (
+              <Text style={styles.bio} numberOfLines={1}>
+                {item.bio}
+              </Text>
+            ) : null}
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.friendActions}>
           <TouchableOpacity
@@ -279,20 +295,31 @@ export default function FriendsScreen() {
 
     return (
       <View key={`suggest-${item.id}`} style={styles.card}>
-        <Image source={avatarUri} style={styles.avatar} />
-        <View style={styles.info}>
-          <Text style={styles.fullName} numberOfLines={1}>
-            {displayName}
-          </Text>
-          <Text style={styles.username} numberOfLines={1}>
-            @{item.username}
-          </Text>
-          {item.bio ? (
-            <Text style={styles.bio} numberOfLines={1}>
-              {item.bio}
+        <TouchableOpacity
+          style={styles.cardMainTouch}
+          onPress={() =>
+            router.push({
+              pathname: '/user/[id]',
+              params: { id: item.id.toString() },
+            })
+          }
+          activeOpacity={0.7}
+        >
+          <Image source={avatarUri} style={styles.avatar} />
+          <View style={styles.info}>
+            <Text style={styles.fullName} numberOfLines={1}>
+              {displayName}
             </Text>
-          ) : null}
-        </View>
+            <Text style={styles.username} numberOfLines={1}>
+              @{item.username}
+            </Text>
+            {item.bio ? (
+              <Text style={styles.bio} numberOfLines={1}>
+                {item.bio}
+              </Text>
+            ) : null}
+          </View>
+        </TouchableOpacity>
 
         {isBusy ? (
           <ActivityIndicator size="small" color={C.primary} style={{ marginHorizontal: 16 }} />
@@ -336,18 +363,29 @@ export default function FriendsScreen() {
 
     return (
       <View style={styles.card}>
-        <Image source={avatarUri} style={styles.avatar} />
-        <View style={styles.info}>
-          <Text style={styles.fullName} numberOfLines={1}>
-            {displayName}
-          </Text>
-          <Text style={styles.username} numberOfLines={1}>
-            @{item.username}
-          </Text>
-          <Text style={styles.timeText}>
-            {new Date(item.request_time).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')}
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={styles.cardMainTouch}
+          onPress={() =>
+            router.push({
+              pathname: '/user/[id]',
+              params: { id: item.requester_id.toString() },
+            })
+          }
+          activeOpacity={0.7}
+        >
+          <Image source={avatarUri} style={styles.avatar} />
+          <View style={styles.info}>
+            <Text style={styles.fullName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={styles.username} numberOfLines={1}>
+              @{item.username}
+            </Text>
+            <Text style={styles.timeText}>
+              {new Date(item.request_time).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')}
+            </Text>
+          </View>
+        </TouchableOpacity>
         {isBusy ? (
           <ActivityIndicator size="small" color={C.primary} style={{ marginHorizontal: 16 }} />
         ) : (
@@ -679,11 +717,30 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
+  cardMainTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  avatarWrapper: {
+    position: 'relative',
+  },
   avatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
     backgroundColor: C.separator,
+  },
+  onlineBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
+    backgroundColor: '#4CAF50',
+    borderWidth: 2,
+    borderColor: C.card,
   },
   info: {
     flex: 1,

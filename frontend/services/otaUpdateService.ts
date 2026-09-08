@@ -33,16 +33,49 @@ export const otaUpdateService = {
       try {
         const update = await Updates.checkForUpdateAsync();
         if (update.isAvailable) {
+          // Lấy changelog từ backend để hiển thị đầy đủ tính năng cho người dùng
+          let changelogVi = ['Bản cập nhật OTA trực tiếp từ Expo EAS Server.'];
+          let changelogEn = ['Direct OTA update package from Expo EAS Server.'];
+          let latestVer = '1.2.7';
+          try {
+            const apiRes = await api.get('/system/ota-check', {
+              params: { current_version: appVersion, channel: activeChannel },
+            });
+            if (apiRes.data?.data) {
+              changelogVi = apiRes.data.data.changelog_vi || changelogVi;
+              changelogEn = apiRes.data.data.changelog_en || changelogEn;
+              latestVer = apiRes.data.data.latest_version || latestVer;
+            }
+          } catch {}
+
           return {
             is_update_available: true,
             current_version: appVersion,
-            latest_version: `${appVersion}-ota.${Date.now().toString().slice(-4)}`,
+            latest_version: latestVer,
             release_date: new Date().toISOString().split('T')[0],
             bundle_size: '3.5 MB',
             mandatory: false,
             channel: activeChannel,
-            changelog_vi: ['Bản cập nhật OTA trực tiếp từ Expo EAS Server.'],
-            changelog_en: ['Direct OTA update package from Expo EAS Server.'],
+            changelog_vi: changelogVi,
+            changelog_en: changelogEn,
+            is_native_expo_update: true,
+          };
+        } else {
+          // Bản cập nhật native đã được áp dụng, ứng dụng đã ở bản mới nhất!
+          useAppSettings.getState().setLastOtaCheckTime(new Date().toISOString());
+          if (appVersion !== '1.2.7') {
+            await useAppSettings.getState().setAppVersion('1.2.7');
+          }
+          return {
+            is_update_available: false,
+            current_version: '1.2.7',
+            latest_version: '1.2.7',
+            release_date: new Date().toISOString().split('T')[0],
+            bundle_size: '0 MB',
+            mandatory: false,
+            channel: activeChannel,
+            changelog_vi: [],
+            changelog_en: [],
             is_native_expo_update: true,
           };
         }

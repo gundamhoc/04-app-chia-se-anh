@@ -14,6 +14,7 @@ export interface User {
   email: string;
   full_name: string | null;
   avatar_url: string | null;
+  cover_url?: string | null;
   bio?: string | null;
   created_at?: string;
   stats?: UserStats;
@@ -48,6 +49,28 @@ export interface LoginPayload {
 
 export type FriendshipStatus = 'none' | 'pending_sent' | 'pending_received' | 'accepted';
 
+export interface OtherUserProfile {
+  id: number;
+  username: string;
+  email?: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  cover_url?: string | null;
+  bio: string | null;
+  is_private_account?: boolean;
+  created_at?: string;
+  stats: UserStats;
+  friendship_status: FriendshipStatus | 'self';
+  friendship_id?: number | null;
+  is_online?: boolean;
+}
+
+export interface UserProfileData {
+  user: OtherUserProfile;
+  photos: Photo[];
+  is_locked: boolean;
+}
+
 export interface UserSearchResult {
   id: number;
   username: string;
@@ -56,6 +79,7 @@ export interface UserSearchResult {
   avatar_url: string | null;
   bio: string | null;
   friendship_status: FriendshipStatus;
+  is_online?: boolean;
 }
 
 export interface Friend {
@@ -66,6 +90,7 @@ export interface Friend {
   avatar_url: string | null;
   bio: string | null;
   friendship_date: string;
+  is_online?: boolean;
 }
 
 export interface FriendRequest {
@@ -103,6 +128,8 @@ export interface Photo {
   top_reactions?: PhotoReaction[];
   total_reactions?: number;
   comment_count?: number;
+  is_saved?: boolean;
+  is_reposted?: boolean;
 }
 
 export interface CommentReaction {
@@ -142,6 +169,7 @@ export interface Conversation {
   unread_count: number;
   is_pinned?: boolean;
   is_muted?: boolean;
+  is_online?: boolean;
 }
 
 export interface Message {
@@ -175,6 +203,7 @@ export interface ChatHistoryResponse {
     full_name: string;
     username: string;
     avatar_url: string | null;
+    is_online?: boolean;
   };
   background_url?: string | null;
   is_pinned?: boolean;

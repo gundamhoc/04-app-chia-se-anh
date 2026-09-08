@@ -247,51 +247,66 @@ export default function HomeScreen() {
     const userReaction = reactions.find((r) => r.user_reacted);
     const hasUserReacted = !!userReaction;
 
+    const handleAuthorPress = () => {
+      if (item.user_id === user?.id) {
+        router.push('/(tabs)/profile');
+      } else {
+        router.push({
+          pathname: '/user/[id]',
+          params: { id: item.user_id.toString() },
+        });
+      }
+    };
+
     return (
       <View style={styles.photoCard}>
         {/* Card Header */}
         <View style={styles.cardHeader}>
-          <Image source={authorAvatarUri} style={styles.authorAvatar} />
-          <View style={styles.authorInfo}>
-            <View style={styles.authorRow}>
-              <Text style={styles.authorName} numberOfLines={1}>
-                {item.author_name}
-              </Text>
-              {item.recipient_name ? (
-                <Text style={styles.recipientTag} numberOfLines={1}>
-                  {' '}➔ {item.recipient_name}
+          <TouchableOpacity
+            style={styles.authorHeaderTouch}
+            onPress={handleAuthorPress}
+            activeOpacity={0.7}
+          >
+            <Image source={authorAvatarUri} style={styles.authorAvatar} />
+            <View style={styles.authorInfo}>
+              <View style={styles.authorRow}>
+                <Text style={styles.authorName} numberOfLines={1}>
+                  {item.author_name}
                 </Text>
-              ) : null}
-            </View>
-            <View style={styles.timeAndPrivacyRow}>
-              <Text style={styles.timeText}>{formatTime(item.created_at)}</Text>
-              <Text style={styles.dotSeparator}>•</Text>
-              <View style={[
-                styles.privacyBadge,
-                item.privacy === 'public' && styles.privacyBadgePublic,
-                item.privacy === 'private' && styles.privacyBadgePrivate,
-              ]}>
-                <Text style={styles.privacyBadgeText}>
-                  {item.privacy === 'public'
-                    ? `🌐 ${t('public')}`
-                    : item.privacy === 'private'
-                    ? `🔒 ${t('private')}`
-                    : `👥 ${t('friends_only')}`}
-                </Text>
+                {item.recipient_name ? (
+                  <Text style={styles.recipientTag} numberOfLines={1}>
+                    {' '}➔ {item.recipient_name}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.timeAndPrivacyRow}>
+                <Text style={styles.timeText}>{formatTime(item.created_at)}</Text>
+                <Text style={styles.dotSeparator}>•</Text>
+                <View style={[
+                  styles.privacyBadge,
+                  item.privacy === 'public' && styles.privacyBadgePublic,
+                  item.privacy === 'private' && styles.privacyBadgePrivate,
+                ]}>
+                  <Text style={styles.privacyBadgeText}>
+                    {item.privacy === 'public'
+                      ? `🌐 ${t('public')}`
+                      : item.privacy === 'private'
+                      ? `🔒 ${t('private')}`
+                      : `👥 ${t('friends_only')}`}
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
 
-          {isOwner && (
-            <TouchableOpacity
-              style={styles.moreBtn}
-              onPress={() => setActiveOptionsPhoto(item)}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              activeOpacity={0.6}
-            >
-              <Text style={styles.moreBtnText}>•••</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.moreBtn}
+            onPress={() => setActiveOptionsPhoto(item)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.6}
+          >
+            <Text style={styles.moreBtnText}>•••</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Photo Image (Chạm để mở chế độ xem toàn màn hình và phóng to/thu nhỏ) */}
@@ -659,6 +674,11 @@ export default function HomeScreen() {
         onDelete={(photo) => {
           confirmDeletePhoto(photo);
         }}
+        onUpdatePhoto={(updatedPhoto) => {
+          setPhotos((prev) =>
+            prev.map((p) => (p.id === updatedPhoto.id ? { ...p, ...updatedPhoto } : p))
+          );
+        }}
       />
 
       {/* Edit Post Modal (Chỉnh sửa bài đăng) */}
@@ -778,6 +798,11 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
+  },
+  authorHeaderTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   authorAvatar: {
     width: 44,

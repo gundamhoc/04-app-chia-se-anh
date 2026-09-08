@@ -4,22 +4,22 @@ const router = express.Router();
 // Định nghĩa thông tin các phiên bản OTA trên hệ thống
 const SYSTEM_VERSIONS = {
   production: {
-    latest_version: '1.2.6',
+    latest_version: '1.2.7',
     release_date: '2026-09-08',
-    bundle_size: '3.3 MB',
+    bundle_size: '3.5 MB',
     mandatory: false,
     channel: 'production',
     changelog_vi: [
-      'Khắc phục lỗi bàn phím che khuất ô nhập chú thích (caption) khi đăng khoảnh khắc.',
-      'Khắc phục lỗi bàn phím che khuất Tên hiển thị và Bio khi chỉnh sửa hồ sơ.',
-      'Tự động cuộn thông minh đưa ô nhập văn bản lên trên bàn phím ảo khi chạm vào.',
-      'Bổ sung bộ đếm ký tự thời gian thực cho chú thích bài đăng ({caption}/200).',
+      'Xem trang cá nhân người dùng khác: bấm vào avatar để xem profile chi tiết, khoảnh khắc và trạng thái quan hệ.',
+      'Bổ sung ảnh bìa hồ sơ (Cover Banner) nằm ngang nghệ thuật phía trên avatar hiệu ứng 3D.',
+      'Tùy chọn bài viết: Bổ sung tính năng Lưu bài viết, Bỏ lưu và Đăng lại (Repost) khoảnh khắc.',
+      'Giao diện mặc định Trắng (Light mode) và tối ưu hóa cuộn bàn phím khi nhập Bio trong hồ sơ.',
     ],
     changelog_en: [
-      'Fixed keyboard covering caption input when posting a new moment.',
-      'Fixed keyboard covering Name and Bio inputs when editing profile.',
-      'Smart auto-scrolling bringing text inputs above the virtual keyboard when focused.',
-      'Added real-time character counter for post caption ({caption}/200).',
+      'View other user profiles: tap any avatar to view detailed profile, moments, and friendship status.',
+      'Added profile Cover Banner header above avatar with modern 3D depth effect.',
+      'Post actions: Save post, Unsave post, and Repost moment.',
+      'Default Light theme mode and enhanced keyboard auto-scrolling when editing Bio.',
     ],
   },
   beta: {
@@ -63,7 +63,7 @@ router.get('/ota-check', (req, res) => {
     isUpdateAvailable = false;
   } else {
     // So sánh phiên bản (chuỗi hoặc semver đơn giản)
-    const cleanCurrent = currentVersion.replace(/^v/, '').trim();
+    const cleanCurrent = currentVersion.replace(/^v/, '').replace(/-ota.*$/, '').trim();
     const cleanLatest = versionInfo.latest_version.replace(/^v/, '').trim();
     isUpdateAvailable = cleanCurrent !== cleanLatest;
   }

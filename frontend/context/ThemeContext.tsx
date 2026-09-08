@@ -14,9 +14,9 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  colors: Colors.dark,
-  isDark: true,
-  themeMode: 'dark',
+  colors: Colors.light,
+  isDark: false,
+  themeMode: 'light',
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

@@ -157,8 +157,8 @@ export const photoService = {
   },
 
   // Lưu / Bỏ lưu bài viết
-  async toggleSavePhoto(photoId: number): Promise<{ is_saved: boolean }> {
-    const res = await api.post<ApiResponse<{ is_saved: boolean }>>(`/photos/${photoId}/save`);
+  async toggleSavePhoto(photoId: number, action?: 'save' | 'unsave'): Promise<{ is_saved: boolean }> {
+    const res = await api.post<ApiResponse<{ is_saved: boolean }>>(`/photos/${photoId}/save`, { action });
     if (!res.data.data) {
       throw new Error(res.data.message || 'Không thể lưu bài viết.');
     }
@@ -172,8 +172,8 @@ export const photoService = {
   },
 
   // Đăng lại / Hủy đăng lại bài viết
-  async toggleRepost(photoId: number): Promise<{ is_reposted: boolean }> {
-    const res = await api.post<ApiResponse<{ is_reposted: boolean }>>(`/photos/${photoId}/repost`);
+  async toggleRepost(photoId: number, action?: 'repost' | 'unrepost'): Promise<{ is_reposted: boolean }> {
+    const res = await api.post<ApiResponse<{ is_reposted: boolean }>>(`/photos/${photoId}/repost`, { action });
     if (!res.data.data) {
       throw new Error(res.data.message || 'Không thể đăng lại bài viết.');
     }

@@ -1,7 +1,16 @@
 import api from './api';
-import { ApiResponse, UserSearchResult, Friend, FriendRequest } from '../types';
+import { ApiResponse, UserSearchResult, Friend, FriendRequest, UserProfileData } from '../types';
 
 export const friendService = {
+  // Xem thông tin trang cá nhân người khác
+  async getUserProfile(userId: number): Promise<UserProfileData> {
+    const res = await api.get<ApiResponse<UserProfileData>>(`/friends/profile/${userId}`);
+    if (!res.data.data) {
+      throw new Error(res.data.message || 'Không thể tải thông tin hồ sơ.');
+    }
+    return res.data.data;
+  },
+
   // Tìm kiếm người dùng theo từ khóa
   async searchUsers(query: string): Promise<UserSearchResult[]> {
     const res = await api.get<ApiResponse<UserSearchResult[]>>(`/friends/search`, {

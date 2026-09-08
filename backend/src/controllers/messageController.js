@@ -1,6 +1,6 @@
 const { pool } = require('../config/db');
 const { uploadFileToDrive, getDriveClient } = require('../utils/googleDrive');
-const { sendNotificationToUser } = require('../sockets/socketHandler');
+const { sendNotificationToUser, isUserOnline } = require('../sockets/socketHandler');
 const fs = require('fs');
 const path = require('path');
 
@@ -126,6 +126,7 @@ const getConversations = async (req, res) => {
       last_message_is_read: Boolean(c.last_message_is_read),
       last_message_time: c.last_message_time,
       unread_count: parseInt(c.unread_count, 10) || 0,
+      is_online: isUserOnline(c.friend_id),
     }));
 
     return res.json({
@@ -172,6 +173,7 @@ const getMessages = async (req, res) => {
       full_name: friendRows[0].full_name || friendRows[0].username,
       username: friendRows[0].username,
       avatar_url: formatImageUrl(friendRows[0].avatar_url, protocol, host),
+      is_online: isUserOnline(friendId),
     };
 
     // Tự động đánh dấu đã đọc các tin nhắn gửi đến mình

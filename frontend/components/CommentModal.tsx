@@ -20,6 +20,7 @@ import { commentService } from '../services/commentService';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useI18n } from '../utils/i18n';
+import { useRouter } from 'expo-router';
 
 const VALID_EMOJIS = ['❤️', '🔥', '😂', '😮', '😢'];
 
@@ -36,8 +37,21 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   onClose,
   onCommentCountChange,
 }) => {
+  const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
+
+  const handleUserProfilePress = (authorId: number) => {
+    onClose();
+    if (authorId === user?.id) {
+      router.push('/(tabs)/profile');
+    } else {
+      router.push({
+        pathname: '/user/[id]',
+        params: { id: authorId.toString() },
+      });
+    }
+  };
   const { colors: C, isDark } = useTheme();
   const { t, formatTime } = useI18n();
   const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
@@ -158,14 +172,24 @@ export const CommentModal: React.FC<CommentModalProps> = ({
 
     return (
       <View style={[styles.commentRow, isReply && styles.replyRow]}>
-        <Image source={avatarUri} style={styles.commentAvatar} />
+        <TouchableOpacity
+          onPress={() => handleUserProfilePress(item.user_id)}
+          activeOpacity={0.7}
+        >
+          <Image source={avatarUri} style={styles.commentAvatar} />
+        </TouchableOpacity>
 
         <View style={styles.commentBody}>
           {/* Header info */}
           <View style={styles.commentHeader}>
-            <Text style={styles.commentAuthorName} numberOfLines={1}>
-              {item.author_name || item.author_username}
-            </Text>
+            <TouchableOpacity
+              onPress={() => handleUserProfilePress(item.user_id)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.commentAuthorName} numberOfLines={1}>
+                {item.author_name || item.author_username}
+              </Text>
+            </TouchableOpacity>
             <Text style={styles.commentTime}>{formatTime(item.created_at)}</Text>
           </View>
 

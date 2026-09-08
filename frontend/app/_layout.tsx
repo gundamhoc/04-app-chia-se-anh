@@ -3,7 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { ToastProvider } from '../context/ToastContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
@@ -19,7 +19,7 @@ function InnerLayout() {
   const { isDark, colors } = useTheme();
 
   return (
-    <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics} style={{ flex: 1, backgroundColor: colors.background }}>
       <ToastProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
@@ -29,6 +29,7 @@ function InnerLayout() {
           <Stack.Screen name="add-photo" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="search" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="user/[id]" options={{ animation: 'slide_from_right' }} />
         </Stack>
       </ToastProvider>
     </SafeAreaProvider>

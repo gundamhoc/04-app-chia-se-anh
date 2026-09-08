@@ -9,10 +9,14 @@ const {
   getFriendsList,
   getPendingRequests,
   getSuggestions,
+  getUserProfile,
 } = require('../controllers/friendController');
 
 // Tất cả các route kết bạn đều yêu cầu JWT auth
 router.use(authMiddleware);
+
+// 0. Xem thông tin trang cá nhân người khác
+router.get('/profile/:id', getUserProfile);
 
 // 1. Tìm kiếm người dùng theo keyword
 router.get('/search', searchUsers);

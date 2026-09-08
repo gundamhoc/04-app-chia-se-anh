@@ -4,8 +4,58 @@
  * Giai đoạn 1: Chỉ setup nền tảng, chưa có business logic
  */
 
-// Map lưu userId -> socketId để gửi tin nhắn trực tiếp về sau
+// Map lưu userId (number) -> Set<socketId> để hỗ trợ nhiều tab/thiết bị đồng thời
 const connectedUsers = new Map();
+
+/**
+ * Thêm socket cho 1 user.
+ * Trả về true nếu đây là kết nối đầu tiên của user (vừa chuyển từ Offline -> Online).
+ */
+const addUserSocket = (userId, socketId) => {
+  const uid = parseInt(userId, 10);
+  if (isNaN(uid) || uid <= 0) return false;
+  if (!connectedUsers.has(uid)) {
+    connectedUsers.set(uid, new Set());
+  }
+  const set = connectedUsers.get(uid);
+  const wasOffline = set.size === 0;
+  set.add(socketId);
+  return wasOffline;
+};
+
+/**
+ * Gỡ socket của 1 user.
+ * Trả về true nếu user không còn socket nào hoạt động (chuyển sang Offline).
+ */
+const removeUserSocket = (userId, socketId) => {
+  const uid = parseInt(userId, 10);
+  if (isNaN(uid) || !connectedUsers.has(uid)) return false;
+  const set = connectedUsers.get(uid);
+  set.delete(socketId);
+  if (set.size === 0) {
+    connectedUsers.delete(uid);
+    return true; // Hoàn toàn offline
+  }
+  return false;
+};
+
+// Helper: Lấy danh sách userId (number) đang online
+const getOnlineUsers = () => Array.from(connectedUsers.keys()).map((id) => Number(id));
+
+// Helper: Kiểm tra 1 user có đang online không
+const isUserOnline = (userId) => {
+  const uid = parseInt(userId, 10);
+  if (isNaN(uid) || uid <= 0) return false;
+  const set = connectedUsers.get(uid);
+  return Boolean(set && set.size > 0);
+};
+
+// Helper: Lấy 1 socketId bất kỳ của user (tương thích ngược)
+const getSocketId = (userId) => {
+  const uid = parseInt(userId, 10);
+  const set = connectedUsers.get(uid);
+  return set && set.size > 0 ? Array.from(set)[0] : null;
+};
 
 const initSocketHandler = (io) => {
   io.on('connection', (socket) => {
@@ -17,13 +67,43 @@ const initSocketHandler = (io) => {
     // payload: { userId }
     // -------------------------------------------------------
     socket.on('user_online', ({ userId }) => {
-      if (userId) {
-        connectedUsers.set(userId, socket.id);
-        socket.userId = userId;
-        console.log(`👤 User ${userId} is online (socket: ${socket.id})`);
+      const uid = parseInt(userId, 10);
+      if (uid && !isNaN(uid)) {
+        socket.userId = uid;
+        const becameOnline = addUserSocket(uid, socket.id);
+        console.log(`👤 User ${uid} is online (socket: ${socket.id}, active sockets: ${connectedUsers.get(uid)?.size})`);
 
-        // Thông báo cho client biết đã online thành công
-        socket.emit('user_online_ack', { status: 'online', userId });
+        // Gửi xác nhận cho client
+        socket.emit('user_online_ack', { status: 'online', userId: uid });
+
+        // Gửi toàn bộ danh sách online users hiện thời cho chính client này
+        socket.emit('online_users_list', { onlineUserIds: getOnlineUsers() });
+
+        // Nếu user này vừa mới chuyển trạng thái sang online -> broadcast cho TẤT CẢ các client khác
+        if (becameOnline) {
+          socket.broadcast.emit('user_status_changed', { userId: uid, status: 'online' });
+        }
+      }
+    });
+
+    // -------------------------------------------------------
+    // Event: get_online_users (Client chủ động yêu cầu danh sách)
+    // -------------------------------------------------------
+    socket.on('get_online_users', () => {
+      socket.emit('online_users_list', { onlineUserIds: getOnlineUsers() });
+    });
+
+    // -------------------------------------------------------
+    // Event: user_offline (Client chủ động báo ngắt kết nối / đăng xuất)
+    // -------------------------------------------------------
+    socket.on('user_offline', ({ userId }) => {
+      const uid = parseInt(userId || socket.userId, 10);
+      if (uid && !isNaN(uid)) {
+        const becameOffline = removeUserSocket(uid, socket.id);
+        if (becameOffline) {
+          console.log(`🔴 User ${uid} went offline (manual logout)`);
+          io.emit('user_status_changed', { userId: uid, status: 'offline' });
+        }
       }
     });
 
@@ -105,30 +185,32 @@ const initSocketHandler = (io) => {
     // -------------------------------------------------------
     socket.on('disconnect', (reason) => {
       if (socket.userId) {
-        connectedUsers.delete(socket.userId);
-        console.log(`👋 User ${socket.userId} went offline (reason: ${reason})`);
+        const uid = socket.userId;
+        const becameOffline = removeUserSocket(uid, socket.id);
+        console.log(`👋 Socket disconnected for user ${uid} (socket: ${socket.id}, reason: ${reason})`);
+        if (becameOffline) {
+          console.log(`🔴 User ${uid} went completely offline`);
+          io.emit('user_status_changed', { userId: uid, status: 'offline' });
+        }
       } else {
         console.log(`🔌 Socket disconnected: ${socket.id} (reason: ${reason})`);
       }
     });
   });
 
-  console.log('✅ Socket.io handler initialized');
+  console.log('✅ Socket.io handler initialized with Realtime Presence Engine');
 };
 
-// Helper: Lấy socketId của user (dùng cho các module khác sau này)
-const getSocketId = (userId) => connectedUsers.get(userId);
-
-// Helper: Lấy danh sách userId đang online
-const getOnlineUsers = () => Array.from(connectedUsers.keys());
-
 /**
- * Gửi thông báo tới 1 user cụ thể nếu họ đang online
+ * Gửi thông báo tới 1 user cụ thể nếu họ đang online (hỗ trợ đa socket)
  */
 const sendNotificationToUser = (io, targetUserId, eventName, payload) => {
-  const targetSocketId = connectedUsers.get(parseInt(targetUserId, 10)) || connectedUsers.get(String(targetUserId));
-  if (targetSocketId && io) {
-    io.to(targetSocketId).emit(eventName, payload);
+  const uid = parseInt(targetUserId, 10);
+  const socketIds = connectedUsers.get(uid);
+  if (socketIds && socketIds.size > 0 && io) {
+    socketIds.forEach((sId) => {
+      io.to(sId).emit(eventName, payload);
+    });
     return true;
   }
   return false;
@@ -157,6 +239,7 @@ module.exports = {
   initSocketHandler,
   getSocketId,
   getOnlineUsers,
+  isUserOnline,
   sendNotificationToUser,
   broadcastToUsers,
   sendNotificationToGroup,
