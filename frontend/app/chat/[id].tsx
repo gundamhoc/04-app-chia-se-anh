@@ -711,6 +711,7 @@ export default function ChatScreen() {
 
   // 10. Phân loại định dạng file
   const isImageMessage = (msg: Message) => {
+    if (isVideoMessage(msg)) return false;
     if (msg.image_url) return true;
     const ext = msg.file_name?.split('.').pop()?.toLowerCase();
     return (
@@ -837,8 +838,8 @@ export default function ChatScreen() {
   // Render từng dòng tin nhắn
   const renderMessageItem = ({ item }: { item: Message }) => {
     const isMine = item.is_mine || item.sender_id === user?.id;
-    const isImg = isImageMessage(item);
     const isVid = isVideoMessage(item);
+    const isImg = !isVid && isImageMessage(item);
     const hasFile = Boolean(item.file_url || item.image_url);
 
     return (

@@ -74,33 +74,20 @@ export const AdaptiveVideoCard: React.FC<AdaptiveVideoCardProps> = ({
       onPress={onPress}
       style={[styles.container, { width: cardWidth, height: cardHeight }]}
     >
-      {/* 1. LỚP NỀN MỜ NGHỆ THUẬT (Blurred Backdrop) */}
+      {/* 1. LỚP NỀN MỜ NGHỆ THUẬT (Blurred Backdrop phủ kín toàn bộ khung) */}
       {hasThumbnail ? (
         <Image
           source={{ uri: message.image_url! }}
           style={StyleSheet.absoluteFill}
-          blurRadius={Platform.OS === 'android' ? 14 : 20}
+          blurRadius={Platform.OS === 'android' ? 18 : 26}
           resizeMode="cover"
         />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.fallbackBackground]} />
       )}
 
-      {/* Lớp phủ tối màu nhẹ làm dịu ánh sáng nền */}
+      {/* Lớp phủ tối màu làm dịu ánh sáng nền */}
       <View style={styles.backdropOverlay} />
-
-      {/* 2. ẢNH BÌA VIDEO CHÍNH Ở GIỮA (Contain - giữ trọn khung hình sắc nét) */}
-      {hasThumbnail ? (
-        <Image
-          source={{ uri: message.image_url! }}
-          style={styles.foregroundImage}
-          resizeMode="contain"
-        />
-      ) : (
-        <View style={styles.centerIconBox}>
-          <Text style={styles.centerEmoji}>🎬</Text>
-        </View>
-      )}
 
       {/* 3. NÚT PLAY GLASSMORPHISM Ở CHÍNH GIỮA */}
       <View style={styles.playButtonCircle}>
@@ -155,10 +142,6 @@ const styles = StyleSheet.create({
   backdropOverlay: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
-  },
-  foregroundImage: {
-    width: '100%',
-    height: '100%',
   },
   centerIconBox: {
     width: 60,

@@ -791,8 +791,8 @@ export default function GroupChatScreen() {
   // Render từng tin nhắn nhóm
   const renderMessageItem = ({ item }: { item: Message }) => {
     const isMine = item.is_mine || item.sender_id === user?.id;
-    const isImg = Boolean(item.image_url);
     const isVid = isVideoMessage(item);
+    const isImg = !isVid && Boolean(item.image_url);
     const hasFile = Boolean(item.file_url || item.image_url);
 
     return (
