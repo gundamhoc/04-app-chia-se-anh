@@ -4,7 +4,7 @@ const fs = require('fs');
 require('dotenv').config();
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
-const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE) || 30 * 1024 * 1024; // 30MB
+const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE) || 100 * 1024 * 1024; // 100MB (hỗ trợ video HD dung lượng lớn)
 
 // Tạo thư mục uploads nếu chưa tồn tại
 if (!fs.existsSync(UPLOAD_DIR)) {

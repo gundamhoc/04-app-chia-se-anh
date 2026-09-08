@@ -3,6 +3,7 @@ const { uploadFileToDrive, getDriveClient } = require('../utils/googleDrive');
 const { sendNotificationToUser, isUserOnline } = require('../sockets/socketHandler');
 const fs = require('fs');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 
 // Helper chuẩn hóa link ảnh Google Drive hoặc local sang proxy URL
 function formatImageUrl(rawUrl, protocol, host) {
@@ -533,6 +534,14 @@ const sendFileMessage = async (req, res) => {
       const driveResult = await uploadFileToDrive(req.file.path, req.file.mimetype, req.file.originalname || req.file.filename);
       if (driveResult && driveResult.directUrl) {
         finalFileUrl = driveResult.directUrl;
+        // Xóa ngay tệp tin tạm trên server để tiết kiệm 100% dung lượng ổ cứng
+        if (fs.existsSync(req.file.path)) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (unlinkErr) {
+            console.warn('⚠️ Lỗi xóa file tạm sau khi upload drive:', unlinkErr.message);
+          }
+        }
       }
     } catch (driveErr) {
       console.warn('⚠️ Lỗi upload tệp tin lên Google Drive, fallback sang lưu nội bộ:', driveErr.message);
@@ -783,6 +792,183 @@ const downloadMessageFile = async (req, res) => {
 };
 
 /**
+ * 8.5. Stream video trực tiếp chuẩn HTTP 206 Partial Content (YouTube progressive buffer streaming)
+ * GET /api/messages/video-stream/:messageId
+ * Hỗ trợ Query param: ?token=... hoặc Header Authorization
+ * Hỗ trợ Header Range: bytes=start-end
+ */
+const streamMessageVideo = async (req, res) => {
+  try {
+    const messageId = parseInt(req.params.messageId, 10);
+    if (isNaN(messageId)) {
+      return res.status(400).json({ success: false, message: 'ID tin nhắn không hợp lệ.' });
+    }
+
+    // Xác thực token (qua Authorization header hoặc query param ?token=...)
+    let userId = req.user ? req.user.id : null;
+    if (!userId && req.query.token) {
+      try {
+        const decoded = jwt.verify(req.query.token, process.env.JWT_SECRET);
+        userId = decoded.id;
+      } catch (tokenErr) {
+        return res.status(401).json({ success: false, message: 'Token xác thực không hợp lệ.' });
+      }
+    }
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Vui lòng đăng nhập để phát video.' });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, sender_id, receiver_id, group_id, file_url, file_name, file_size, file_type FROM messages WHERE id = ?`,
+      [messageId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy video.' });
+    }
+
+    const msg = rows[0];
+
+    // Kiểm tra quyền truy cập
+    if (msg.group_id) {
+      const [membership] = await pool.query(
+        `SELECT id FROM \`group_members\` WHERE group_id = ? AND user_id = ?`,
+        [msg.group_id, userId]
+      );
+      if (membership.length === 0) {
+        return res.status(403).json({ success: false, message: 'Bạn không phải là thành viên nhóm này.' });
+      }
+    } else {
+      if (msg.sender_id !== userId && msg.receiver_id !== userId) {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền xem video này.' });
+      }
+    }
+
+    const targetUrl = msg.file_url;
+    if (!targetUrl) {
+      return res.status(404).json({ success: false, message: 'Tin nhắn này không có tệp video.' });
+    }
+
+    const mimeType = msg.file_type || 'video/mp4';
+
+    // 1. Nếu video lưu trên Google Drive
+    const match = targetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      const fileId = match[1];
+      const drive = getDriveClient();
+      if (!drive) {
+        return res.status(500).json({ success: false, message: 'Google Drive client chưa sẵn sàng.' });
+      }
+
+      let totalSize = msg.file_size;
+      if (!totalSize) {
+        try {
+          const meta = await drive.files.get({ fileId, fields: 'size, mimeType' });
+          totalSize = parseInt(meta.data.size, 10);
+        } catch (mErr) {
+          console.warn('Lỗi đọc size video từ Google Drive:', mErr.message);
+        }
+      }
+
+      const range = req.headers.range;
+      if (range && totalSize) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+        const chunkSize = end - start + 1;
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': mimeType,
+          'Cache-Control': 'no-cache',
+        });
+
+        const driveStream = await drive.files.get(
+          { fileId, alt: 'media' },
+          {
+            responseType: 'stream',
+            headers: {
+              Range: `bytes=${start}-${end}`,
+            },
+          }
+        );
+
+        driveStream.data.on('error', (streamErr) => {
+          if (!res.headersSent) res.status(500).end();
+        });
+
+        return driveStream.data.pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Accept-Ranges': 'bytes',
+          'Content-Type': mimeType,
+          ...(totalSize ? { 'Content-Length': totalSize } : {}),
+        });
+
+        const driveStream = await drive.files.get(
+          { fileId, alt: 'media' },
+          { responseType: 'stream' }
+        );
+
+        driveStream.data.on('error', (streamErr) => {
+          if (!res.headersSent) res.status(500).end();
+        });
+
+        return driveStream.data.pipe(res);
+      }
+    }
+
+    // 2. Nếu video fallback lưu cục bộ trong /uploads/
+    if (targetUrl.includes('/uploads/')) {
+      const matchLocal = targetUrl.match(/\/uploads\/([a-zA-Z0-9_.-]+)/);
+      const fname = matchLocal ? matchLocal[1] : path.basename(targetUrl);
+      const localPath = path.join(__dirname, '../../uploads', fname);
+
+      if (fs.existsSync(localPath)) {
+        const stat = fs.statSync(localPath);
+        const fileSize = stat.size;
+        const range = req.headers.range;
+
+        if (range) {
+          const parts = range.replace(/bytes=/, '').split('-');
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+          const chunkSize = end - start + 1;
+
+          res.writeHead(206, {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunkSize,
+            'Content-Type': mimeType,
+          });
+
+          const fileStream = fs.createReadStream(localPath, { start, end });
+          return fileStream.pipe(res);
+        } else {
+          res.writeHead(200, {
+            'Content-Length': fileSize,
+            'Accept-Ranges': 'bytes',
+            'Content-Type': mimeType,
+          });
+          return fs.createReadStream(localPath).pipe(res);
+        }
+      }
+    }
+
+    // Fallback chuyển hướng đến file gốc
+    return res.redirect(targetUrl);
+  } catch (error) {
+    console.error('Stream message video error:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi phát luồng video.' });
+    }
+  }
+};
+
+/**
  * 9. Cập nhật Theme / Hình nền trò chuyện 1-1
  * PUT /api/messages/:friendId/theme
  */
@@ -1005,6 +1191,7 @@ module.exports = {
   getFileContent,
   markMessagesAsRead,
   downloadMessageFile,
+  streamMessageVideo,
   updateDirectTheme,
   togglePinDirectChat,
   toggleMuteDirectChat,

@@ -1,6 +1,7 @@
 const { pool } = require('../config/db');
 const { uploadFileToDrive } = require('../utils/googleDrive');
 const { sendNotificationToGroup, sendNotificationToUser } = require('../sockets/socketHandler');
+const fs = require('fs');
 
 // Helper chuẩn hóa link ảnh Google Drive hoặc local
 function formatImageUrl(rawUrl, protocol, host) {
@@ -848,6 +849,13 @@ const sendGroupFileMessage = async (req, res) => {
       const driveResult = await uploadFileToDrive(req.file.path, req.file.mimetype, req.file.originalname || req.file.filename);
       if (driveResult && driveResult.directUrl) {
         finalFileUrl = driveResult.directUrl;
+        if (fs.existsSync(req.file.path)) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (unlinkErr) {
+            console.warn('⚠️ Lỗi xóa file tạm sau upload nhóm:', unlinkErr.message);
+          }
+        }
       }
     } catch (err) {
       console.warn('Lỗi upload file nhóm lên drive:', err.message);

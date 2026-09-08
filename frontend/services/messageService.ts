@@ -274,5 +274,12 @@ export const messageService = {
     });
     return res.data.data || [];
   },
+
+  // Lấy URL phát video trực tiếp chuẩn HTTP 206 (YouTube Progressive Buffer Streaming)
+  getVideoStreamUrl(messageId: number, token?: string | null): string {
+    const baseURL = api.defaults.baseURL || '';
+    const cleanBase = baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL;
+    return `${cleanBase}/messages/video-stream/${messageId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
 };
 

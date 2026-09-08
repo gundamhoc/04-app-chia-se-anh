@@ -29,6 +29,7 @@ import { Message, Photo } from '../../types';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { WebCameraModal } from '../../components/WebCameraModal';
 import { FileViewerModal } from '../../components/FileViewerModal';
+import { VideoPlayerModal } from '../../components/VideoPlayerModal';
 
 const PRESET_THEMES = [
   { id: 'cosmic', name: 'Vũ trụ huyền ảo', url: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000&auto=format&fit=crop' },
@@ -49,7 +50,7 @@ interface SelectedFileState {
 export default function ChatScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
   const { socket, isConnected, isUserOnline } = useSocket();
   const { showToast } = useToast();
   const { colors: C, isDark } = useTheme();
@@ -112,6 +113,9 @@ export default function ChatScreen() {
   // Modal đọc nội dung tệp tin văn bản / code
   const [fileViewerVisible, setFileViewerVisible] = useState(false);
   const [activeFileViewerMessage, setActiveFileViewerMessage] = useState<Message | null>(null);
+
+  // Modal phát video toàn màn hình chuẩn YouTube streaming
+  const [activeVideoModal, setActiveVideoModal] = useState<{ url: string; name?: string; size?: number } | null>(null);
 
   // Trạng thái đang soạn tin (typing indicator)
   const [isFriendTyping, setIsFriendTyping] = useState(false);
@@ -356,6 +360,73 @@ export default function ChatScreen() {
     } catch (e) {
       console.warn('Lỗi mở camera:', e);
       showToast('error', 'Không thể khởi động camera.');
+    }
+  };
+
+  // 7.5. Chọn video từ thư viện
+  const pickVideoFromGallery = async () => {
+    setShowActionMenu(false);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('warning', 'Quyền truy cập thư viện bị từ chối.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const rawName = asset.fileName || asset.uri.split('/').pop() || `video_${Date.now()}.mp4`;
+        setSelectedFile({
+          uri: asset.uri,
+          name: rawName,
+          size: asset.fileSize || undefined,
+          mimeType: asset.mimeType || 'video/mp4',
+          isImage: false,
+        });
+        setTimeout(() => scrollToBottom(true), 100);
+      }
+    } catch (e) {
+      console.warn('Lỗi chọn video từ thư viện:', e);
+      showToast('error', 'Không thể mở thư viện video.');
+    }
+  };
+
+  // 7.6. Quay video từ máy ảnh
+  const recordVideoFromCamera = async () => {
+    setShowActionMenu(false);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('warning', 'Quyền truy cập máy ảnh bị từ chối.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: false,
+        quality: 0.8,
+        cameraType: ImagePicker.CameraType.back,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const rawName = asset.fileName || `video_cam_${Date.now()}.mp4`;
+        setSelectedFile({
+          uri: asset.uri,
+          name: rawName,
+          size: asset.fileSize || undefined,
+          mimeType: asset.mimeType || 'video/mp4',
+          isImage: false,
+        });
+        setTimeout(() => scrollToBottom(true), 100);
+      }
+    } catch (e) {
+      console.warn('Lỗi quay video:', e);
+      showToast('error', 'Không thể khởi động camera quay video.');
     }
   };
 
@@ -607,6 +678,23 @@ export default function ChatScreen() {
     );
   };
 
+  const isVideoMessage = (msg: Message) => {
+    const ext = msg.file_name?.split('.').pop()?.toLowerCase();
+    return (
+      Boolean(msg.file_type?.startsWith('video/')) ||
+      ['mp4', 'mov', 'm4v', 'webm', '3gp', 'mkv', 'avi'].includes(ext || '')
+    );
+  };
+
+  const openVideoPlayer = (msg: Message) => {
+    const streamUrl = messageService.getVideoStreamUrl(msg.id, token);
+    setActiveVideoModal({
+      url: streamUrl,
+      name: msg.file_name || 'Video',
+      size: msg.file_size || undefined,
+    });
+  };
+
   const isReadableTextOrCode = (msg: Message) => {
     const ext = msg.file_name?.split('.').pop()?.toLowerCase();
     const readableExts = [
@@ -638,6 +726,11 @@ export default function ChatScreen() {
 
   // 11. Xử lý khi chạm vào tệp tin (Đọc hoặc báo không hỗ trợ)
   const handleFilePress = (msg: Message) => {
+    if (isVideoMessage(msg)) {
+      openVideoPlayer(msg);
+      return;
+    }
+
     if (isImageMessage(msg)) {
       openImageViewer(msg);
       return;
@@ -703,6 +796,7 @@ export default function ChatScreen() {
   const renderMessageItem = ({ item }: { item: Message }) => {
     const isMine = item.is_mine || item.sender_id === user?.id;
     const isImg = isImageMessage(item);
+    const isVid = isVideoMessage(item);
     const hasFile = Boolean(item.file_url || item.image_url);
 
     return (
@@ -729,6 +823,7 @@ export default function ChatScreen() {
             styles.bubbleBox,
             isMine ? styles.bubbleMine : styles.bubbleFriend,
             isImg ? styles.bubbleWithImage : undefined,
+            isVid ? styles.bubbleWithImage : undefined,
             item.id === highlightedMessageId && styles.bubbleHighlighted,
           ]}
         >
@@ -768,8 +863,45 @@ export default function ChatScreen() {
             </TouchableOpacity>
           )}
 
+          {/* TRƯỜNG HỢP 1.5: Tin nhắn tệp tin là VIDEO (Chuẩn YouTube Streaming) */}
+          {isVid && (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => openVideoPlayer(item)}
+              style={styles.videoWrapper}
+            >
+              <View style={styles.videoThumbnailCard}>
+                <View style={styles.videoPlayCircle}>
+                  <Text style={styles.videoPlayIcon}>▶</Text>
+                </View>
+                <Text style={styles.videoDurationHint} numberOfLines={1}>
+                  🎬 {item.file_name || 'Video'}
+                </Text>
+              </View>
+
+              <View style={styles.imageMetaBadge}>
+                <View style={styles.imageMetaLeft}>
+                  <Text style={styles.imageZoomHint}>▶ Bấm xem trực tiếp</Text>
+                  {item.file_size ? (
+                    <Text style={styles.imageSizeText}>• {formatFileSize(item.file_size)}</Text>
+                  ) : null}
+                </View>
+
+                {item.file_url && (
+                  <TouchableOpacity
+                    style={styles.downloadIconBtn}
+                    onPress={() => handleDownloadFile(item.file_url!, item.file_name || 'video.mp4')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={styles.downloadIconText}>⬇️</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </TouchableOpacity>
+          )}
+
           {/* TRƯỜNG HỢP 2: Tin nhắn tệp tin là CODE, TEXT, PDF, ZIP, DOCX... */}
-          {!isImg && hasFile && (
+          {!isImg && !isVid && hasFile && (
             <TouchableOpacity
               style={[styles.fileCard, isMine ? styles.fileCardMine : styles.fileCardOther]}
               activeOpacity={0.8}
@@ -1121,7 +1253,31 @@ export default function ChatScreen() {
               <Text style={styles.actionTitle}>{t('photo_library')}</Text>
             </TouchableOpacity>
 
-            {/* 3. Tệp tin */}
+            {/* 3. Gửi Video */}
+            <TouchableOpacity
+              style={styles.actionOption}
+              onPress={pickVideoFromGallery}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.actionIconCircle, { backgroundColor: '#EC4899' }]}>
+                <Text style={styles.actionEmoji}>🎬</Text>
+              </View>
+              <Text style={styles.actionTitle}>Gửi Video</Text>
+            </TouchableOpacity>
+
+            {/* 4. Quay Video */}
+            <TouchableOpacity
+              style={styles.actionOption}
+              onPress={recordVideoFromCamera}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.actionIconCircle, { backgroundColor: '#EF4444' }]}>
+                <Text style={styles.actionEmoji}>📹</Text>
+              </View>
+              <Text style={styles.actionTitle}>Quay Video</Text>
+            </TouchableOpacity>
+
+            {/* 5. Tệp tin */}
             <TouchableOpacity
               style={styles.actionOption}
               onPress={pickDocumentFile}
@@ -1235,6 +1391,15 @@ export default function ChatScreen() {
           setActiveFileViewerMessage(null);
         }}
         onDownload={handleDownloadFile}
+      />
+
+      {/* 6.2. Modal Phát Video Trực Tiếp Chuẩn YouTube Stream */}
+      <VideoPlayerModal
+        visible={Boolean(activeVideoModal)}
+        videoUrl={activeVideoModal?.url || null}
+        fileName={activeVideoModal?.name}
+        fileSize={activeVideoModal?.size}
+        onClose={() => setActiveVideoModal(null)}
       />
 
       {/* 6.5. Modal Cài đặt Cuộc trò chuyện (Bánh răng ⚙️) */}
@@ -2391,5 +2556,52 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     color: C.primary,
     fontSize: 12,
     fontWeight: '500',
+  },
+  videoWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: isDark ? '#121220' : '#F1F5F9',
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+  },
+  videoThumbnailCard: {
+    width: 230,
+    height: 135,
+    backgroundColor: isDark ? '#0c0c16' : '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  videoPlayCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  videoPlayIcon: {
+    color: '#ffffff',
+    fontSize: 22,
+    marginLeft: 3,
+  },
+  videoDurationHint: {
+    position: 'absolute',
+    bottom: 8,
+    left: 10,
+    right: 10,
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });

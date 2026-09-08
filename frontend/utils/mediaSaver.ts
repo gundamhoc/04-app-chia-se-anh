@@ -63,3 +63,61 @@ export const savePhotoToDevice = async (
     };
   }
 };
+
+/**
+ * Helper lưu video trên Mobile (iOS & Android) vào Bộ sưu tập.
+ */
+export const saveVideoToDevice = async (
+  videoUrl: string,
+  filename?: string
+): Promise<{ success: boolean; message: string }> => {
+  try {
+    let hasPermission = false;
+    try {
+      const current = await MediaLibrary.getPermissionsAsync(true, ['video', 'photo']);
+      hasPermission = current.granted || current.status === 'granted';
+
+      if (!hasPermission) {
+        const requested = await MediaLibrary.requestPermissionsAsync(true, ['video', 'photo']);
+        hasPermission = requested.granted || requested.status === 'granted';
+      }
+    } catch {
+      try {
+        const fallback = await MediaLibrary.requestPermissionsAsync(true);
+        hasPermission = fallback.granted || fallback.status === 'granted';
+      } catch (fallbackErr) {
+        console.warn('Fallback quyền video thất bại:', fallbackErr);
+      }
+    }
+
+    if (!hasPermission) {
+      return {
+        success: false,
+        message: 'Quyền lưu video vào thiết bị bị từ chối.',
+      };
+    }
+
+    const safeFilename = filename || `masita_video_${Date.now()}.mp4`;
+    const targetFileUri = `${FileSystem.documentDirectory}${safeFilename}`;
+
+    const downloaded = await FileSystem.downloadAsync(videoUrl, targetFileUri);
+
+    try {
+      await MediaLibrary.saveToLibraryAsync(downloaded.uri);
+    } catch {
+      await MediaLibrary.createAssetAsync(downloaded.uri);
+    }
+
+    return {
+      success: true,
+      message: 'Đã lưu video vào bộ sưu tập của bạn! 🎬',
+    };
+  } catch (err) {
+    console.warn('Lỗi lưu video trên thiết bị:', err);
+    const errMsg = err instanceof Error ? err.message : 'Lỗi không xác định';
+    return {
+      success: false,
+      message: 'Lưu video thất bại: ' + errMsg,
+    };
+  }
+};

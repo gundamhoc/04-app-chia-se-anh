@@ -11,6 +11,7 @@ const {
   getFileContent,
   markMessagesAsRead,
   downloadMessageFile,
+  streamMessageVideo,
   updateDirectTheme,
   togglePinDirectChat,
   toggleMuteDirectChat,
@@ -19,6 +20,9 @@ const {
 
 // Route tải tệp tin đính kèm trực tiếp (cho phép truy cập tải về máy)
 router.get('/download/:messageId', downloadMessageFile);
+
+// Route stream video chuẩn HTTP 206 Range Request (xác thực qua token query hoặc Bearer)
+router.get('/video-stream/:messageId', streamMessageVideo);
 
 // Tất cả các route còn lại yêu cầu xác thực JWT
 router.use(authMiddleware);

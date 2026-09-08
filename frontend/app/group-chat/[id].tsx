@@ -30,6 +30,7 @@ import { friendService } from '../../services/friendService';
 import { messageService } from '../../services/messageService';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { FileViewerModal } from '../../components/FileViewerModal';
+import { VideoPlayerModal } from '../../components/VideoPlayerModal';
 import { Message, GroupDetail, Friend, Photo } from '../../types';
 
 const PRESET_THEMES = [
@@ -43,7 +44,7 @@ const PRESET_THEMES = [
 export default function GroupChatScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { socket } = useSocket();
   const { showToast, ToastComponent } = useToast();
   const { colors: C, isDark } = useTheme();
@@ -102,6 +103,9 @@ export default function GroupChatScreen() {
 
   // Trạng thái bàn phím
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Modal phát video toàn màn hình chuẩn YouTube streaming
+  const [activeVideoModal, setActiveVideoModal] = useState<{ url: string; name?: string; size?: number } | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -277,6 +281,60 @@ export default function GroupChatScreen() {
     }
   };
 
+  // Chọn video từ thư viện vào nhóm
+  const handlePickVideo = async () => {
+    setShowPlusMenu(false);
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        quality: 0.8,
+        allowsEditing: false,
+      });
+      if (!res.canceled && res.assets && res.assets[0]) {
+        const asset = res.assets[0];
+        setSelectedFile({
+          uri: asset.uri,
+          name: asset.fileName || `video_${Date.now()}.mp4`,
+          isImage: false,
+          mimeType: asset.mimeType || 'video/mp4',
+          size: asset.fileSize,
+        });
+      }
+    } catch (e) {
+      console.warn('Pick video error:', e);
+    }
+  };
+
+  // Quay video từ camera vào nhóm
+  const handleRecordVideo = async () => {
+    setShowPlusMenu(false);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('warning', 'Cần quyền truy cập máy ảnh để quay video.');
+        return;
+      }
+      const res = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['videos'],
+        quality: 0.8,
+        allowsEditing: false,
+        cameraType: ImagePicker.CameraType.back,
+      });
+      if (!res.canceled && res.assets && res.assets[0]) {
+        const asset = res.assets[0];
+        setSelectedFile({
+          uri: asset.uri,
+          name: asset.fileName || `video_cam_${Date.now()}.mp4`,
+          isImage: false,
+          mimeType: asset.mimeType || 'video/mp4',
+          size: asset.fileSize,
+        });
+      }
+    } catch (e) {
+      console.warn('Record video error:', e);
+    }
+  };
+
   // Chọn tệp tin bất kỳ
   const handlePickDocument = async () => {
     setShowPlusMenu(false);
@@ -388,8 +446,29 @@ export default function GroupChatScreen() {
     setViewerVisible(true);
   };
 
+  const isVideoMessage = (msg: Message) => {
+    const ext = msg.file_name?.split('.').pop()?.toLowerCase();
+    return (
+      Boolean(msg.file_type?.startsWith('video/')) ||
+      ['mp4', 'mov', 'm4v', 'webm', '3gp', 'mkv', 'avi'].includes(ext || '')
+    );
+  };
+
+  const openVideoPlayer = (msg: Message) => {
+    const streamUrl = messageService.getVideoStreamUrl(msg.id, token);
+    setActiveVideoModal({
+      url: streamUrl,
+      name: msg.file_name || 'Video',
+      size: msg.file_size || undefined,
+    });
+  };
+
   // Chạm vào tệp tin
   const handleFilePress = (msg: Message) => {
+    if (isVideoMessage(msg)) {
+      openVideoPlayer(msg);
+      return;
+    }
     if (msg.image_url) {
       openImageViewer(msg);
       return;
@@ -674,6 +753,7 @@ export default function GroupChatScreen() {
   const renderMessageItem = ({ item }: { item: Message }) => {
     const isMine = item.is_mine || item.sender_id === user?.id;
     const isImg = Boolean(item.image_url);
+    const isVid = isVideoMessage(item);
     const hasFile = Boolean(item.file_url || item.image_url);
 
     return (
@@ -728,8 +808,45 @@ export default function GroupChatScreen() {
             </TouchableOpacity>
           )}
 
+          {/* Trường hợp: Tin nhắn là Video (Chuẩn YouTube Streaming) */}
+          {isVid && (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => openVideoPlayer(item)}
+              style={styles.videoWrapper}
+            >
+              <View style={styles.videoThumbnailCard}>
+                <View style={styles.videoPlayCircle}>
+                  <Text style={styles.videoPlayIcon}>▶</Text>
+                </View>
+                <Text style={styles.videoDurationHint} numberOfLines={1}>
+                  🎬 {item.file_name || 'Video'}
+                </Text>
+              </View>
+
+              <View style={styles.imageMetaBadge}>
+                <View style={styles.imageMetaLeft}>
+                  <Text style={styles.imageZoomHint}>▶ Bấm xem trực tiếp</Text>
+                  {item.file_size ? (
+                    <Text style={styles.imageSizeText}>• {formatFileSize(item.file_size)}</Text>
+                  ) : null}
+                </View>
+
+                {item.file_url && (
+                  <TouchableOpacity
+                    style={styles.downloadIconBtn}
+                    onPress={() => handleDownload(item.file_url!, item.file_name || 'video.mp4')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={styles.downloadIconText}>⬇️</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </TouchableOpacity>
+          )}
+
           {/* Trường hợp: Tin nhắn là tệp tin */}
-          {!isImg && hasFile && (
+          {!isImg && !isVid && hasFile && (
             <TouchableOpacity
               style={[styles.fileCard, isMine ? styles.fileCardMine : styles.fileCardOther]}
               activeOpacity={0.8}
@@ -1011,6 +1128,20 @@ export default function GroupChatScreen() {
                 <Text style={styles.plusMenuEmoji}>🖼️</Text>
               </View>
               <Text style={styles.plusMenuLabel}>{t('photo_library')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.plusMenuItem} onPress={handlePickVideo}>
+              <View style={[styles.plusMenuIconBox, { backgroundColor: '#EC4899' }]}>
+                <Text style={styles.plusMenuEmoji}>🎬</Text>
+              </View>
+              <Text style={styles.plusMenuLabel}>Gửi Video</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.plusMenuItem} onPress={handleRecordVideo}>
+              <View style={[styles.plusMenuIconBox, { backgroundColor: '#EF4444' }]}>
+                <Text style={styles.plusMenuEmoji}>📹</Text>
+              </View>
+              <Text style={styles.plusMenuLabel}>Quay Video</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.plusMenuItem} onPress={handlePickDocument}>
@@ -1377,6 +1508,15 @@ export default function GroupChatScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal Phát Video Toàn Màn Hình Chuẩn YouTube Streaming */}
+      <VideoPlayerModal
+        visible={Boolean(activeVideoModal)}
+        videoUrl={activeVideoModal?.url || null}
+        fileName={activeVideoModal?.name}
+        fileSize={activeVideoModal?.size}
+        onClose={() => setActiveVideoModal(null)}
+      />
     </View>
   );
 }
@@ -2282,5 +2422,52 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     color: isDark ? '#FFFFFF' : '#0F172A',
     fontSize: 13,
     fontWeight: '600',
+  },
+  videoWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: isDark ? '#121220' : '#F1F5F9',
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+  },
+  videoThumbnailCard: {
+    width: 230,
+    height: 135,
+    backgroundColor: isDark ? '#0c0c16' : '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  videoPlayCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  videoPlayIcon: {
+    color: '#ffffff',
+    fontSize: 22,
+    marginLeft: 3,
+  },
+  videoDurationHint: {
+    position: 'absolute',
+    bottom: 8,
+    left: 10,
+    right: 10,
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });
