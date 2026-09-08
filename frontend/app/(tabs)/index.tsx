@@ -23,8 +23,10 @@ import { useSocket } from '../../hooks/useSocket';
 import { useToast } from '../../hooks/useToast';
 import { useI18n } from '../../utils/i18n';
 import { photoService } from '../../services/photoService';
+import { notificationService } from '../../services/notificationService';
 import { Photo, PhotoReaction } from '../../types';
 import { CommentModal } from '../../components/CommentModal';
+import { NotificationModal } from '../../components/NotificationModal';
 import { ShareModal } from '../../components/ShareModal';
 import { PostOptionsModal } from '../../components/PostOptionsModal';
 import { EditPostModal } from '../../components/EditPostModal';
@@ -57,6 +59,8 @@ export default function HomeScreen() {
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
   const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<Photo | null>(null);
   const [selectedVideoPost, setSelectedVideoPost] = useState<Photo | null>(null);
+  const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState<number>(0);
 
   // Quản lý tự động phát video thông minh kiểu Facebook (Single Active Video Player on Scroll)
   const [activeVideoId, setActiveVideoId] = useState<number | null>(null);
@@ -79,7 +83,8 @@ export default function HomeScreen() {
     activeOptionsPhoto ||
     editingPhoto ||
     selectedViewerPhoto ||
-    selectedVideoPost
+    selectedVideoPost ||
+    isNotificationModalVisible
   );
 
   const viewabilityConfig = useRef({
@@ -110,6 +115,36 @@ export default function HomeScreen() {
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // Lấy số lượng thông báo chưa đọc khi vào màn hình
+  useEffect(() => {
+    notificationService
+      .getUnreadCount()
+      .then((count) => {
+        setUnreadNotificationCount(count);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Lắng nghe realtime sự kiện thông báo mới từ Socket.IO
+  useEffect(() => {
+    if (!socket) return;
+    const handleNewNotification = (data: any) => {
+      if (typeof data?.unread_count === 'number') {
+        setUnreadNotificationCount(data.unread_count);
+      } else {
+        setUnreadNotificationCount((prev) => prev + 1);
+      }
+      if (data?.notification?.content) {
+        showToast(data.notification.content, 'info');
+      }
+    };
+
+    socket.on('new_notification', handleNewNotification);
+    return () => {
+      socket.off('new_notification', handleNewNotification);
+    };
+  }, [socket, showToast]);
 
   const fetchFeed = useCallback(async (query?: string, scope: 'all' | 'friends' | 'public' = searchScope) => {
     try {
@@ -650,6 +685,21 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
+                style={styles.bellBtn}
+                onPress={() => setIsNotificationModalVisible(true)}
+                accessibilityLabel={t('notifications_title')}
+              >
+                <Text style={styles.bellBtnText}>🔔</Text>
+                {unreadNotificationCount > 0 ? (
+                  <View style={styles.bellBadge}>
+                    <Text style={styles.bellBadgeText}>
+                      {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={styles.searchBtn}
                 onPress={() => setIsSearchVisible(true)}
                 accessibilityLabel="Tìm kiếm bài viết"
@@ -880,6 +930,29 @@ export default function HomeScreen() {
         fileName={selectedVideoPost?.caption || `Video của ${selectedVideoPost?.author_name || 'bạn bè'}`}
         onClose={() => setSelectedVideoPost(null)}
       />
+
+      {/* Notification Modal (Trung tâm thông báo) */}
+      <NotificationModal
+        visible={isNotificationModalVisible}
+        onClose={() => setIsNotificationModalVisible(false)}
+        onUnreadCountChange={setUnreadNotificationCount}
+        onSelectPhoto={(photoId) => {
+          const target = photos.find((p) => p.id === photoId);
+          if (target) {
+            setActiveCommentPhoto(target);
+          }
+        }}
+        onSelectUser={(targetUserId) => {
+          if (targetUserId === user?.id) {
+            router.push('/(tabs)/profile');
+          } else {
+            router.push({
+              pathname: '/user/[id]',
+              params: { id: targetUserId.toString() },
+            });
+          }
+        }}
+      />
     </View>
   );
 }
@@ -940,6 +1013,37 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
+  },
+  bellBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: `${C.primary}20`,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  bellBtnText: {
+    fontSize: 16,
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    backgroundColor: '#ef4444',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: isDark ? '#0f172a' : '#ffffff',
+  },
+  bellBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   searchBtn: {
     width: 34,

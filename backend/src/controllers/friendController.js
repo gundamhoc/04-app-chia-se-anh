@@ -1,6 +1,7 @@
 const { pool } = require('../config/db');
 const { sendNotificationToUser, isUserOnline } = require('../sockets/socketHandler');
 const { enrichPhotosWithReactionsAndComments, formatImageUrl } = require('./photoController');
+const { createNotification } = require('../services/notificationService');
 
 // ============================================================
 // Controller: Quản lý Bạn bè
@@ -182,19 +183,29 @@ const sendFriendRequest = async (req, res) => {
       );
     }
 
-    // Gửi socket notification tới targetId nếu online
+    // Gửi socket notification & lưu thông báo tới targetId
     try {
+      const [sender] = await pool.query('SELECT full_name, username FROM users WHERE id = ?', [currentUserId]);
+      const senderName = sender[0]?.full_name || sender[0]?.username || 'Một người bạn';
+
       if (req.io) {
-        const [sender] = await pool.query('SELECT full_name, username FROM users WHERE id = ?', [currentUserId]);
-        const senderName = sender[0]?.full_name || sender[0]?.username || 'Một người bạn';
         sendNotificationToUser(req.io, targetId, 'friend_request_received', {
           sender_id: currentUserId,
           sender_name: senderName,
           message: `👥 ${senderName} đã gửi cho bạn một lời mời kết bạn!`,
         });
       }
+
+      createNotification({
+        userId: targetId,
+        actorId: currentUserId,
+        type: 'friend_request',
+        entityId: currentUserId,
+        content: `${senderName} đã gửi cho bạn một lời mời kết bạn.`,
+        io: req.io,
+      }).catch((err) => console.error('Lỗi tạo thông báo friend_request:', err.message));
     } catch (socketErr) {
-      console.warn('⚠️ Lỗi gửi socket notification friend_request:', socketErr.message);
+      console.warn('⚠️ Lỗi gửi thông báo friend_request:', socketErr.message);
     }
 
     return res.json({
@@ -241,19 +252,29 @@ const acceptFriendRequest = async (req, res) => {
       });
     }
 
-    // Gửi socket notification tới requesterId nếu online
+    // Gửi socket notification & lưu thông báo tới requesterId
     try {
+      const [accepter] = await pool.query('SELECT full_name, username FROM users WHERE id = ?', [currentUserId]);
+      const accepterName = accepter[0]?.full_name || accepter[0]?.username || 'Một người bạn';
+
       if (req.io) {
-        const [accepter] = await pool.query('SELECT full_name, username FROM users WHERE id = ?', [currentUserId]);
-        const accepterName = accepter[0]?.full_name || accepter[0]?.username || 'Một người bạn';
         sendNotificationToUser(req.io, requesterId, 'friend_request_accepted', {
           user_id: currentUserId,
           user_name: accepterName,
           message: `🎉 ${accepterName} đã đồng ý lời mời kết bạn của bạn!`,
         });
       }
+
+      createNotification({
+        userId: requesterId,
+        actorId: currentUserId,
+        type: 'friend_accept',
+        entityId: currentUserId,
+        content: `${accepterName} đã chấp nhận lời mời kết bạn của bạn.`,
+        io: req.io,
+      }).catch((err) => console.error('Lỗi tạo thông báo friend_accept:', err.message));
     } catch (socketErr) {
-      console.warn('⚠️ Lỗi gửi socket notification friend_accept:', socketErr.message);
+      console.warn('⚠️ Lỗi gửi thông báo friend_accept:', socketErr.message);
     }
 
     return res.json({

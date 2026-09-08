@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const { sendNotificationToUser } = require('../sockets/socketHandler');
+const { createNotification } = require('../services/notificationService');
 
 // ============================================================
 // Controller: Quản lý Bình luận & Thả cảm xúc bình luận
@@ -203,22 +204,44 @@ const createComment = async (req, res) => {
     }
     createdComment.reactions = [];
 
-    // Gửi socket notification tới tác giả bài viết
-    if (photoAuthorId !== currentUserId && req.io) {
-      sendNotificationToUser(req.io, photoAuthorId, 'new_comment', {
-        photo_id: parseInt(photoId, 10),
-        comment: createdComment,
-        message: `💬 ${createdComment.author_name || createdComment.author_username} đã bình luận vào ảnh của bạn!`,
-      });
+    // Gửi socket notification & lưu thông báo tới tác giả bài viết
+    if (photoAuthorId !== currentUserId) {
+      if (req.io) {
+        sendNotificationToUser(req.io, photoAuthorId, 'new_comment', {
+          photo_id: parseInt(photoId, 10),
+          comment: createdComment,
+          message: `💬 ${createdComment.author_name || createdComment.author_username} đã bình luận vào ảnh của bạn!`,
+        });
+      }
+
+      createNotification({
+        userId: photoAuthorId,
+        actorId: currentUserId,
+        type: 'comment_post',
+        entityId: photoId,
+        content: `${createdComment.author_name || createdComment.author_username} đã bình luận về bài viết: "${content.trim().slice(0, 60)}"`,
+        io: req.io,
+      }).catch((err) => console.error('Lỗi tạo thông báo comment_post:', err.message));
     }
 
-    // Nếu trả lời bình luận của người khác, gửi socket cho người đó
-    if (parentAuthorId && parentAuthorId !== currentUserId && parentAuthorId !== photoAuthorId && req.io) {
-      sendNotificationToUser(req.io, parentAuthorId, 'new_comment_reply', {
-        photo_id: parseInt(photoId, 10),
-        comment: createdComment,
-        message: `💬 ${createdComment.author_name || createdComment.author_username} đã trả lời bình luận của bạn!`,
-      });
+    // Nếu trả lời bình luận của người khác, gửi socket và thông báo cho người đó
+    if (parentAuthorId && parentAuthorId !== currentUserId && parentAuthorId !== photoAuthorId) {
+      if (req.io) {
+        sendNotificationToUser(req.io, parentAuthorId, 'new_comment_reply', {
+          photo_id: parseInt(photoId, 10),
+          comment: createdComment,
+          message: `💬 ${createdComment.author_name || createdComment.author_username} đã trả lời bình luận của bạn!`,
+        });
+      }
+
+      createNotification({
+        userId: parentAuthorId,
+        actorId: currentUserId,
+        type: 'reply_comment',
+        entityId: photoId,
+        content: `${createdComment.author_name || createdComment.author_username} đã trả lời bình luận của bạn: "${content.trim().slice(0, 60)}"`,
+        io: req.io,
+      }).catch((err) => console.error('Lỗi tạo thông báo reply_comment:', err.message));
     }
 
     return res.status(201).json({
@@ -353,20 +376,33 @@ const toggleCommentReaction = async (req, res) => {
       user_reacted: r.user_reacted > 0,
     }));
 
-    // Gửi socket event tới tác giả bình luận nếu không phải bản thân
-    if (commentAuthorId !== currentUserId && req.io) {
+    // Gửi socket event & lưu thông báo tới tác giả bình luận nếu không phải bản thân
+    if (commentAuthorId !== currentUserId) {
       const [users] = await pool.query(`SELECT full_name, username FROM users WHERE id = ?`, [currentUserId]);
       const actorName = users[0]?.full_name || users[0]?.username || 'Một người bạn';
 
-      sendNotificationToUser(req.io, commentAuthorId, 'comment_reaction_updated', {
-        comment_id: parseInt(commentId, 10),
-        actor_id: currentUserId,
-        actor_name: actorName,
-        emoji,
-        action,
-        reactions: formattedReactions,
-        message: `${actorName} đã thả ${emoji} vào bình luận của bạn!`,
-      });
+      if (req.io) {
+        sendNotificationToUser(req.io, commentAuthorId, 'comment_reaction_updated', {
+          comment_id: parseInt(commentId, 10),
+          actor_id: currentUserId,
+          actor_name: actorName,
+          emoji,
+          action,
+          reactions: formattedReactions,
+          message: `${actorName} đã thả ${emoji} vào bình luận của bạn!`,
+        });
+      }
+
+      if (action === 'added') {
+        createNotification({
+          userId: commentAuthorId,
+          actorId: currentUserId,
+          type: 'like_comment',
+          entityId: commentId,
+          content: `${actorName} đã thả ${emoji} vào bình luận của bạn.`,
+          io: req.io,
+        }).catch((err) => console.error('Lỗi tạo thông báo like_comment:', err.message));
+      }
     }
 
     return res.json({

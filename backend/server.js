@@ -14,6 +14,7 @@ const photoRoutes = require('./src/routes/photoRoutes');
 const messageRoutes = require('./src/routes/messageRoutes');
 const groupRoutes = require('./src/routes/groupRoutes');
 const systemRoutes = require('./src/routes/systemRoutes');
+const notificationRoutes = require('./src/routes/notificationRoutes');
 
 // ============================================================
 // Khởi tạo Express App
@@ -77,6 +78,7 @@ app.use('/api/photos', photoRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -1,6 +1,7 @@
 const { pool } = require('../config/db');
 const { uploadFileToDrive, getDriveClient } = require('../utils/googleDrive');
 const { sendNotificationToUser, broadcastToUsers } = require('../sockets/socketHandler');
+const { createNotification } = require('../services/notificationService');
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
@@ -873,21 +874,35 @@ const toggleReaction = async (req, res) => {
       user_reacted: r.user_reacted > 0,
     }));
 
-    // Gửi socket event tới tác giả bức ảnh nếu không phải bản thân
-    if (photoAuthorId !== currentUserId && req.io) {
+    // Gửi socket event và lưu thông báo tới tác giả bức ảnh nếu không phải bản thân
+    if (photoAuthorId !== currentUserId) {
       // Lấy tên người thả
       const [users] = await pool.query(`SELECT full_name, username FROM users WHERE id = ?`, [currentUserId]);
       const actorName = users[0]?.full_name || users[0]?.username || 'Một người bạn';
 
-      sendNotificationToUser(req.io, photoAuthorId, 'photo_reaction_updated', {
-        photo_id: parseInt(photoId, 10),
-        actor_id: currentUserId,
-        actor_name: actorName,
-        emoji,
-        action,
-        reactions: formattedReactions,
-        message: `${actorName} đã thả ${emoji} vào bức ảnh của bạn!`,
-      });
+      if (req.io) {
+        sendNotificationToUser(req.io, photoAuthorId, 'photo_reaction_updated', {
+          photo_id: parseInt(photoId, 10),
+          actor_id: currentUserId,
+          actor_name: actorName,
+          emoji,
+          action,
+          reactions: formattedReactions,
+          message: `${actorName} đã thả ${emoji} vào bức ảnh của bạn!`,
+        });
+      }
+
+      // Lưu notification vào database & phát realtime
+      if (action === 'added') {
+        createNotification({
+          userId: photoAuthorId,
+          actorId: currentUserId,
+          type: 'like_post',
+          entityId: photoId,
+          content: `${actorName} đã bày tỏ cảm xúc ${emoji} về bài viết của bạn.`,
+          io: req.io,
+        }).catch((err) => console.error('Lỗi tạo thông báo like_post:', err.message));
+      }
     }
 
     return res.json({

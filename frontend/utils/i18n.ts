@@ -447,6 +447,23 @@ export const translations = {
     upload_photo_failed: 'Đăng ảnh thất bại.',
     success: 'Thành công',
     error: 'Đã xảy ra lỗi',
+
+    // Notifications Modal & Center
+    notifications_title: 'Thông báo',
+    notifications_empty: 'Bạn chưa có thông báo nào',
+    notifications_empty_desc: 'Khi ai đó thích, bình luận hoặc gửi lời mời kết bạn, bạn sẽ thấy ở đây.',
+    notifications_mark_all_read: 'Đánh dấu tất cả đã đọc',
+    notifications_all_read: 'Tất cả thông báo đã đọc',
+    notifications_new: 'Mới',
+    notifications_earlier: 'Trước đó',
+    notifications_like_post: 'đã thích bài viết của bạn',
+    notifications_comment_post: 'đã bình luận về bài viết của bạn',
+    notifications_reply_comment: 'đã trả lời bình luận của bạn',
+    notifications_like_comment: 'đã thích bình luận của bạn',
+    notifications_friend_request: 'đã gửi lời mời kết bạn cho bạn',
+    notifications_friend_accept: 'đã chấp nhận lời mời kết bạn',
+    notifications_group_invite: 'đã mời bạn vào nhóm',
+    notifications_delete: 'Xóa thông báo',
   },
   en: {
     // Navigation tabs
@@ -883,10 +900,26 @@ export const translations = {
     loading: 'Loading...',
     retry: 'Retry',
     select_photo_first: 'Please select or take a photo first.',
-    camera_error: 'Could not open camera. Please try again.',
     upload_photo_failed: 'Failed to upload photo.',
     success: 'Success',
     error: 'An error occurred',
+
+    // Notifications Modal & Center
+    notifications_title: 'Notifications',
+    notifications_empty: 'No notifications yet',
+    notifications_empty_desc: 'When someone likes, comments, or sends a friend request, you will see it here.',
+    notifications_mark_all_read: 'Mark all as read',
+    notifications_all_read: 'All caught up!',
+    notifications_new: 'New',
+    notifications_earlier: 'Earlier',
+    notifications_like_post: 'liked your post',
+    notifications_comment_post: 'commented on your post',
+    notifications_reply_comment: 'replied to your comment',
+    notifications_like_comment: 'liked your comment',
+    notifications_friend_request: 'sent you a friend request',
+    notifications_friend_accept: 'accepted your friend request',
+    notifications_group_invite: 'invited you to a group',
+    notifications_delete: 'Delete notification',
   },
 } as const;
 

@@ -285,3 +285,30 @@ export interface LoginSession {
   created_at: string;
   is_active: number;
 }
+
+export type NotificationType =
+  | 'like_post'
+  | 'comment_post'
+  | 'reply_comment'
+  | 'like_comment'
+  | 'friend_request'
+  | 'friend_accept'
+  | 'group_invite'
+  | 'new_post';
+
+export interface NotificationItem {
+  id: number;
+  user_id: number;
+  actor_id: number;
+  actor_name: string;
+  actor_username: string;
+  actor_avatar: string | null;
+  type: NotificationType;
+  entity_id: number | null;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+  photo_thumbnail: string | null;
+  photo_media_type?: 'image' | 'video' | null;
+}
+

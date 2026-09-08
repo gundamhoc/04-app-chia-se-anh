@@ -250,6 +250,23 @@ const initDatabase = async (pool) => {
       KEY idx_repost_photo (photo_id),
       CONSTRAINT fk_repost_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
       CONSTRAINT fk_repost_photo FOREIGN KEY (photo_id) REFERENCES photos (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    // 16. Bảng notifications (Trung tâm thông báo tương tác)
+    `CREATE TABLE IF NOT EXISTS notifications (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id INT UNSIGNED NOT NULL,
+      actor_id INT UNSIGNED NOT NULL,
+      type ENUM('like_post', 'comment_post', 'reply_comment', 'friend_request', 'friend_accept', 'like_comment', 'group_invite', 'new_post') NOT NULL,
+      entity_id INT UNSIGNED DEFAULT NULL,
+      content VARCHAR(255) DEFAULT NULL,
+      is_read TINYINT(1) NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_notif_user (user_id),
+      KEY idx_notif_created (created_at DESC),
+      CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+      CONSTRAINT fk_notif_actor FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
   ];
 
