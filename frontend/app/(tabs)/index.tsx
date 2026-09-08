@@ -55,13 +55,13 @@ export default function HomeScreen() {
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
   const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<Photo | null>(null);
 
-  // Search bài viết / bài đăng
+  // Search & Filter bài viết / bài đăng
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchScope, setSearchScope] = useState<'friends' | 'public'>('friends');
+  const [searchScope, setSearchScope] = useState<'all' | 'friends' | 'public'>('all');
   const [isSearchingBackend, setIsSearchingBackend] = useState(false);
 
-  const fetchFeed = useCallback(async (query?: string, scope: 'friends' | 'public' = 'friends') => {
+  const fetchFeed = useCallback(async (query?: string, scope: 'all' | 'friends' | 'public' = searchScope) => {
     try {
       const data = await photoService.getPhotoFeed(query, scope);
       setPhotos(data);
@@ -73,14 +73,14 @@ export default function HomeScreen() {
       setRefreshing(false);
       setIsSearchingBackend(false);
     }
-  }, []);
+  }, [searchScope]);
 
   const handleSearchBackend = async (q: string, scope = searchScope) => {
     setIsSearchingBackend(true);
     fetchFeed(q.trim() || undefined, scope);
   };
 
-  const handleScopeChange = (newScope: 'friends' | 'public') => {
+  const handleScopeChange = (newScope: 'all' | 'friends' | 'public') => {
     setSearchScope(newScope);
     setIsSearchingBackend(true);
     fetchFeed(searchQuery.trim() || undefined, newScope);
@@ -100,8 +100,8 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchFeed();
-    }, [fetchFeed])
+      fetchFeed(searchQuery.trim() || undefined, searchScope);
+    }, [fetchFeed, searchQuery, searchScope])
   );
 
   // Socket event listener thời gian thực cho Feed bài viết & reactions
@@ -152,7 +152,7 @@ export default function HomeScreen() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchFeed();
+    fetchFeed(searchQuery.trim() || undefined, searchScope);
   };
 
   const confirmDeletePhoto = (photo: Photo) => {
@@ -481,16 +481,34 @@ export default function HomeScreen() {
               onPress={() => {
                 setIsSearchVisible(false);
                 setSearchQuery('');
-                setSearchScope('friends');
-                fetchFeed();
+                setSearchScope('all');
+                fetchFeed(undefined, 'all');
               }}
             >
               <Text style={styles.closeSearchText}>{t('close')}</Text>
             </TouchableOpacity>
           </View>
 
-          {/* 2 Scope Switcher: Bạn bè vs Khám phá (Công khai) */}
+          {/* 3 Scope Switcher: Tất cả vs Bạn bè vs Khám phá */}
           <View style={styles.scopeSwitcherRow}>
+            <TouchableOpacity
+              style={[
+                styles.scopeChip,
+                searchScope === 'all' && styles.scopeChipActive,
+              ]}
+              onPress={() => handleScopeChange('all')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.scopeChipText,
+                  searchScope === 'all' && styles.scopeChipTextActive,
+                ]}
+              >
+                ✨ {t('feed_all')}
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[
                 styles.scopeChip,
@@ -529,31 +547,66 @@ export default function HomeScreen() {
           </View>
         </View>
       ) : (
-        <View style={styles.appBar}>
-          <Text style={styles.appName}>Masita 📸</Text>
+        <>
+          <View style={styles.appBar}>
+            <Text style={styles.appName}>Masita 📸</Text>
 
-          <View style={styles.appBarRight}>
-            <View style={[styles.socketBadge, isConnected ? styles.socketOn : styles.socketOff]}>
-              <View style={[styles.socketDot, isConnected ? styles.dotOn : styles.dotOff]} />
-              <Text style={styles.socketText}>{isConnected ? t('online') : t('offline')}</Text>
+            <View style={styles.appBarRight}>
+              <View style={[styles.socketBadge, isConnected ? styles.socketOn : styles.socketOff]}>
+                <View style={[styles.socketDot, isConnected ? styles.dotOn : styles.dotOff]} />
+                <Text style={styles.socketText}>{isConnected ? t('online') : t('offline')}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.btnHeaderCamera}
+                onPress={() => router.push('/add-photo')}
+              >
+                <Text style={styles.btnHeaderCameraText}>{t('moment_tag')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.searchBtn}
+                onPress={() => setIsSearchVisible(true)}
+                accessibilityLabel="Tìm kiếm bài viết"
+              >
+                <Text style={styles.searchBtnText}>🔍</Text>
+              </TouchableOpacity>
             </View>
+          </View>
 
+          {/* Thanh Tab chuyển nhanh bộ lọc Bảng tin: Tất cả / Bạn bè / Khám phá */}
+          <View style={styles.topFilterBar}>
             <TouchableOpacity
-              style={styles.btnHeaderCamera}
-              onPress={() => router.push('/add-photo')}
+              style={[styles.topFilterChip, searchScope === 'all' && styles.topFilterChipActive]}
+              onPress={() => handleScopeChange('all')}
+              activeOpacity={0.7}
             >
-              <Text style={styles.btnHeaderCameraText}>{t('moment_tag')}</Text>
+              <Text style={[styles.topFilterText, searchScope === 'all' && styles.topFilterTextActive]}>
+                ✨ {t('feed_all')}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.searchBtn}
-              onPress={() => setIsSearchVisible(true)}
-              accessibilityLabel="Tìm kiếm bài viết"
+              style={[styles.topFilterChip, searchScope === 'friends' && styles.topFilterChipActive]}
+              onPress={() => handleScopeChange('friends')}
+              activeOpacity={0.7}
             >
-              <Text style={styles.searchBtnText}>🔍</Text>
+              <Text style={[styles.topFilterText, searchScope === 'friends' && styles.topFilterTextActive]}>
+                👥 {t('feed_friends')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.topFilterChip, searchScope === 'public' && styles.topFilterChipActive]}
+              onPress={() => handleScopeChange('public')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.topFilterText, searchScope === 'public' && styles.topFilterTextActive]}>
+                🌐 {t('explore_public')}
+              </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </>
       )}
 
       {/* Banner thông báo kết quả tìm kiếm bài viết */}
@@ -611,8 +664,18 @@ export default function HomeScreen() {
               <Text style={styles.emptyEmoji}>📸</Text>
               <Text style={styles.emptyTitle}>{t('feed_empty')}</Text>
               <Text style={styles.emptySub}>
-                {t('feed_empty_desc')}
+                {searchScope === 'friends'
+                  ? 'Bạn bè của bạn chưa đăng khoảnh khắc nào. Hãy khám phá các bài đăng công khai từ mọi người!'
+                  : t('feed_empty_desc')}
               </Text>
+              {searchScope === 'friends' && (
+                <TouchableOpacity
+                  style={[styles.btnCreateFirst, { marginBottom: 10 }]}
+                  onPress={() => handleScopeChange('public')}
+                >
+                  <Text style={styles.btnCreateFirstText}>🌐 {t('explore_public')}</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.btnCreateFirst}
                 onPress={() => router.push('/add-photo')}
@@ -1198,6 +1261,36 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   btnSwitchExploreText: {
     color: C.primaryLight || C.primary,
     fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  topFilterBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    backgroundColor: C.card,
+  },
+  topFilterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  topFilterChipActive: {
+    backgroundColor: `${C.primary}25`,
+    borderColor: C.primary,
+  },
+  topFilterText: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: C.textMuted,
+  },
+  topFilterTextActive: {
+    color: C.primary,
     fontFamily: 'Inter_600SemiBold',
   },
 });

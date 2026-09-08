@@ -254,7 +254,7 @@ const getPhotoFeed = async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const queryTerm = req.query.q ? req.query.q.trim() : '';
-    const scope = req.query.scope === 'public' ? 'public' : 'friends';
+    const scope = req.query.scope || 'all';
 
     let querySql = `
       SELECT DISTINCT
@@ -282,11 +282,22 @@ const getPhotoFeed = async (req, res) => {
       // Phạm vi công khai / khám phá: CHỈ bài đăng được cài đặt 'public' của người dùng công khai hoặc bạn bè đã kết bạn
       querySql += ` WHERE (p.privacy = 'public' AND p.recipient_id IS NULL AND (u.is_private_account IS NULL OR u.is_private_account = 0 OR p.user_id = ? OR f.status = 'accepted'))`;
       queryParams.push(currentUserId);
-    } else {
-      // Phạm vi bạn bè:
-      // 1. Bài của chính bản thân (p.user_id = currentUserId): luôn thấy kể cả riêng tư
+    } else if (scope === 'friends') {
+      // Phạm vi chỉ bạn bè:
+      // 1. Bài của chính bản thân (luôn thấy kể cả riêng tư)
       // 2. Bài của bạn bè: chỉ thấy nếu privacy thuộc 'public' hoặc 'friends' (không thấy bài riêng tư 'private' của bạn bè)
       querySql += ` WHERE (p.user_id = ? OR (f.status = 'accepted' AND p.privacy IN ('public', 'friends') AND (p.recipient_id IS NULL OR p.recipient_id = ?)))`;
+      queryParams.push(currentUserId, currentUserId);
+    } else {
+      // Phạm vi mặc định 'all' (Bảng tin chung: Bài của mình + Bài bạn bè + Bài Công khai từ tất cả mọi người):
+      // 1. Bài của chính bản thân (luôn thấy)
+      // 2. Bài Công khai (public) của bất kỳ ai trong cộng đồng (tài khoản công khai hoặc bạn bè, không gửi riêng)
+      // 3. Bài Bạn bè (friends) từ những người đã kết bạn thành công (f.status = 'accepted')
+      querySql += ` WHERE (
+        p.user_id = ?
+        OR (p.privacy = 'public' AND p.recipient_id IS NULL AND (u.is_private_account IS NULL OR u.is_private_account = 0 OR f.status = 'accepted'))
+        OR (f.status = 'accepted' AND p.privacy = 'friends' AND (p.recipient_id IS NULL OR p.recipient_id = ?))
+      )`;
       queryParams.push(currentUserId, currentUserId);
     }
 
