@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,6 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +32,15 @@ export default function AddPhotoScreen() {
   const { colors: C, isDark } = useTheme();
   const { t, language } = useI18n();
   const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const captionInputRef = useRef<TextInput>(null);
+
+  const handleCaptionFocus = () => {
+    // Cuộn ScrollView nhẹ để vùng nhập chú thích luôn nổi rõ ràng trên bàn phím
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: 220, animated: true });
+    }, 120);
+  };
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
@@ -169,7 +179,18 @@ export default function AddPhotoScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={[styles.content, { paddingBottom: 140 + insets.bottom }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
         {/* Preview & Choice Container */}
         <View style={styles.imagePreviewContainer}>
           {imageUri ? (
@@ -240,8 +261,12 @@ export default function AddPhotoScreen() {
 
         {/* Caption Input */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>{t('caption_label')}</Text>
+          <View style={styles.labelRow}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>{t('caption_label')}</Text>
+            <Text style={styles.charCount}>{caption.length}/200</Text>
+          </View>
           <TextInput
+            ref={captionInputRef}
             style={styles.captionInput}
             placeholder={t('caption_placeholder')}
             placeholderTextColor={C.textMuted}
@@ -249,6 +274,7 @@ export default function AddPhotoScreen() {
             onChangeText={setCaption}
             multiline
             maxLength={200}
+            onFocus={handleCaptionFocus}
           />
         </View>
 
@@ -366,6 +392,7 @@ export default function AddPhotoScreen() {
           )}
         </View>
       </ScrollView>
+    </KeyboardAvoidingView>
 
       {/* Web Camera Modal cho môi trường Web browser */}
       <WebCameraModal
@@ -391,6 +418,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
+  },
+  keyboardView: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -560,6 +590,17 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 20,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  charCount: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: C.textMuted,
   },
   label: {
     fontSize: 14,
