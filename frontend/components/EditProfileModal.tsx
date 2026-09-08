@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -48,6 +48,21 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const handleNameFocus = () => {
+    // Cuộn nhẹ để đưa ô Tên hiển thị vào tầm nhìn tối ưu trên bàn phím
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: 120, animated: true });
+    }, 120);
+  };
+
+  const handleBioFocus = () => {
+    // Cuộn xuống cuối để toàn bộ ô Bio và bộ đếm ký tự nổi lên trên bàn phím
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 120);
+  };
 
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [bio, setBio] = useState(user?.bio || '');
@@ -166,12 +181,16 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.backdrop}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.keyboardView}
-        >
-          <View style={[styles.modalBox, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View style={[styles.modalBox, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.headerTitle}>{t('edit_profile') || 'Chỉnh sửa hồ sơ'}</Text>
@@ -186,10 +205,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             </View>
 
             <ScrollView
+              ref={scrollViewRef}
               style={styles.scrollView}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             >
               {/* Avatar Section */}
               <View style={styles.avatarSection}>
@@ -256,6 +277,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     placeholderTextColor={C.textMuted}
                     maxLength={100}
                     editable={!submitting}
+                    onFocus={handleNameFocus}
                   />
                 </View>
 
@@ -289,6 +311,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     numberOfLines={3}
                     maxLength={150}
                     editable={!submitting}
+                    onFocus={handleBioFocus}
                   />
                 </View>
               </View>
@@ -319,8 +342,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
-
         {/* Web Camera Modal */}
         {Platform.OS === 'web' && (
           <WebCameraModal
@@ -332,20 +353,24 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             }}
           />
         )}
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const createStyles = (C: ColorScheme, isDark: boolean) =>
   StyleSheet.create({
-    backdrop: {
+    overlay: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.65)',
       justifyContent: 'flex-end',
     },
-    keyboardView: {
-      width: '100%',
+    backdrop: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
     },
     modalBox: {
       backgroundColor: C.background,
@@ -390,12 +415,13 @@ const createStyles = (C: ColorScheme, isDark: boolean) =>
       fontWeight: 'bold',
     },
     scrollView: {
+      flexShrink: 1,
       maxHeight: 520,
     },
     scrollContent: {
       paddingHorizontal: 20,
       paddingTop: 20,
-      paddingBottom: 24,
+      paddingBottom: 32,
     },
     avatarSection: {
       alignItems: 'center',
