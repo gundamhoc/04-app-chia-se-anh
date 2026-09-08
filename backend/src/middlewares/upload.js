@@ -74,11 +74,14 @@ const handleUploadSingle = (req, res, next) => {
   });
 };
 
-// Multer instance cho upload bất kỳ loại tệp tin nào (code, text, pdf, zip, ảnh, doc...)
+// Multer instance cho upload bất kỳ loại tệp tin nào (hỗ trợ kèm ảnh bìa thumbnail nếu là video)
 const uploadAnyFile = multer({
   storage,
   limits: { fileSize: MAX_FILE_SIZE },
-}).single('file');
+}).fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'thumbnail', maxCount: 1 },
+]);
 
 // Middleware wrapper xử lý lỗi upload tệp tin chung
 const handleUploadAnyFile = (req, res, next) => {
@@ -96,6 +99,16 @@ const handleUploadAnyFile = (req, res, next) => {
       }
       return res.status(400).json({ success: false, message: err.message });
     }
+
+    // Tương thích ngược req.file cho toàn bộ code hiện hành
+    if (req.files && req.files['file'] && req.files['file'][0]) {
+      req.file = req.files['file'][0];
+    }
+    // Gán file ảnh bìa nếu client gửi kèm
+    if (req.files && req.files['thumbnail'] && req.files['thumbnail'][0]) {
+      req.thumbnailFile = req.files['thumbnail'][0];
+    }
+
     next();
   });
 };

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Platform,
   StatusBar,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -18,6 +19,7 @@ import { useToast } from '../hooks/useToast';
 interface VideoPlayerModalProps {
   visible: boolean;
   videoUrl: string | null;
+  thumbnailUrl?: string | null;
   fileName?: string;
   fileSize?: number;
   onClose: () => void;
@@ -26,6 +28,7 @@ interface VideoPlayerModalProps {
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   visible,
   videoUrl,
+  thumbnailUrl,
   fileName,
   fileSize,
   onClose,
@@ -137,8 +140,20 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Khung phát video trung tâm */}
+        {/* Khung phát video trung tâm với nền mờ ambient thích ứng */}
         <View style={styles.playerWrapper}>
+          {thumbnailUrl ? (
+            <Image
+              source={{ uri: thumbnailUrl }}
+              style={StyleSheet.absoluteFill}
+              blurRadius={Platform.OS === 'android' ? 20 : 30}
+              resizeMode="cover"
+            />
+          ) : null}
+          {thumbnailUrl ? (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.45)' }]} />
+          ) : null}
+
           <VideoView
             style={styles.videoPlayer}
             player={player}

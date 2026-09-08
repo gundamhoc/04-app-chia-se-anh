@@ -230,13 +230,14 @@ export const groupService = {
     return res.data.data;
   },
 
-  // 10. Gửi tệp tin vào nhóm
+  // 10. Gửi tệp tin vào nhóm (hỗ trợ video kèm thumbnail)
   async sendGroupFile(
     groupId: number,
     fileUri: string,
     fileName: string,
     mimeType?: string,
-    messageText?: string
+    messageText?: string,
+    thumbnailUri?: string
   ): Promise<Message> {
     const formData = new FormData();
     if (messageText && messageText.trim().length > 0) {
@@ -254,6 +255,32 @@ export const groupService = {
         name: fileName,
         type: mimeType || 'application/octet-stream',
       });
+    }
+
+    // Đính kèm ảnh bìa thumbnail nếu có (dành cho video)
+    if (thumbnailUri) {
+      const thumbName = `thumb_${fileName.replace(/\.[^/.]+$/, '')}.jpg`;
+      if (Platform.OS === 'web') {
+        try {
+          const thumbResponse = await fetch(thumbnailUri);
+          const thumbBlob = await thumbResponse.blob();
+          formData.append('thumbnail', thumbBlob, thumbName);
+        } catch {
+          // @ts-expect-error React Native FormData thumbnail
+          formData.append('thumbnail', {
+            uri: thumbnailUri,
+            name: thumbName,
+            type: 'image/jpeg',
+          });
+        }
+      } else {
+        // @ts-expect-error React Native FormData thumbnail
+        formData.append('thumbnail', {
+          uri: thumbnailUri,
+          name: thumbName,
+          type: 'image/jpeg',
+        });
+      }
     }
 
     const res = await api.post<ApiResponse<Message>>(`/groups/${groupId}/upload-file`, formData, {

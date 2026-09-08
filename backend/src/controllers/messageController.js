@@ -547,7 +547,33 @@ const sendFileMessage = async (req, res) => {
       console.warn('⚠️ Lỗi upload tệp tin lên Google Drive, fallback sang lưu nội bộ:', driveErr.message);
     }
 
-    const imageUrl = isImage ? finalFileUrl : null;
+    let imageUrl = isImage ? finalFileUrl : null;
+
+    // Nếu là video hoặc tệp tin và có gửi kèm thumbnail ảnh bìa
+    if (!isImage && req.thumbnailFile) {
+      let finalThumbUrl = `/uploads/${req.thumbnailFile.filename}`;
+      try {
+        const thumbDriveResult = await uploadFileToDrive(
+          req.thumbnailFile.path,
+          req.thumbnailFile.mimetype,
+          req.thumbnailFile.originalname || req.thumbnailFile.filename
+        );
+        if (thumbDriveResult && thumbDriveResult.directUrl) {
+          finalThumbUrl = thumbDriveResult.directUrl;
+          if (fs.existsSync(req.thumbnailFile.path)) {
+            try {
+              fs.unlinkSync(req.thumbnailFile.path);
+            } catch (unlinkErr) {
+              console.warn('⚠️ Lỗi xóa file thumbnail tạm:', unlinkErr.message);
+            }
+          }
+        }
+      } catch (thumbDriveErr) {
+        console.warn('⚠️ Lỗi upload thumbnail lên Google Drive:', thumbDriveErr.message);
+      }
+      imageUrl = finalThumbUrl;
+    }
+
     const fileName = req.file.originalname || req.file.filename;
     const fileSize = req.file.size;
     const fileType = req.file.mimetype || 'application/octet-stream';

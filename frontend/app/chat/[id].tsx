@@ -26,11 +26,13 @@ import { useSocket } from '../../hooks/useSocket';
 import { useToast } from '../../hooks/useToast';
 import { useI18n } from '../../utils/i18n';
 import { messageService } from '../../services/messageService';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Message, Photo } from '../../types';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { WebCameraModal } from '../../components/WebCameraModal';
 import { FileViewerModal } from '../../components/FileViewerModal';
 import { VideoPlayerModal } from '../../components/VideoPlayerModal';
+import { AdaptiveVideoCard } from '../../components/AdaptiveVideoCard';
 
 const PRESET_THEMES = [
   { id: 'cosmic', name: 'Vũ trụ huyền ảo', url: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000&auto=format&fit=crop' },
@@ -46,6 +48,8 @@ interface SelectedFileState {
   size?: number;
   mimeType?: string;
   isImage?: boolean;
+  thumbnailUri?: string;
+  isVideo?: boolean;
 }
 
 export default function ChatScreen() {
@@ -116,7 +120,12 @@ export default function ChatScreen() {
   const [activeFileViewerMessage, setActiveFileViewerMessage] = useState<Message | null>(null);
 
   // Modal phát video toàn màn hình chuẩn YouTube streaming
-  const [activeVideoModal, setActiveVideoModal] = useState<{ url: string; name?: string; size?: number } | null>(null);
+  const [activeVideoModal, setActiveVideoModal] = useState<{
+    url: string;
+    name?: string;
+    size?: number;
+    thumbnailUrl?: string | null;
+  } | null>(null);
 
   // Trạng thái đang soạn tin (typing indicator)
   const [isFriendTyping, setIsFriendTyping] = useState(false);
@@ -382,12 +391,27 @@ export default function ChatScreen() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         const rawName = asset.fileName || asset.uri.split('/').pop() || `video_${Date.now()}.mp4`;
+
+        // Tự động tạo ảnh bìa thumbnail của video
+        let thumbUri: string | undefined = undefined;
+        try {
+          const thumbResult = await VideoThumbnails.getThumbnailAsync(asset.uri, {
+            time: 500,
+            quality: 0.8,
+          });
+          thumbUri = thumbResult.uri;
+        } catch (thumbErr) {
+          console.warn('Lỗi tạo thumbnail video:', thumbErr);
+        }
+
         setSelectedFile({
           uri: asset.uri,
           name: rawName,
           size: asset.fileSize || undefined,
           mimeType: asset.mimeType || 'video/mp4',
           isImage: false,
+          thumbnailUri: thumbUri,
+          isVideo: true,
         });
         setTimeout(() => scrollToBottom(true), 100);
       }
@@ -416,12 +440,27 @@ export default function ChatScreen() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         const rawName = asset.fileName || `video_cam_${Date.now()}.mp4`;
+
+        // Tự động tạo ảnh bìa thumbnail của video quay từ camera
+        let thumbUri: string | undefined = undefined;
+        try {
+          const thumbResult = await VideoThumbnails.getThumbnailAsync(asset.uri, {
+            time: 500,
+            quality: 0.8,
+          });
+          thumbUri = thumbResult.uri;
+        } catch (thumbErr) {
+          console.warn('Lỗi tạo thumbnail camera video:', thumbErr);
+        }
+
         setSelectedFile({
           uri: asset.uri,
           name: rawName,
           size: asset.fileSize || undefined,
           mimeType: asset.mimeType || 'video/mp4',
           isImage: false,
+          thumbnailUri: thumbUri,
+          isVideo: true,
         });
         setTimeout(() => scrollToBottom(true), 100);
       }
@@ -476,14 +515,15 @@ export default function ChatScreen() {
 
     try {
       if (fileToSend) {
-        // Gửi tệp tin (hỗ trợ mọi định dạng: code, txt, pdf, zip, ảnh...)
+        // Gửi tệp tin (hỗ trợ mọi định dạng: video kèm thumbnail, code, txt, pdf, zip, ảnh...)
         const newMsg = await messageService.sendFileMessage(
           friendId,
           fileToSend.uri,
           fileToSend.name,
           fileToSend.size,
           fileToSend.mimeType,
-          textToSend
+          textToSend,
+          fileToSend.thumbnailUri
         );
         setSelectedFile(null);
         setInputText('');
@@ -693,6 +733,7 @@ export default function ChatScreen() {
       url: streamUrl,
       name: msg.file_name || 'Video',
       size: msg.file_size || undefined,
+      thumbnailUrl: msg.image_url || null,
     });
   };
 
@@ -864,41 +905,14 @@ export default function ChatScreen() {
             </TouchableOpacity>
           )}
 
-          {/* TRƯỜNG HỢP 1.5: Tin nhắn tệp tin là VIDEO (Chuẩn YouTube Streaming) */}
+          {/* TRƯỜNG HỢP 1.5: Tin nhắn tệp tin là VIDEO (Chuẩn YouTube Streaming với Khung Nền Mờ Thích Ứng) */}
           {isVid && (
-            <TouchableOpacity
-              activeOpacity={0.9}
+            <AdaptiveVideoCard
+              message={item}
               onPress={() => openVideoPlayer(item)}
-              style={styles.videoWrapper}
-            >
-              <View style={styles.videoThumbnailCard}>
-                <View style={styles.videoPlayCircle}>
-                  <Text style={styles.videoPlayIcon}>▶</Text>
-                </View>
-                <Text style={styles.videoDurationHint} numberOfLines={1}>
-                  🎬 {item.file_name || 'Video'}
-                </Text>
-              </View>
-
-              <View style={styles.imageMetaBadge}>
-                <View style={styles.imageMetaLeft}>
-                  <Text style={styles.imageZoomHint}>▶ Bấm xem trực tiếp</Text>
-                  {item.file_size ? (
-                    <Text style={styles.imageSizeText}>• {formatFileSize(item.file_size)}</Text>
-                  ) : null}
-                </View>
-
-                {item.file_url && (
-                  <TouchableOpacity
-                    style={styles.downloadIconBtn}
-                    onPress={() => handleDownloadFile(item.file_url!, item.file_name || 'video.mp4')}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.downloadIconText}>⬇️</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </TouchableOpacity>
+              onDownload={(url, name) => handleDownloadFile(url, name)}
+              isDark={isDark}
+            />
           )}
 
           {/* TRƯỜNG HỢP 2: Tin nhắn tệp tin là CODE, TEXT, PDF, ZIP, DOCX... */}
@@ -1195,6 +1209,13 @@ export default function ChatScreen() {
             <View style={styles.previewImageContainer}>
               {selectedFile.isImage ? (
                 <Image source={{ uri: selectedFile.uri }} style={styles.previewThumbnail} />
+              ) : selectedFile.thumbnailUri ? (
+                <View style={styles.previewThumbnailWrapper}>
+                  <Image source={{ uri: selectedFile.thumbnailUri }} style={styles.previewThumbnail} />
+                  <View style={styles.previewVideoBadge}>
+                    <Text style={styles.previewVideoBadgeIcon}>▶</Text>
+                  </View>
+                </View>
               ) : (
                 <View style={styles.previewFileBox}>
                   <Text style={styles.previewFileEmoji}>{getFileEmoji(selectedFile.name)}</Text>
@@ -1399,10 +1420,11 @@ export default function ChatScreen() {
         onDownload={handleDownloadFile}
       />
 
-      {/* 6.2. Modal Phát Video Trực Tiếp Chuẩn YouTube Stream */}
+      {/* 6.2. Modal Phát Video Trực Tiếp Chuẩn YouTube Stream với Ambient Blur */}
       <VideoPlayerModal
         visible={Boolean(activeVideoModal)}
         videoUrl={activeVideoModal?.url || null}
+        thumbnailUrl={activeVideoModal?.thumbnailUrl}
         fileName={activeVideoModal?.name}
         fileSize={activeVideoModal?.size}
         onClose={() => setActiveVideoModal(null)}
@@ -2026,6 +2048,27 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: C.primary,
+  },
+  previewThumbnailWrapper: {
+    position: 'relative',
+    width: 48,
+    height: 48,
+  },
+  previewVideoBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewVideoBadgeIcon: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: 'bold',
   },
   previewFileBox: {
     width: 48,

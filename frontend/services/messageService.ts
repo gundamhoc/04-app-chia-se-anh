@@ -112,14 +112,15 @@ export const messageService = {
     return res.data.data;
   },
 
-  // Gửi tin nhắn đính kèm tệp tin bất kỳ (code, txt, pdf, zip, docx...)
+  // Gửi tin nhắn đính kèm tệp tin bất kỳ (code, txt, pdf, zip, docx, video...)
   async sendFileMessage(
     receiverId: number,
     fileUri: string,
     fileName: string,
     fileSize?: number,
     mimeType?: string,
-    messageText?: string
+    messageText?: string,
+    thumbnailUri?: string
   ): Promise<Message> {
     const formData = new FormData();
     const finalMimeType = mimeType || 'application/octet-stream';
@@ -143,6 +144,30 @@ export const messageService = {
         name: fileName,
         type: finalMimeType,
       } as unknown as Blob);
+    }
+
+    // Đính kèm ảnh bìa thumbnail nếu có (dành cho video)
+    if (thumbnailUri) {
+      const thumbName = `thumb_${fileName.replace(/\.[^/.]+$/, '')}.jpg`;
+      if (Platform.OS === 'web') {
+        try {
+          const thumbResponse = await fetch(thumbnailUri);
+          const thumbBlob = await thumbResponse.blob();
+          formData.append('thumbnail', thumbBlob, thumbName);
+        } catch {
+          formData.append('thumbnail', {
+            uri: thumbnailUri,
+            name: thumbName,
+            type: 'image/jpeg',
+          } as unknown as Blob);
+        }
+      } else {
+        formData.append('thumbnail', {
+          uri: thumbnailUri,
+          name: thumbName,
+          type: 'image/jpeg',
+        } as unknown as Blob);
+      }
     }
 
     formData.append('receiver_id', receiverId.toString());
