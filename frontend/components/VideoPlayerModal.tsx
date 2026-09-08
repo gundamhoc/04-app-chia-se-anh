@@ -25,6 +25,30 @@ interface VideoPlayerModalProps {
   onClose: () => void;
 }
 
+/**
+ * Trình phát video chuyên biệt gắn liền với vòng đời modal mở/đóng.
+ * Tránh tạo player rỗng khi modal chưa hiển thị và ngăn ngừa lỗi SharedObject released trên Android.
+ */
+const ModalVideoPlayer: React.FC<{ videoUrl: string }> = ({ videoUrl }) => {
+  const player = useVideoPlayer(videoUrl, (p) => {
+    p.loop = false;
+    try {
+      p.play();
+    } catch {
+      // Ignored
+    }
+  });
+
+  return (
+    <VideoView
+      style={styles.videoPlayer}
+      player={player}
+      contentFit="contain"
+      nativeControls={true}
+    />
+  );
+};
+
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   visible,
   videoUrl,
@@ -36,21 +60,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const [downloading, setDownloading] = useState(false);
-
-  // Khởi tạo trình phát video native của expo-video
-  const player = useVideoPlayer(videoUrl || '', (p) => {
-    p.loop = false;
-    p.play();
-  });
-
-  const handleClose = () => {
-    try {
-      player.pause();
-    } catch {
-      // Ignored
-    }
-    onClose();
-  };
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes || bytes <= 0) return '';
@@ -65,14 +74,12 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
     try {
       if (Platform.OS === 'web') {
-        const link = document.createElement('a');
-        link.href = videoUrl;
-        link.download = fileName || 'video.mp4';
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showToast('success', 'Đã bắt đầu tải video!');
+        const res = await saveVideoToDevice(videoUrl, fileName || `masita_${Date.now()}.mp4`);
+        if (res.success) {
+          showToast('success', res.message);
+        } else {
+          showToast('error', res.message);
+        }
       } else {
         const res = await saveVideoToDevice(videoUrl, fileName || `masita_${Date.now()}.mp4`);
         if (res.success) {
@@ -97,7 +104,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={handleClose}
+      onRequestClose={onClose}
       statusBarTranslucent
     >
       <View style={styles.container}>
@@ -107,7 +114,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
           <TouchableOpacity
             style={styles.closeBtn}
-            onPress={handleClose}
+            onPress={onClose}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.7}
           >
@@ -154,12 +161,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.45)' }]} />
           ) : null}
 
-          <VideoView
-            style={styles.videoPlayer}
-            player={player}
-            contentFit="contain"
-            nativeControls={true}
-          />
+          <ModalVideoPlayer videoUrl={videoUrl} />
         </View>
       </View>
     </Modal>

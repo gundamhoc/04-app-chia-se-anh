@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,46 @@ interface FeedVideoPostProps {
   top2Reactions?: Array<{ emoji: string; count: number }>;
   totalReactionsCount?: number;
 }
+
+/**
+ * Component trình phát video chuyên dụng khi bài đăng ĐANG ACTIVE trên màn hình.
+ * Tách biệt lifecycle để đảm bảo useVideoPlayer và VideoView luôn unmount đồng thời,
+ * triệt tiêu hoàn toàn lỗi "Cannot set prop player on view SurfaceVideoView: Cannot use shared object that was already released".
+ */
+const ActiveVideoPlayer: React.FC<{ sourceUrl: string; isMuted: boolean }> = ({
+  sourceUrl,
+  isMuted,
+}) => {
+  const player = useVideoPlayer(sourceUrl, (p) => {
+    p.loop = true;
+    p.muted = isMuted;
+    try {
+      p.play();
+    } catch (err) {
+      console.warn('Auto play video error:', err);
+    }
+  });
+
+  // Đồng bộ âm lượng mute/unmute khi người dùng ấn nút loa
+  useEffect(() => {
+    if (player) {
+      try {
+        player.muted = isMuted;
+      } catch {
+        // Ignored
+      }
+    }
+  }, [player, isMuted]);
+
+  return (
+    <VideoView
+      style={styles.videoPlayer}
+      player={player}
+      contentFit="contain"
+      nativeControls={false}
+    />
+  );
+};
 
 export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
   post,
@@ -52,66 +92,7 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
     return photoService.getPhotoVideoStreamUrl(post.id, token);
   }, [post.id, post.video_url, post.media_type, token]);
 
-  const shouldPlay = isActive && isScreenFocused && !isModalOpen;
-
-  // Khởi tạo trình phát expo-video
-  const player = useVideoPlayer(videoSourceUrl, (p) => {
-    p.loop = true;
-    p.muted = isMuted;
-  });
-
-  const isPlayingRef = useRef(false);
-
-  // Đồng bộ âm lượng mute/unmute
-  useEffect(() => {
-    if (player) {
-      try {
-        player.muted = isMuted;
-      } catch (e) {
-        // Ignored
-      }
-    }
-  }, [isMuted, player]);
-
-  // Điều khiển phát / tạm dừng tự động an toàn không bị ngắt quãng
-  useEffect(() => {
-    if (!player || !videoSourceUrl) return;
-
-    if (shouldPlay) {
-      if (!isPlayingRef.current) {
-        try {
-          player.muted = isMuted;
-          const playPromise = player.play() as unknown as Promise<void> | undefined;
-          if (playPromise && typeof playPromise.then === 'function') {
-            playPromise
-              .then(() => {
-                isPlayingRef.current = true;
-              })
-              .catch((e: any) => {
-                isPlayingRef.current = false;
-                if (e?.name !== 'AbortError') {
-                  console.warn('Video autoplay notice:', e?.message || e);
-                }
-              });
-          } else {
-            isPlayingRef.current = true;
-          }
-        } catch (e) {
-          console.warn('Feed video play error:', e);
-        }
-      }
-    } else {
-      if (isPlayingRef.current) {
-        isPlayingRef.current = false;
-        try {
-          player.pause();
-        } catch (e) {
-          // Ignored
-        }
-      }
-    }
-  }, [shouldPlay, player, isMuted, videoSourceUrl]);
-
+  const shouldPlay = isActive && isScreenFocused && !isModalOpen && Boolean(videoSourceUrl);
   const thumbnailUrl = post.image_url;
 
   return (
@@ -137,32 +118,27 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
         onPress={onExpand}
       >
         <View style={styles.videoPlayerWrapper}>
-          {videoSourceUrl ? (
-            <VideoView
-              style={styles.videoPlayer}
-              player={player}
-              contentFit="contain"
-              nativeControls={false}
-            />
-          ) : null}
+          {shouldPlay && videoSourceUrl ? (
+            <ActiveVideoPlayer sourceUrl={videoSourceUrl} isMuted={isMuted} />
+          ) : (
+            <>
+              {thumbnailUrl ? (
+                <Image
+                  source={{ uri: thumbnailUrl }}
+                  style={styles.thumbnailImage}
+                  resizeMode="contain"
+                  {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
+                />
+              ) : null}
 
-          {!shouldPlay && thumbnailUrl ? (
-            <Image
-              source={{ uri: thumbnailUrl }}
-              style={styles.thumbnailImage}
-              resizeMode="contain"
-              {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
-            />
-          ) : null}
-
-          {/* Nút Play trung tâm khi video chưa active */}
-          {!shouldPlay && (
-            <View style={styles.centerPlayOverlay}>
-              <View style={styles.centerPlayCircle}>
-                <Text style={styles.centerPlayIcon}>▶</Text>
+              {/* Nút Play trung tâm khi video chưa active */}
+              <View style={styles.centerPlayOverlay}>
+                <View style={styles.centerPlayCircle}>
+                  <Text style={styles.centerPlayIcon}>▶</Text>
+                </View>
+                <Text style={styles.centerPlayHint}>Lướt tới để tự phát</Text>
               </View>
-              <Text style={styles.centerPlayHint}>Lướt tới để tự phát</Text>
-            </View>
+            </>
           )}
         </View>
       </TouchableOpacity>
