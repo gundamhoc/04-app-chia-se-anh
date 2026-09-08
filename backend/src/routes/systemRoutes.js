@@ -4,22 +4,22 @@ const router = express.Router();
 // Định nghĩa thông tin các phiên bản OTA trên hệ thống
 const SYSTEM_VERSIONS = {
   production: {
-    latest_version: '1.2.5',
-    release_date: '2026-09-07',
-    bundle_size: '3.2 MB',
+    latest_version: '1.2.6',
+    release_date: '2026-09-08',
+    bundle_size: '3.3 MB',
     mandatory: false,
     channel: 'production',
     changelog_vi: [
-      'Nâng cấp hệ thống kiểm tra cập nhật Over-The-Air (OTA) thông minh.',
-      'Sửa lỗi hiển thị tên người bạn khi nhắn tin từ tab Bạn bè.',
-      'Bản địa hóa 100% định dạng ngày giờ tương đối và thông báo toàn hệ thống.',
-      'Tối ưu hóa hiệu năng đồng bộ dữ liệu đám mây thời gian thực.',
+      'Khắc phục lỗi bàn phím che khuất ô nhập chú thích (caption) khi đăng khoảnh khắc.',
+      'Khắc phục lỗi bàn phím che khuất Tên hiển thị và Bio khi chỉnh sửa hồ sơ.',
+      'Tự động cuộn thông minh đưa ô nhập văn bản lên trên bàn phím ảo khi chạm vào.',
+      'Bổ sung bộ đếm ký tự thời gian thực cho chú thích bài đăng ({caption}/200).',
     ],
     changelog_en: [
-      'Upgraded smart Over-The-Air (OTA) update checking engine.',
-      'Fixed friend name display when messaging from the Friends tab.',
-      '100% bilingual localization for relative timestamps and app alerts.',
-      'Optimized realtime cloud database synchronization performance.',
+      'Fixed keyboard covering caption input when posting a new moment.',
+      'Fixed keyboard covering Name and Bio inputs when editing profile.',
+      'Smart auto-scrolling bringing text inputs above the virtual keyboard when focused.',
+      'Added real-time character counter for post caption ({caption}/200).',
     ],
   },
   beta: {
