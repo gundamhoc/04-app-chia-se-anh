@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import { PostOptionsModal } from '../../components/PostOptionsModal';
 import { EditPostModal } from '../../components/EditPostModal';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { VideoPlayerModal } from '../../components/VideoPlayerModal';
+import { FeedVideoPost } from '../../components/FeedVideoPost';
 import { FeedSkeleton } from '../../components/LoadingComponents';
 
 const EMOJIS = ['❤️', '🔥', '😂', '😮', '😢'];
@@ -56,6 +57,48 @@ export default function HomeScreen() {
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
   const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<Photo | null>(null);
   const [selectedVideoPost, setSelectedVideoPost] = useState<Photo | null>(null);
+
+  // Quản lý tự động phát video thông minh kiểu Facebook (Single Active Video Player on Scroll)
+  const [activeVideoId, setActiveVideoId] = useState<number | null>(null);
+  const [isFeedMuted, setIsFeedMuted] = useState(true);
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsScreenFocused(true);
+      return () => {
+        setIsScreenFocused(false);
+        setActiveVideoId(null);
+      };
+    }, [])
+  );
+
+  const isAnyModalOpen = Boolean(
+    activeCommentPhoto ||
+    activeSharePhoto ||
+    activeOptionsPhoto ||
+    editingPhoto ||
+    selectedViewerPhoto ||
+    selectedVideoPost
+  );
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 60,
+    minimumViewTime: 200,
+  }).current;
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: Array<{ item: Photo; isViewable: boolean }> }) => {
+      const visibleVideoItem = viewableItems.find(
+        (v) => v.isViewable && (v.item.media_type === 'video' || Boolean(v.item.video_url))
+      );
+      if (visibleVideoItem) {
+        setActiveVideoId(visibleVideoItem.item.id);
+      } else {
+        setActiveVideoId(null);
+      }
+    }
+  ).current;
 
   // Search & Filter bài viết / bài đăng
   const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -337,52 +380,19 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Media (Video kiểu Facebook/Zalo với Blurred Backdrop hoặc Ảnh thông thường) */}
+        {/* Media (Video tự động phát thông minh kiểu Facebook hoặc Ảnh thông thường) */}
         {item.media_type === 'video' || item.video_url ? (
-          <TouchableOpacity
-            style={styles.videoPostContainer}
-            activeOpacity={0.92}
-            onPress={() => setSelectedVideoPost(item)}
-          >
-            {/* Lớp nền mờ (Blurred Backdrop) tự động tương thích kích thước khung hình */}
-            {item.image_url ? (
-              <Image
-                source={{ uri: item.image_url }}
-                style={StyleSheet.absoluteFill}
-                blurRadius={Platform.OS === 'ios' ? 25 : 18}
-                resizeMode="cover"
-                {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
-              />
-            ) : null}
-
-            {/* Lớp phủ tương phản tối */}
-            <View style={styles.videoBackdropDarkOverlay} />
-
-            {/* Nút Play trung tâm kính mờ Glassmorphism */}
-            <View style={styles.videoCenterPlayContainer}>
-              <View style={styles.videoPlayCircle}>
-                <Text style={styles.videoPlayTriangle}>▶</Text>
-              </View>
-              <Text style={styles.videoTapToPlayLabel}>Nhấn để phát video</Text>
-            </View>
-
-            {/* Huy hiệu Video góc trên */}
-            <View style={styles.videoTopLeftBadge}>
-              <Text style={styles.videoTopLeftText}>📹 Video</Text>
-            </View>
-
-            {/* Biểu tượng góc bên phải: hiện số lượt thẻ emoji nhiều nhất */}
-            {top2Reactions.length > 0 && (
-              <View style={styles.topEmojiFloatBadge}>
-                <Text style={styles.topEmojiFloatIcons}>
-                  {top2Reactions.map((r) => r.emoji).join(' ')}
-                </Text>
-                <Text style={styles.topEmojiFloatCount}>
-                  {totalReactionsCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <FeedVideoPost
+            post={item}
+            isActive={activeVideoId === item.id}
+            isScreenFocused={isScreenFocused}
+            isModalOpen={isAnyModalOpen}
+            isMuted={isFeedMuted}
+            onToggleMute={() => setIsFeedMuted((prev) => !prev)}
+            onExpand={() => setSelectedVideoPost(item)}
+            top2Reactions={top2Reactions}
+            totalReactionsCount={totalReactionsCount}
+          />
         ) : (
           <TouchableOpacity
             style={styles.imageContainer}
@@ -767,6 +777,8 @@ export default function HomeScreen() {
           renderItem={renderPhotoCard}
           contentContainerStyle={styles.feedContent}
           showsVerticalScrollIndicator={false}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
           onScrollBeginDrag={() => {
             if (activeEmojiPopoverPhotoId) {
               setActiveEmojiPopoverPhotoId(null);
