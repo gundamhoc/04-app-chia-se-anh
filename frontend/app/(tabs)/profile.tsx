@@ -58,6 +58,7 @@ export default function ProfileScreen() {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [selectedPhotoForView, setSelectedPhotoForView] = useState<Photo | null>(null);
   const [selectedVideoForView, setSelectedVideoForView] = useState<Photo | null>(null);
+  const [viewingCustomImage, setViewingCustomImage] = useState<{ url: string; title: string } | null>(null);
 
   // Tabs state: posts | liked | saved | reposts
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
@@ -231,12 +232,18 @@ export default function ProfileScreen() {
 
         {/* 2. Profile Hero Section */}
         <View style={styles.heroCard}>
-          {/* Cover Banner (Ảnh bìa nằm ngang) */}
+          {/* Cover Banner (Ảnh bìa nằm ngang - Chạm để xem chi tiết) */}
           <View style={styles.coverContainer}>
             {(() => {
               const coverUri = getAvatarUrl(user?.cover_url);
               return coverUri ? (
-                <Image source={{ uri: coverUri }} style={styles.coverImage} resizeMode="cover" />
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => setViewingCustomImage({ url: coverUri, title: t('cover_title') })}
+                  style={StyleSheet.absoluteFill}
+                >
+                  <Image source={{ uri: coverUri }} style={styles.coverImage} resizeMode="cover" />
+                </TouchableOpacity>
               ) : (
                 <View style={styles.defaultCover}>
                   <Text style={styles.defaultCoverEmoji}>✨ 📸 🌟</Text>
@@ -269,7 +276,12 @@ export default function ProfileScreen() {
               {(() => {
                 const avatarUri = getAvatarUrl(user?.avatar_url);
                 return avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={() => setViewingCustomImage({ url: avatarUri, title: t('avatar_title') })}
+                  >
+                    <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                  </TouchableOpacity>
                 ) : (
                   <View style={styles.avatarPlaceholder}>
                     <Text style={styles.avatarInitial}>
@@ -726,11 +738,21 @@ export default function ProfileScreen() {
         }}
       />
 
-      {/* Fullscreen Image Viewer Modal */}
+      {/* Fullscreen Image Viewer Modal cho bài viết */}
       <ImageViewerModal
         visible={Boolean(selectedPhotoForView)}
         photo={selectedPhotoForView}
         onClose={() => setSelectedPhotoForView(null)}
+      />
+
+      {/* Fullscreen Image Viewer Modal cho Ảnh đại diện & Ảnh bìa */}
+      <ImageViewerModal
+        visible={Boolean(viewingCustomImage)}
+        imageUrl={viewingCustomImage?.url}
+        title={viewingCustomImage?.title}
+        authorName={user?.full_name || user?.username}
+        authorAvatar={getAvatarUrl(user?.avatar_url)}
+        onClose={() => setViewingCustomImage(null)}
       />
 
       {/* VideoPlayerModal (Xem video) */}

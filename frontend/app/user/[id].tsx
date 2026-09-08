@@ -64,6 +64,7 @@ export default function OtherUserProfileScreen() {
   // Modal xem ảnh & video toàn màn hình
   const [selectedPhotoForView, setSelectedPhotoForView] = useState<Photo | null>(null);
   const [selectedVideoForView, setSelectedVideoForView] = useState<Photo | null>(null);
+  const [viewingCustomImage, setViewingCustomImage] = useState<{ url: string; title: string } | null>(null);
 
   // Kích thước ô lưới ảnh (3 cột)
   const gridItemSize = useMemo(() => {
@@ -404,14 +405,25 @@ export default function OtherUserProfileScreen() {
           <>
             {/* 2. Hero Section */}
             <View style={styles.heroCard}>
-              {/* Cover Banner */}
+              {/* Cover Banner (Chạm để xem chi tiết) */}
               <View style={styles.coverContainer}>
                 {profileUser.cover_url ? (
-                  <Image
-                    source={{ uri: getAvatarUrl(profileUser.cover_url) || profileUser.cover_url }}
-                    style={styles.coverImage}
-                    resizeMode="cover"
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => {
+                      const coverUri = getAvatarUrl(profileUser.cover_url) || profileUser.cover_url;
+                      if (coverUri) {
+                        setViewingCustomImage({ url: coverUri, title: t('cover_title') });
+                      }
+                    }}
+                    style={StyleSheet.absoluteFill}
+                  >
+                    <Image
+                      source={{ uri: getAvatarUrl(profileUser.cover_url) || profileUser.cover_url }}
+                      style={styles.coverImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
                 ) : (
                   <View style={styles.defaultCover}>
                     <Text style={styles.defaultCoverEmoji}>✨ 📸 🌟</Text>
@@ -427,7 +439,14 @@ export default function OtherUserProfileScreen() {
                       {(() => {
                         const avatarUri = getAvatarUrl(profileUser.avatar_url);
                         return avatarUri ? (
-                          <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                          <TouchableOpacity
+                            activeOpacity={0.88}
+                            onPress={() =>
+                              setViewingCustomImage({ url: avatarUri, title: t('avatar_title') })
+                            }
+                          >
+                            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                          </TouchableOpacity>
                         ) : (
                           <View style={styles.avatarPlaceholder}>
                             <Text style={styles.avatarInitial}>
@@ -571,11 +590,21 @@ export default function OtherUserProfileScreen() {
         )}
       </ScrollView>
 
-      {/* Fullscreen Image Viewer Modal */}
+      {/* Fullscreen Image Viewer Modal cho bài viết */}
       <ImageViewerModal
         visible={!!selectedPhotoForView}
         photo={selectedPhotoForView}
         onClose={() => setSelectedPhotoForView(null)}
+      />
+
+      {/* Fullscreen Image Viewer Modal cho Ảnh đại diện & Ảnh bìa */}
+      <ImageViewerModal
+        visible={Boolean(viewingCustomImage)}
+        imageUrl={viewingCustomImage?.url}
+        title={viewingCustomImage?.title}
+        authorName={profileUser?.full_name || profileUser?.username}
+        authorAvatar={getAvatarUrl(profileUser?.avatar_url)}
+        onClose={() => setViewingCustomImage(null)}
       />
 
       {/* VideoPlayerModal (Xem video) */}

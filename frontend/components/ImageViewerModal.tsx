@@ -11,26 +11,48 @@ import {
   useWindowDimensions,
   Platform,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { savePhotoToDevice } from '../utils/mediaSaver';
+import { useToast } from '../hooks/useToast';
+import { useI18n } from '../utils/i18n';
 import { Photo } from '../types';
 
 interface ImageViewerModalProps {
   visible: boolean;
-  photo: Photo | null;
+  photo?: Photo | null;
+  imageUrl?: string | null;
+  title?: string;
+  authorName?: string;
+  authorAvatar?: string | null;
+  caption?: string;
   onClose: () => void;
 }
 
 export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   visible,
   photo,
+  imageUrl,
+  title,
+  authorName,
+  authorAvatar,
+  caption,
   onClose,
 }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
+  const { t } = useI18n();
 
   const [currentZoomLevel, setCurrentZoomLevel] = useState(1);
   const [showControls, setShowControls] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+
+  const targetImageUrl = imageUrl || photo?.image_url;
+  const displayName = authorName || photo?.author_name || title || 'Ảnh';
+  const displayAvatar = authorAvatar !== undefined ? authorAvatar : photo?.author_avatar;
+  const displayCaption = caption !== undefined ? caption : photo?.caption;
 
   // Animated values
   const scale = useRef(new Animated.Value(1)).current;
@@ -49,7 +71,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
       resetZoom(false);
       setShowControls(true);
     }
-  }, [visible, photo?.id]);
+  }, [visible, photo?.id, imageUrl]);
 
   // Đồng bộ giá trị Animated với Ref
   useEffect(() => {
@@ -238,10 +260,47 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     })
   ).current;
 
-  if (!photo) return null;
+  // Lưu ảnh vào thiết bị (Gallery / Camera Roll trên điện thoại, Download trên Web)
+  const handleDownload = async () => {
+    if (!targetImageUrl || downloading) return;
 
-  const authorAvatarUri = photo.author_avatar
-    ? { uri: photo.author_avatar }
+    try {
+      setDownloading(true);
+
+      if (Platform.OS === 'web') {
+        showToast('info', t('downloading_photo'));
+        const response = await fetch(targetImageUrl);
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `masita_${Date.now()}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        showToast('success', t('download_photo_success'));
+      } else {
+        showToast('info', t('downloading_photo'));
+        const res = await savePhotoToDevice(targetImageUrl);
+        if (res.success) {
+          showToast('success', t('download_photo_success'));
+        } else {
+          showToast('error', res.message || t('download_photo_error'));
+        }
+      }
+    } catch (err: unknown) {
+      console.error('Download photo error:', err);
+      showToast('error', t('download_photo_error'));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  if (!targetImageUrl) return null;
+
+  const authorAvatarUri = displayAvatar
+    ? { uri: displayAvatar }
     : require('../assets/splash-icon.png');
 
   return (
@@ -265,12 +324,12 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         {/* Top Header Bar */}
         {showControls && (
           <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-            {/* Tác giả */}
+            {/* Tác giả hoặc Tiêu đề */}
             <View style={styles.authorHeader}>
               <Image source={authorAvatarUri} style={styles.authorAvatar} />
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.authorName} numberOfLines={1}>
-                  {photo.author_name}
+                  {displayName}
                 </Text>
                 <Text style={styles.zoomText}>
                   {currentZoomLevel > 1 ? `Zoom: ${Math.round(currentZoomLevel * 100)}%` : 'Chạm đúp để phóng to'}
@@ -278,14 +337,30 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
               </View>
             </View>
 
-            {/* Nút đóng */}
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={onClose}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Text style={styles.closeIcon}>✕</Text>
-            </TouchableOpacity>
+            {/* Action Buttons: Tải về & Đóng */}
+            <View style={styles.topRightActions}>
+              <TouchableOpacity
+                style={styles.downloadBtn}
+                onPress={handleDownload}
+                disabled={downloading}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityLabel={t('download_photo')}
+              >
+                {downloading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.downloadIcon}>⬇️</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={onClose}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Text style={styles.closeIcon}>✕</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -304,7 +379,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             ]}
           >
             <Image
-              source={{ uri: photo.image_url }}
+              source={{ uri: targetImageUrl }}
               style={[styles.mainImage, { width: windowWidth, height: windowHeight * 0.75 }]}
               resizeMode="contain"
               {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}
@@ -315,9 +390,9 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         {/* Bottom Bar: Chú thích & Nút điều khiển Zoom nhanh */}
         {showControls && (
           <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-            {photo.caption ? (
+            {displayCaption ? (
               <View style={styles.captionBox}>
-                <Text style={styles.captionText}>{photo.caption}</Text>
+                <Text style={styles.captionText}>{displayCaption}</Text>
               </View>
             ) : null}
 
@@ -399,6 +474,22 @@ const styles = StyleSheet.create({
     color: '#A0A0B2',
     marginTop: 2,
   },
+  topRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  downloadBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  downloadIcon: {
+    fontSize: 16,
+  },
   closeBtn: {
     width: 38,
     height: 38,
@@ -406,7 +497,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 12,
   },
   closeIcon: {
     color: '#FFFFFF',

@@ -464,6 +464,14 @@ export const translations = {
     notifications_friend_accept: 'đã chấp nhận lời mời kết bạn',
     notifications_group_invite: 'đã mời bạn vào nhóm',
     notifications_delete: 'Xóa thông báo',
+
+    // Image Viewer & Download
+    download_photo: 'Tải ảnh về',
+    downloading_photo: 'Đang tải ảnh về máy...',
+    download_photo_success: 'Đã lưu ảnh vào thư viện thiết bị! 📸',
+    download_photo_error: 'Không thể tải ảnh về thiết bị.',
+    avatar_title: 'Ảnh đại diện',
+    cover_title: 'Ảnh bìa',
   },
   en: {
     // Navigation tabs
@@ -920,6 +928,14 @@ export const translations = {
     notifications_friend_accept: 'accepted your friend request',
     notifications_group_invite: 'invited you to a group',
     notifications_delete: 'Delete notification',
+
+    // Image Viewer & Download
+    download_photo: 'Download photo',
+    downloading_photo: 'Downloading photo...',
+    download_photo_success: 'Photo saved to device gallery! 📸',
+    download_photo_error: 'Could not save photo to device.',
+    avatar_title: 'Profile Picture',
+    cover_title: 'Cover Photo',
   },
 } as const;
 
