@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -60,6 +60,8 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
     p.muted = isMuted;
   });
 
+  const isPlayingRef = useRef(false);
+
   // Đồng bộ âm lượng mute/unmute
   useEffect(() => {
     if (player) {
@@ -71,30 +73,42 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
     }
   }, [isMuted, player]);
 
-  // Cập nhật khi source URL thay đổi
+  // Điều khiển phát / tạm dừng tự động an toàn không bị ngắt quãng
   useEffect(() => {
     if (!player || !videoSourceUrl) return;
-    try {
-      if (typeof player.replace === 'function') {
-        player.replace(videoSourceUrl);
-      }
-    } catch (e) {
-      // Ignored
-    }
-  }, [videoSourceUrl, player]);
 
-  // Điều khiển phát / tạm dừng tự động theo tầm nhìn màn hình
-  useEffect(() => {
-    if (!player || !videoSourceUrl) return;
-    try {
-      if (shouldPlay) {
-        player.muted = isMuted;
-        player.play();
-      } else {
-        player.pause();
+    if (shouldPlay) {
+      if (!isPlayingRef.current) {
+        try {
+          player.muted = isMuted;
+          const playPromise = player.play() as unknown as Promise<void> | undefined;
+          if (playPromise && typeof playPromise.then === 'function') {
+            playPromise
+              .then(() => {
+                isPlayingRef.current = true;
+              })
+              .catch((e: any) => {
+                isPlayingRef.current = false;
+                if (e?.name !== 'AbortError') {
+                  console.warn('Video autoplay notice:', e?.message || e);
+                }
+              });
+          } else {
+            isPlayingRef.current = true;
+          }
+        } catch (e) {
+          console.warn('Feed video play error:', e);
+        }
       }
-    } catch (e) {
-      console.warn('Feed video autoplay error:', e);
+    } else {
+      if (isPlayingRef.current) {
+        isPlayingRef.current = false;
+        try {
+          player.pause();
+        } catch (e) {
+          // Ignored
+        }
+      }
     }
   }, [shouldPlay, player, isMuted, videoSourceUrl]);
 
@@ -196,7 +210,7 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    aspectRatio: 4 / 5,
+    height: 380,
     backgroundColor: '#0a0a0e',
     overflow: 'hidden',
     position: 'relative',
