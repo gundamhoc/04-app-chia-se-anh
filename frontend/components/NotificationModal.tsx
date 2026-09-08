@@ -16,6 +16,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useI18n, formatRelativeTime } from '../utils/i18n';
 import { useSocket } from '../hooks/useSocket';
 import { notificationService } from '../services/notificationService';
+import { friendService } from '../services/friendService';
 import { NotificationItem, NotificationType } from '../types';
 import { useRouter } from 'expo-router';
 
@@ -45,6 +46,8 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [markingAll, setMarkingAll] = useState<boolean>(false);
+  // Track which friend requests are being processed
+  const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
 
   // Tải danh sách thông báo
   const loadNotifications = useCallback(
@@ -129,6 +132,47 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       } catch (err) {
         console.warn('Lỗi đánh dấu thông báo đã đọc:', err);
       }
+    }
+  };
+
+  // Chấp nhận lời mời kết bạn ngay từ thông báo
+  const handleAcceptFriendRequest = async (item: NotificationItem) => {
+    if (processingIds.has(item.id)) return;
+    setProcessingIds((prev) => new Set(prev).add(item.id));
+    try {
+      await friendService.acceptFriendRequest(item.actor_id);
+      // Cập nhật thông báo thành đã đọc và xóa khỏi danh sách
+      setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+      if (!item.is_read) {
+        const newCount = Math.max(0, unreadCount - 1);
+        setUnreadCount(newCount);
+        onUnreadCountChange?.(newCount);
+      }
+      try { await notificationService.markAsRead(item.id); } catch { /* ignored */ }
+    } catch (err) {
+      console.warn('Lỗi chấp nhận kết bạn:', err);
+    } finally {
+      setProcessingIds((prev) => { const s = new Set(prev); s.delete(item.id); return s; });
+    }
+  };
+
+  // Từ chối lời mời kết bạn ngay từ thông báo
+  const handleRejectFriendRequest = async (item: NotificationItem) => {
+    if (processingIds.has(item.id)) return;
+    setProcessingIds((prev) => new Set(prev).add(item.id));
+    try {
+      await friendService.rejectOrCancelRequest(item.actor_id);
+      setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+      if (!item.is_read) {
+        const newCount = Math.max(0, unreadCount - 1);
+        setUnreadCount(newCount);
+        onUnreadCountChange?.(newCount);
+      }
+      try { await notificationService.deleteNotification(item.id); } catch { /* ignored */ }
+    } catch (err) {
+      console.warn('Lỗi từ chối kết bạn:', err);
+    } finally {
+      setProcessingIds((prev) => { const s = new Set(prev); s.delete(item.id); return s; });
     }
   };
 
@@ -253,11 +297,37 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             {actionText}
           </Text>
 
-          {/* Trích dẫn nội dung bình luận nếu có */}
-          {item.content && (item.type === 'comment_post' || item.type === 'reply_comment') ? (
+          {/* Trích dẫn nội dung cho các loại thông báo có content */}
+          {item.content && (item.type === 'comment_post' || item.type === 'reply_comment' || item.type === 'like_comment') ? (
             <Text style={styles.quoteText} numberOfLines={1}>
-              {item.content}
+              "{item.content}"
             </Text>
+          ) : null}
+
+          {/* Nút Chấp nhận / Từ chối cho lời mời kết bạn */}
+          {item.type === 'friend_request' ? (
+            <View style={styles.friendActionRow}>
+              <TouchableOpacity
+                style={styles.friendAcceptBtn}
+                onPress={(e) => { e.stopPropagation?.(); handleAcceptFriendRequest(item); }}
+                disabled={processingIds.has(item.id)}
+                activeOpacity={0.8}
+              >
+                {processingIds.has(item.id) ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.friendAcceptText}>✓ Chấp nhận</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.friendRejectBtn}
+                onPress={(e) => { e.stopPropagation?.(); handleRejectFriendRequest(item); }}
+                disabled={processingIds.has(item.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.friendRejectText}>✕ Từ chối</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
 
           <View style={styles.timeRow}>
@@ -285,15 +355,17 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           </View>
         ) : null}
 
-        {/* Nút xóa thông báo */}
-        <TouchableOpacity
-          style={styles.deleteBtn}
-          onPress={() => handleDeleteNotification(item.id, item.is_read)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel={t('notifications_delete')}
-        >
-          <Text style={styles.deleteBtnText}>✕</Text>
-        </TouchableOpacity>
+        {/* Nút xóa thông báo (chỉ hiện với non-friend_request) */}
+        {item.type !== 'friend_request' ? (
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={() => handleDeleteNotification(item.id, item.is_read)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel={t('notifications_delete')}
+          >
+            <Text style={styles.deleteBtnText}>✕</Text>
+          </TouchableOpacity>
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -584,6 +656,39 @@ const createStyles = (C: ColorScheme, isDark: boolean) =>
     deleteBtnText: {
       fontSize: 14,
       color: C.textMuted,
+      fontWeight: '600',
+    },
+    friendActionRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 8,
+    },
+    friendAcceptBtn: {
+      flex: 1,
+      backgroundColor: C.primary,
+      paddingVertical: 7,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    friendAcceptText: {
+      color: '#ffffff',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    friendRejectBtn: {
+      flex: 1,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+      paddingVertical: 7,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+    },
+    friendRejectText: {
+      color: C.textMuted,
+      fontSize: 13,
       fontWeight: '600',
     },
   });

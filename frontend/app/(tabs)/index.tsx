@@ -136,7 +136,7 @@ export default function HomeScreen() {
         setUnreadNotificationCount((prev) => prev + 1);
       }
       if (data?.notification?.content) {
-        showToast(data.notification.content, 'info');
+        showToast('info', data.notification.content, 4000);
       }
     };
 

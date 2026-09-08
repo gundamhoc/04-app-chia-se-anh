@@ -9,15 +9,15 @@ export interface GetNotificationsResponse {
 export const notificationService = {
   // Lấy danh sách thông báo
   async getNotifications(page = 1, limit = 20): Promise<GetNotificationsResponse> {
-    const res = await api.get<ApiResponse<NotificationItem[]> & { unread_count?: number }>(
+    const res = await api.get<{ success: boolean; data: { notifications: NotificationItem[]; unread_count: number; has_more: boolean } }>(
       '/notifications',
       {
         params: { page, limit },
       }
     );
     return {
-      notifications: res.data.data || [],
-      unread_count: res.data.unread_count ?? 0,
+      notifications: res.data.data?.notifications || [],
+      unread_count: res.data.data?.unread_count ?? 0,
     };
   },
 
