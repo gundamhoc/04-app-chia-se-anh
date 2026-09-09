@@ -46,6 +46,17 @@
           <span class="nav-label">Kiểm duyệt bài viết</span>
         </button>
 
+        <button class="nav-item" data-tab="tickets" id="nav-tickets">
+          <span class="nav-icon">💬</span>
+          <span class="nav-label">Hỗ trợ người dùng</span>
+          <span class="nav-badge" id="badge-pending-tickets" style="display: none;">0</span>
+        </button>
+
+        <button class="nav-item" data-tab="staff" id="nav-staff" style="display: none;">
+          <span class="nav-icon">👔</span>
+          <span class="nav-label">Nhân viên</span>
+        </button>
+
         <button class="nav-item" data-tab="settings" id="nav-settings">
           <span class="nav-icon">⚙️</span>
           <span class="nav-label">Cài đặt kết nối</span>
@@ -81,12 +92,15 @@
           <button class="btn btn-secondary btn-sm" id="btn-refresh" title="Làm mới dữ liệu">
             <span class="btn-icon">🔄</span> Làm mới
           </button>
-          <div class="admin-profile">
-            <div class="admin-avatar">👑</div>
+          <div class="admin-profile" id="topbar-admin-profile" title="Tài khoản đang đăng nhập">
+            <div class="admin-avatar" id="topbar-admin-avatar">👑</div>
             <div class="admin-info">
-              <span class="admin-name">Super Admin</span>
-              <span class="admin-role">Toàn quyền</span>
+              <span class="admin-name" id="topbar-admin-name">Đang kết nối...</span>
+              <span class="admin-role" id="topbar-admin-role">Quản trị</span>
             </div>
+            <button class="btn-logout" id="btn-admin-logout" title="Đăng xuất khỏi hệ thống" onclick="handleAdminLogout()">
+              🚪 Đăng xuất
+            </button>
           </div>
         </div>
       </header>
@@ -320,10 +334,83 @@
                 <span id="test-result-text"></span>
               </div>
 
-              <div class="form-actions">
+                <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Lưu cấu hình</button>
               </div>
             </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Content: Support Tickets (Trung tâm trợ giúp) -->
+      <section class="tab-pane" id="tab-tickets">
+        <div class="pane-header">
+          <div class="filter-group">
+            <button class="filter-pill active" data-ticket-filter="all" onclick="filterTickets('all')">Tất cả (<span id="count-ticket-all">0</span>)</button>
+            <button class="filter-pill" data-ticket-filter="pending" onclick="filterTickets('pending')">⏳ Chờ giải đáp (<span id="count-ticket-pending">0</span>)</button>
+            <button class="filter-pill" data-ticket-filter="answered" onclick="filterTickets('answered')">✓ Đã giải đáp (<span id="count-ticket-answered">0</span>)</button>
+          </div>
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="tickets-search" placeholder="Tìm theo tiêu đề, người gửi..." oninput="handleTicketsSearch(this.value)">
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Người gửi</th>
+                  <th>Chủ đề & Nội dung</th>
+                  <th>Danh mục</th>
+                  <th>Trạng thái</th>
+                  <th>Thời gian gửi</th>
+                  <th>Người phụ trách</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="tickets-table-body">
+                <tr><td colspan="8" class="text-center loading-cell">Đang tải danh sách câu hỏi...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-pagination" id="tickets-pagination"></div>
+        </div>
+      </section>
+
+      <!-- Tab Content: Staff Management (Chỉ dành cho Admin) -->
+      <section class="tab-pane" id="tab-staff">
+        <div class="pane-header">
+          <div>
+            <h3 style="margin-bottom: 4px;">Đội ngũ Quản trị & Nhân viên</h3>
+            <p class="sub-text" style="margin: 0;">Quản lý tài khoản nhân viên kiểm duyệt và phân quyền truy cập hệ thống</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('modal-add-staff')">
+            <span class="btn-icon">➕</span> Thêm nhân viên mới
+          </button>
+        </div>
+
+        <div class="table-card mt-16">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Họ và tên</th>
+                  <th>Tên đăng nhập</th>
+                  <th>Email</th>
+                  <th>Vai trò</th>
+                  <th>Trạng thái</th>
+                  <th>Đăng nhập cuối</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="staff-table-body">
+                <tr><td colspan="8" class="text-center loading-cell">Đang tải danh sách nhân viên...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -481,6 +568,135 @@
       <div class="modal-review-footer" id="media-preview-meta">
         <!-- Post meta & quick action -->
       </div>
+    </div>
+  </div>
+
+  <!-- Support Ticket Reply Modal -->
+  <div class="modal-overlay" id="modal-ticket-reply">
+    <div class="modal-card modal-media-card">
+      <div class="modal-header">
+        <h3 id="modal-ticket-title">Giải đáp thắc mắc người dùng</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-ticket-reply')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="ticket-preview-box" id="modal-ticket-preview">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div class="form-group mt-16">
+          <label for="ticket-reply-text"><strong>Nội dung câu trả lời / Hướng dẫn giải đáp:</strong></label>
+          <div class="quick-reply-presets mb-8">
+            <span class="sub-text" style="display: block; margin-bottom: 6px;">Mẫu trả lời nhanh:</span>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="insertQuickReply(1)">✅ Đã tiếp nhận & Xử lý</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="insertQuickReply(2)">ℹ️ Hướng dẫn thao tác</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="insertQuickReply(3)">❤️ Cảm ơn đóng góp</button>
+          </div>
+          <textarea id="ticket-reply-text" class="form-control" rows="4" placeholder="Nhập lời giải đáp chi tiết cho người dùng..."></textarea>
+          <small class="form-hint">Lời giải đáp sẽ được lưu vào hệ thống và tự động gửi thông báo trực tiếp đến tài khoản của người dùng.</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-ticket-reply')">Đóng</button>
+        <button class="btn btn-primary" id="btn-submit-reply" onclick="submitTicketReplyAction()">📨 Gửi lời giải đáp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Staff Modal (Chỉ Admin) -->
+  <div class="modal-overlay" id="modal-add-staff">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Thêm nhân viên mới vào hệ thống</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-add-staff')">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-add-staff" onsubmit="submitCreateStaffAction(event)">
+          <div class="form-group">
+            <label for="staff-fullname">Họ và tên nhân viên:</label>
+            <input type="text" id="staff-fullname" class="form-control" placeholder="Ví dụ: Nguyễn Văn A" required>
+          </div>
+
+          <div class="form-group">
+            <label for="staff-username">Tên đăng nhập (Username):</label>
+            <input type="text" id="staff-username" class="form-control" placeholder="Ví dụ: staff_support" required>
+          </div>
+
+          <div class="form-group">
+            <label for="staff-email">Email liên hệ (Tùy chọn):</label>
+            <input type="email" id="staff-email" class="form-control" placeholder="staff@masita.app">
+          </div>
+
+          <div class="form-group">
+            <label for="staff-password">Mật khẩu khởi tạo:</label>
+            <div class="input-with-button">
+              <input type="text" id="staff-password" class="form-control" placeholder="Tối thiểu 6 ký tự" required>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="generateStaffPassword()">🎲 Tạo mã</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="staff-role">Phân quyền vai trò:</label>
+            <select id="staff-role" class="form-control">
+              <option value="staff" selected>🛡️ Nhân viên CSKH / Kiểm duyệt (Staff)</option>
+              <option value="admin">👑 Quản trị viên tối cao (Admin)</option>
+            </select>
+          </div>
+
+          <div class="modal-footer" style="padding: 16px 0 0 0; border: none;">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-staff')">Hủy</button>
+            <button type="submit" class="btn btn-primary">Tạo tài khoản</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin & Staff Fullscreen Login Overlay -->
+  <div class="login-overlay" id="admin-login-overlay" style="display: none;">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-brand-logo">
+          <span>M</span>
+        </div>
+        <h2>Masita Admin Portal</h2>
+        <p>Bảng điều hành dành cho Quản trị viên & Nhân viên</p>
+      </div>
+
+      <div class="login-error-box" id="login-error-box" style="display: none;"></div>
+
+      <form id="admin-login-form" onsubmit="handleAdminLoginSubmit(event)">
+        <div class="form-group">
+          <label for="login-username">Tên đăng nhập</label>
+          <div class="input-with-icon">
+            <span class="field-icon">👤</span>
+            <input type="text" id="login-username" class="form-control" placeholder="admin hoặc staff" required autocomplete="username">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="login-password">Mật khẩu</label>
+          <div class="input-with-icon">
+            <span class="field-icon">🔒</span>
+            <input type="password" id="login-password" class="form-control" placeholder="Nhập mật khẩu" required autocomplete="current-password">
+          </div>
+        </div>
+
+        <div class="quick-login-presets mb-16">
+          <span class="sub-text" style="display: block; margin-bottom: 8px;">Đăng nhập nhanh mẫu (1 chạm):</span>
+          <div class="preset-buttons-row">
+            <button type="button" class="btn btn-sm btn-outline-admin" onclick="fillLoginPreset('admin', 'admin123')">
+              👑 Admin (admin123)
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-staff" onclick="fillLoginPreset('staff', 'staff123')">
+              🛡️ Nhân viên (staff123)
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-login-submit">
+          🚀 Đăng nhập hệ thống
+        </button>
+      </form>
     </div>
   </div>
 

@@ -51,6 +51,29 @@ const state = {
     email: '',
     username: '',
   },
+
+  // Auth state
+  adminToken: localStorage.getItem('masita_admin_token') || null,
+  adminUser: JSON.parse(localStorage.getItem('masita_admin_user') || 'null'),
+
+  // Support tickets tab state
+  tickets: {
+    data: [],
+    page: 1,
+    limit: 10,
+    totalPages: 1,
+    total: 0,
+    filter: 'all', // all | pending | answered
+    search: '',
+    searchTimeout: null,
+  },
+
+  // Staff tab state
+  staff: {
+    data: [],
+  },
+
+  activeTicketTarget: null,
 };
 
 // ==========================================
@@ -129,16 +152,27 @@ async function apiRequest(endpoint, options = {}) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    if (state.adminToken) {
+      headers['Authorization'] = `Bearer ${state.adminToken}`;
+    }
+
     const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      signal: controller.signal,
       ...options,
+      headers,
+      signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
+
+    if (response.status === 401 && !endpoint.includes('/auth/login')) {
+      showLoginOverlay('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.');
+      throw new Error('Yêu cầu đăng nhập quản trị.');
+    }
 
     const data = await response.json();
     if (!response.ok) {
@@ -156,9 +190,11 @@ async function apiRequest(endpoint, options = {}) {
 // ==========================================
 const tabTitles = {
   overview: { title: 'Tổng quan hệ thống', subtitle: 'Theo dõi trạng thái và chỉ số thời gian thực của Masita' },
+  tickets: { title: 'Trung tâm trợ giúp & Hỗ trợ', subtitle: 'Giải đáp thắc mắc, hướng dẫn người dùng và xử lý báo lỗi' },
+  posts: { title: 'Kiểm duyệt bài viết', subtitle: 'Quản lý bài đăng ảnh/video và nội dung cộng đồng' },
   resets: { title: 'Yêu cầu cấp lại mật khẩu', subtitle: 'Hỗ trợ người dùng quên mật khẩu và quản lý mã xác thực' },
   users: { title: 'Quản lý người dùng', subtitle: 'Xem thông tin thành viên, phân quyền và khóa tài khoản vi phạm' },
-  posts: { title: 'Kiểm duyệt bài viết', subtitle: 'Quản lý bài đăng ảnh/video và nội dung cộng đồng' },
+  staff: { title: 'Quản lý Đội ngũ Nhân viên', subtitle: 'Phân quyền kiểm duyệt và quản lý tài khoản nhân viên' },
   settings: { title: 'Cài đặt kết nối', subtitle: 'Cấu hình endpoint API và tùy chọn bảng quản trị' },
 };
 
@@ -189,17 +225,22 @@ function refreshCurrentTab() {
     case 'overview':
       loadDashboardStats();
       break;
+    case 'tickets':
+      loadSupportTickets(state.tickets.page);
+      break;
+    case 'posts':
+      loadPosts(state.posts.page);
+      break;
     case 'resets':
       loadResetRequests();
       break;
     case 'users':
       loadUsers(state.users.page);
       break;
-    case 'posts':
-      loadPosts(state.posts.page);
+    case 'staff':
+      loadStaffList();
       break;
     case 'settings':
-      // Settings already populated
       break;
   }
 }
@@ -236,16 +277,32 @@ async function loadDashboardStats() {
     // Reset Requests
     const pendingCount = stats.pending_resets || 0;
     const statPendingElem = document.getElementById('stat-pending-resets');
-    statPendingElem.textContent = pendingCount.toString();
+    if (statPendingElem) statPendingElem.textContent = pendingCount.toString();
 
     const badgePendingElem = document.getElementById('badge-pending-resets');
-    if (pendingCount > 0) {
-      badgePendingElem.style.display = 'inline-flex';
-      badgePendingElem.textContent = pendingCount.toString();
-      document.getElementById('card-reset-alert').style.borderColor = 'rgba(239, 68, 68, 0.4)';
-    } else {
-      badgePendingElem.style.display = 'none';
-      document.getElementById('card-reset-alert').style.borderColor = '';
+    if (badgePendingElem) {
+      if (pendingCount > 0) {
+        badgePendingElem.style.display = 'inline-flex';
+        badgePendingElem.textContent = pendingCount.toString();
+        const alertCard = document.getElementById('card-reset-alert');
+        if (alertCard) alertCard.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+      } else {
+        badgePendingElem.style.display = 'none';
+        const alertCard = document.getElementById('card-reset-alert');
+        if (alertCard) alertCard.style.borderColor = '';
+      }
+    }
+
+    // Support Tickets Badge
+    const pendingTickets = stats.pending_tickets || 0;
+    const badgePendingTickets = document.getElementById('badge-pending-tickets');
+    if (badgePendingTickets) {
+      if (pendingTickets > 0) {
+        badgePendingTickets.style.display = 'inline-flex';
+        badgePendingTickets.textContent = pendingTickets.toString();
+      } else {
+        badgePendingTickets.style.display = 'none';
+      }
     }
 
     // Recent Users List
@@ -474,15 +531,15 @@ async function loadUsers(page = 1) {
           <td>${statusPillHtml}</td>
           <td>
             <div class="action-buttons">
-              ${user.is_active ? `
-                <button class="btn btn-sm btn-danger" onclick="openBanUserModal(${user.id})" title="Khóa tài khoản kèm lý do và thời hạn">
-                  🔒 Khóa
-                </button>
-              ` : `
-                <button class="btn btn-sm btn-success" onclick="unbanUserDirect(${user.id}, '${escapeHtml(user.username)}')" title="Mở khóa tài khoản ngay">
-                  🔓 Mở khóa
-                </button>
-              `}
+              ${user.is_active ? (
+                isAdmin
+                  ? `<button class="btn btn-sm btn-danger" onclick="openBanUserModal(${user.id})" title="Khóa tài khoản kèm lý do và thời hạn">🔒 Khóa</button>`
+                  : `<button class="btn btn-sm btn-secondary" disabled title="Chỉ Quản trị viên tối cao mới có quyền khóa tài khoản">🔒 Khóa (Admin)</button>`
+              ) : (
+                isAdmin
+                  ? `<button class="btn btn-sm btn-success" onclick="unbanUserDirect(${user.id}, '${escapeHtml(user.username)}')" title="Mở khóa tài khoản ngay">🔓 Mở khóa</button>`
+                  : `<button class="btn btn-sm btn-secondary" disabled title="Chỉ Quản trị viên tối cao mới có quyền mở khóa">🔒 Đã khóa</button>`
+              )}
               <button class="btn btn-sm btn-secondary" onclick="openResetModalDirect(${user.id}, '${escapeHtml(user.email)}', '${escapeHtml(user.username)}')">
                 🔑 Mật khẩu
               </button>
@@ -1143,9 +1200,488 @@ function setupAutoRefresh() {
 }
 
 // ==========================================
-// 11. INITIALIZATION & EVENT LISTENERS
+// 10. AUTHENTICATION & LOGIN MANAGEMENT
 // ==========================================
-document.addEventListener('DOMContentLoaded', () => {
+function showLoginOverlay(errorMsg = '') {
+  const overlay = document.getElementById('admin-login-overlay');
+  if (overlay) {
+    overlay.style.display = 'flex';
+  }
+  const errorBox = document.getElementById('login-error-box');
+  if (errorBox) {
+    if (errorMsg) {
+      errorBox.style.display = 'block';
+      errorBox.textContent = errorMsg;
+    } else {
+      errorBox.style.display = 'none';
+    }
+  }
+}
+
+function hideLoginOverlay() {
+  const overlay = document.getElementById('admin-login-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function fillLoginPreset(username, password) {
+  document.getElementById('login-username').value = username;
+  document.getElementById('login-password').value = password;
+  const form = document.getElementById('admin-login-form');
+  if (form) form.requestSubmit ? form.requestSubmit() : form.submit();
+}
+
+async function handleAdminLoginSubmit(e) {
+  if (e) e.preventDefault();
+  const usernameInput = document.getElementById('login-username');
+  const passwordInput = document.getElementById('login-password');
+  const submitBtn = document.getElementById('btn-login-submit');
+
+  const username = usernameInput ? usernameInput.value.trim() : '';
+  const password = passwordInput ? passwordInput.value : '';
+
+  if (!username || !password) {
+    showLoginOverlay('Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.');
+    return;
+  }
+
+  try {
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Đang xác thực...';
+    }
+
+    const res = await apiRequest('/admin/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (res.success && res.data) {
+      state.adminToken = res.data.token;
+      state.adminUser = res.data.user;
+
+      localStorage.setItem('masita_admin_token', state.adminToken);
+      localStorage.setItem('masita_admin_user', JSON.stringify(state.adminUser));
+
+      hideLoginOverlay();
+      updateTopbarProfile();
+      showToast(`Chào mừng ${state.adminUser.full_name || state.adminUser.username} (${state.adminUser.role === 'admin' ? 'Quản trị viên' : 'Nhân viên'})!`, 'success');
+      
+      checkBackendHealth();
+      refreshCurrentTab();
+      setupAutoRefresh();
+    }
+  } catch (err) {
+    showLoginOverlay(err.message || 'Tài khoản hoặc mật khẩu không chính xác.');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '🚀 Đăng nhập hệ thống';
+    }
+  }
+}
+
+function handleAdminLogout() {
+  state.adminToken = null;
+  state.adminUser = null;
+  localStorage.removeItem('masita_admin_token');
+  localStorage.removeItem('masita_admin_user');
+  updateTopbarProfile();
+  showLoginOverlay('Bạn đã đăng xuất khỏi hệ thống.');
+  showToast('Đã đăng xuất tài khoản quản trị.', 'info');
+}
+
+async function checkAdminAuth() {
+  if (!state.adminToken) {
+    showLoginOverlay();
+    return false;
+  }
+
+  try {
+    const res = await apiRequest('/admin/auth/me');
+    if (res.success && res.data) {
+      state.adminUser = res.data;
+      localStorage.setItem('masita_admin_user', JSON.stringify(state.adminUser));
+      hideLoginOverlay();
+      updateTopbarProfile();
+      return true;
+    }
+  } catch (err) {
+    showLoginOverlay('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+    return false;
+  }
+  return false;
+}
+
+function updateTopbarProfile() {
+  const nameEl = document.getElementById('topbar-admin-name');
+  const roleEl = document.getElementById('topbar-admin-role');
+  const avatarEl = document.getElementById('topbar-admin-avatar');
+  const navStaff = document.getElementById('nav-staff');
+
+  if (state.adminUser) {
+    const isAdmin = state.adminUser.role === 'admin';
+    if (nameEl) nameEl.textContent = state.adminUser.full_name || state.adminUser.username;
+    if (roleEl) {
+      roleEl.innerHTML = isAdmin
+        ? '<span class="badge-role-admin">👑 Admin</span>'
+        : '<span class="badge-role-staff">🛡️ Nhân viên</span>';
+    }
+    if (avatarEl) avatarEl.textContent = isAdmin ? '👑' : '🛡️';
+
+    // Show staff tab only for admin
+    if (navStaff) {
+      navStaff.style.display = isAdmin ? 'flex' : 'none';
+      if (!isAdmin && state.currentTab === 'staff') {
+        switchTab('overview');
+      }
+    }
+  } else {
+    if (nameEl) nameEl.textContent = 'Chưa đăng nhập';
+    if (roleEl) roleEl.textContent = 'Khách';
+    if (avatarEl) avatarEl.textContent = '👤';
+    if (navStaff) navStaff.style.display = 'none';
+  }
+}
+
+// ==========================================
+// 11. SUPPORT TICKETS CONTROLLER
+// ==========================================
+async function loadSupportTickets(page = 1) {
+  const tbody = document.getElementById('tickets-table-body');
+  if (!tbody) return;
+
+  state.tickets.page = page;
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center loading-cell">Đang tải danh sách câu hỏi...</td></tr>';
+
+  try {
+    const res = await apiRequest(`/admin/support-tickets?status=${state.tickets.filter}&q=${encodeURIComponent(state.tickets.search)}&page=${page}&limit=${state.tickets.limit}`);
+    if (!res.success) return;
+
+    state.tickets.data = res.data;
+    state.tickets.totalPages = res.pagination.total_pages || 1;
+    state.tickets.total = res.pagination.total || 0;
+
+    // Update filter counts
+    if (res.counts) {
+      const allEl = document.getElementById('count-ticket-all');
+      const pendEl = document.getElementById('count-ticket-pending');
+      const ansEl = document.getElementById('count-ticket-answered');
+      if (allEl) allEl.textContent = res.counts.total.toString();
+      if (pendEl) pendEl.textContent = res.counts.pending.toString();
+      if (ansEl) ansEl.textContent = res.counts.answered.toString();
+
+      const badge = document.getElementById('badge-pending-tickets');
+      if (badge) {
+        if (res.counts.pending > 0) {
+          badge.style.display = 'inline-flex';
+          badge.textContent = res.counts.pending.toString();
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+    }
+
+    if (res.data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center empty-cell">Không có câu hỏi hoặc thắc mắc nào.</td></tr>';
+      renderPagination('tickets-pagination', res.pagination, loadSupportTickets);
+      return;
+    }
+
+    const categoryNames = {
+      general: 'Hỏi đáp chung',
+      account: 'Tài khoản & Đăng nhập',
+      posts: 'Bài viết & Khoảnh khắc',
+      chat_friends: 'Tin nhắn & Bạn bè',
+      bug_report: 'Báo cáo lỗi kỹ thuật',
+      other: 'Khác',
+    };
+
+    tbody.innerHTML = res.data.map(t => {
+      const isPending = t.status === 'pending';
+      const statusHtml = isPending
+        ? '<span class="badge-ticket-pending">⏳ Chờ giải đáp</span>'
+        : '<span class="badge-ticket-answered">✓ Đã giải đáp</span>';
+
+      const categoryLabel = categoryNames[t.category] || t.category || 'Chung';
+
+      return `
+        <tr>
+          <td>#${t.id}</td>
+          <td>
+            <div class="user-inline">
+              <img src="${resolveMediaUrl(t.avatar_url)}" alt="avatar" class="avatar-sm" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=60'">
+              <div>
+                <strong>${escapeHtml(t.full_name || t.username)}</strong>
+                <div class="sub-text">@${escapeHtml(t.username)}</div>
+              </div>
+            </div>
+          </td>
+          <td style="max-width: 260px;">
+            <div style="font-weight: 600; color: #fff; margin-bottom: 2px;">${escapeHtml(t.subject)}</div>
+            <div class="sub-text text-truncate" style="max-width: 240px;">${escapeHtml(t.message)}</div>
+          </td>
+          <td><span class="privacy-badge privacy-public">${escapeHtml(categoryLabel)}</span></td>
+          <td>${statusHtml}</td>
+          <td>${formatDate(t.created_at)}</td>
+          <td>
+            ${t.responder_name ? `
+              <div>
+                <strong>${escapeHtml(t.responder_name)}</strong>
+                <div class="sub-text">${t.replied_at ? formatDate(t.replied_at) : ''}</div>
+              </div>
+            ` : '<span class="sub-text">—</span>'}
+          </td>
+          <td>
+            <button class="btn btn-sm ${isPending ? 'btn-primary' : 'btn-secondary'}" onclick="openTicketReplyModal(${t.id})" title="${isPending ? 'Trả lời câu hỏi' : 'Xem lại lời giải đáp'}">
+              ${isPending ? '💬 Trả lời' : '👁️ Xem'}
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    renderPagination('tickets-pagination', res.pagination, loadSupportTickets);
+  } catch (error) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center error-cell">Lỗi tải danh sách: ${error.message}</td></tr>`;
+    showToast(`Lỗi: ${error.message}`, 'error');
+  }
+}
+
+function filterTickets(filter) {
+  state.tickets.filter = filter;
+  document.querySelectorAll('[data-ticket-filter]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.ticketFilter === filter);
+  });
+  loadSupportTickets(1);
+}
+
+function handleTicketsSearch(value) {
+  clearTimeout(state.tickets.searchTimeout);
+  state.tickets.searchTimeout = setTimeout(() => {
+    state.tickets.search = value.trim();
+    loadSupportTickets(1);
+  }, 400);
+}
+
+function openTicketReplyModal(ticketId) {
+  const ticket = state.tickets.data.find(t => t.id === ticketId);
+  if (!ticket) return;
+
+  state.activeTicketTarget = ticket;
+  const isPending = ticket.status === 'pending';
+
+  const previewBox = document.getElementById('modal-ticket-preview');
+  previewBox.innerHTML = `
+    <div class="ticket-user-header">
+      <div class="user-inline">
+        <img src="${resolveMediaUrl(ticket.avatar_url)}" class="avatar-sm" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=60'">
+        <div>
+          <strong>${escapeHtml(ticket.full_name || ticket.username)}</strong>
+          <div class="sub-text">@${escapeHtml(ticket.username)} • Gửi lúc ${formatDate(ticket.created_at)}</div>
+        </div>
+      </div>
+      <span class="privacy-badge privacy-public">${escapeHtml(ticket.category)}</span>
+    </div>
+    <div class="ticket-subject-title">❓ ${escapeHtml(ticket.subject)}</div>
+    <div class="ticket-message-content">${escapeHtml(ticket.message)}</div>
+    ${ticket.staff_reply ? `
+      <div class="ticket-previous-reply">
+        <div class="ticket-previous-reply-title">
+          <span>✓ Đã được giải đáp bởi ${escapeHtml(ticket.responder_name || 'Ban Quản Trị')}</span>
+          <span>(${formatDate(ticket.replied_at)})</span>
+        </div>
+        <div style="color: #D1D5DB; font-size: 13px; line-height: 1.5;">${escapeHtml(ticket.staff_reply)}</div>
+      </div>
+    ` : ''}
+  `;
+
+  document.getElementById('modal-ticket-title').textContent = isPending ? 'Giải đáp thắc mắc người dùng' : 'Chi tiết thắc mắc & Lời giải đáp';
+  const replyInput = document.getElementById('ticket-reply-text');
+  replyInput.value = ticket.staff_reply || '';
+
+  const submitBtn = document.getElementById('btn-submit-reply');
+  if (submitBtn) {
+    submitBtn.textContent = isPending ? '📨 Gửi lời giải đáp' : '💾 Cập nhật câu trả lời';
+  }
+
+  openModal('modal-ticket-reply');
+}
+
+function insertQuickReply(type) {
+  const input = document.getElementById('ticket-reply-text');
+  if (!input) return;
+
+  const templates = {
+    1: 'Chào bạn, Ban Quản Trị Masita đã tiếp nhận vấn đề và tiến hành xử lý kỹ thuật xong. Bạn hãy thử lại tính năng này nhé. Cảm ơn bạn đã đồng hành!',
+    2: 'Chào bạn, tính năng này bạn có thể vào trang cá nhân -> Cài đặt để tùy chỉnh, hoặc kiểm tra kết nối mạng/cập nhật phiên bản mới nhất để sử dụng mượt mà nhất.',
+    3: 'Masita chân thành cảm ơn ý kiến đóng góp quý báu từ bạn! Đội ngũ phát triển sẽ ghi nhận để nâng cấp và hoàn thiện trải nghiệm trong các bản cập nhật sắp tới.',
+  };
+
+  input.value = templates[type] || '';
+  input.focus();
+}
+
+async function submitTicketReplyAction() {
+  if (!state.activeTicketTarget) return;
+
+  const reply = document.getElementById('ticket-reply-text').value.trim();
+  if (!reply) {
+    showToast('Vui lòng nhập nội dung câu trả lời giải đáp.', 'warning');
+    return;
+  }
+
+  const submitBtn = document.getElementById('btn-submit-reply');
+  try {
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Đang gửi...';
+    }
+
+    const res = await apiRequest(`/admin/support-tickets/${state.activeTicketTarget.id}/reply`, {
+      method: 'PUT',
+      body: JSON.stringify({ reply }),
+    });
+
+    if (res.success) {
+      closeModal('modal-ticket-reply');
+      showToast('Đã gửi lời giải đáp và thông báo trực tiếp tới người dùng!', 'success');
+      loadSupportTickets(state.tickets.page);
+    }
+  } catch (err) {
+    showToast(`Lỗi: ${err.message}`, 'error');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '📨 Gửi lời giải đáp';
+    }
+  }
+}
+
+// ==========================================
+// 12. STAFF MANAGEMENT CONTROLLER (ADMIN ONLY)
+// ==========================================
+async function loadStaffList() {
+  const tbody = document.getElementById('staff-table-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center loading-cell">Đang tải danh sách nhân viên...</td></tr>';
+
+  try {
+    const res = await apiRequest('/admin/staff');
+    if (!res.success) return;
+
+    state.staff.data = res.data;
+
+    if (res.data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center empty-cell">Chưa có nhân viên nào.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = res.data.map(s => {
+      const isMasterAdmin = s.id === 1;
+      const isAdmin = s.role === 'admin';
+      const roleBadge = isAdmin
+        ? '<span class="badge-role-admin">👑 Admin</span>'
+        : '<span class="badge-role-staff">🛡️ Nhân viên</span>';
+
+      const statusBadge = s.is_active
+        ? '<span class="status-pill status-active">🟢 Hoạt động</span>'
+        : '<span class="status-pill status-inactive">🔴 Đã khóa</span>';
+
+      return `
+        <tr>
+          <td>#${s.id}</td>
+          <td><strong>${escapeHtml(s.full_name)}</strong></td>
+          <td>@${escapeHtml(s.username)}</td>
+          <td>${escapeHtml(s.email || '—')}</td>
+          <td>${roleBadge}</td>
+          <td>${statusBadge}</td>
+          <td>${s.last_login ? formatDate(s.last_login) : '<span class="sub-text">Chưa đăng nhập</span>'}</td>
+          <td>
+            ${isMasterAdmin ? `
+              <span class="sub-text" title="Tài khoản Admin gốc hệ thống">🔒 Không thể sửa</span>
+            ` : `
+              <div class="action-buttons">
+                <button class="btn btn-sm ${s.is_active ? 'btn-danger' : 'btn-success'}" onclick="toggleStaffStatusAction(${s.id}, ${s.is_active})">
+                  ${s.is_active ? '🔒 Khóa' : '🔓 Mở'}
+                </button>
+              </div>
+            `}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (error) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center error-cell">Lỗi tải danh sách: ${error.message}</td></tr>`;
+    showToast(`Lỗi: ${error.message}`, 'error');
+  }
+}
+
+function generateStaffPassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$';
+  let pwd = 'Nv@';
+  for (let i = 0; i < 7; i++) {
+    pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  document.getElementById('staff-password').value = pwd;
+}
+
+async function submitCreateStaffAction(e) {
+  if (e) e.preventDefault();
+
+  const full_name = document.getElementById('staff-fullname').value.trim();
+  const username = document.getElementById('staff-username').value.trim();
+  const email = document.getElementById('staff-email').value.trim();
+  const password = document.getElementById('staff-password').value;
+  const role = document.getElementById('staff-role').value;
+
+  if (!full_name || !username || !password) {
+    showToast('Vui lòng điền đầy đủ họ tên, tên đăng nhập và mật khẩu.', 'warning');
+    return;
+  }
+
+  try {
+    const res = await apiRequest('/admin/staff', {
+      method: 'POST',
+      body: JSON.stringify({ full_name, username, email, password, role }),
+    });
+
+    if (res.success) {
+      closeModal('modal-add-staff');
+      document.getElementById('form-add-staff').reset();
+      showToast(`Đã tạo tài khoản ${role === 'admin' ? 'Quản trị viên' : 'Nhân viên'} thành công!`, 'success');
+      loadStaffList();
+    }
+  } catch (err) {
+    showToast(`Lỗi: ${err.message}`, 'error');
+  }
+}
+
+async function toggleStaffStatusAction(staffId, currentStatus) {
+  const newStatus = currentStatus ? 0 : 1;
+  const actionText = newStatus ? 'mở khóa' : 'tạm khóa';
+
+  if (!confirm(`Bạn có chắc chắn muốn ${actionText} tài khoản nhân viên #${staffId}?`)) return;
+
+  try {
+    const res = await apiRequest(`/admin/staff/${staffId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_active: newStatus }),
+    });
+
+    if (res.success) {
+      showToast(`Đã ${actionText} tài khoản thành công!`, 'success');
+      loadStaffList();
+    }
+  } catch (err) {
+    showToast(`Lỗi: ${err.message}`, 'error');
+  }
+}
+
+// ==========================================
+// 13. INITIALIZATION & EVENT LISTENERS
+// ==========================================
+document.addEventListener('DOMContentLoaded', async () => {
   // Bind Sidebar Nav
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -1171,13 +1707,16 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.modal-overlay').forEach(modal => {
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
-        modal.classList.remove('show');
+        closeModal(modal.id);
       }
     });
   });
 
-  // Initial Load
-  checkBackendHealth();
-  loadDashboardStats();
-  setupAutoRefresh();
+  // Initial Auth Check & Load
+  const isAuthenticated = await checkAdminAuth();
+  if (isAuthenticated) {
+    checkBackendHealth();
+    loadDashboardStats();
+    setupAutoRefresh();
+  }
 });

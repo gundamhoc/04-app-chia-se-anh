@@ -25,6 +25,7 @@ import { UserPrivacySettings, SecurityStatus, LoginSession } from '../types';
 import { useAppSettings } from '../store/appSettingsStore';
 import { useI18n, formatRelativeTime as formatRelativeTimeI18n } from '../utils/i18n';
 import { otaUpdateService, OtaUpdateInfo } from '../services/otaUpdateService';
+import { supportService, SupportTicket } from '../services/supportService';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -243,6 +244,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, 
   const [deleteEmail, setDeleteEmail] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
+
+  // ─── Help Center / Support Tickets ───────────────────────────────────
+  // Tab: 'faq' | 'submit' | 'history'
+  const [helpTab, setHelpTab] = useState<'faq' | 'submit' | 'history'>('faq');
+  const [ticketSubject, setTicketSubject] = useState('');
+  const [ticketCategory, setTicketCategory] = useState('general');
+  const [ticketMessage, setTicketMessage] = useState('');
+  const [submittingTicket, setSubmittingTicket] = useState(false);
+  const [myTickets, setMyTickets] = useState<SupportTicket[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(false);
+  const [ticketSubmitted, setTicketSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (activeDetail === 'help_center' && helpTab === 'history') {
+      fetchMyTickets();
+    }
+  }, [activeDetail, helpTab]);
+
+  const fetchMyTickets = async () => {
+    try {
+      setLoadingTickets(true);
+      const tickets = await supportService.getMyTickets();
+      setMyTickets(tickets);
+    } catch (e: any) {
+      showToast('error', language === 'vi' ? 'Không thể tải lịch sử thắc mắc.' : 'Failed to load ticket history.');
+    } finally {
+      setLoadingTickets(false);
+    }
+  };
+
+  const handleSubmitTicket = async () => {
+    if (!ticketSubject.trim()) {
+      showToast('error', language === 'vi' ? 'Vui lòng nhập tiêu đề thắc mắc.' : 'Please enter a subject.');
+      return;
+    }
+    if (!ticketMessage.trim()) {
+      showToast('error', language === 'vi' ? 'Vui lòng nhập nội dung chi tiết.' : 'Please describe your issue.');
+      return;
+    }
+    try {
+      setSubmittingTicket(true);
+      await supportService.createTicket({
+        subject: ticketSubject.trim(),
+        category: ticketCategory,
+        message: ticketMessage.trim(),
+      });
+      setTicketSubject('');
+      setTicketMessage('');
+      setTicketCategory('general');
+      setTicketSubmitted(true);
+      setTimeout(() => setTicketSubmitted(false), 4000);
+      showToast('success', language === 'vi' ? '✅ Thắc mắc đã gửi! Admin/Nhân viên sẽ phản hồi sớm nhất.' : '✅ Question sent! Admin/Staff will reply shortly.');
+    } catch (e: any) {
+      showToast('error', e?.response?.data?.message || (language === 'vi' ? 'Gửi thắc mắc thất bại.' : 'Failed to submit.'));
+    } finally {
+      setSubmittingTicket(false);
+    }
+  };
 
   useEffect(() => {
     if (visible || activeDetail === 'privacy_detail') {
@@ -1546,51 +1605,420 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, 
         return (
           <View style={[styles.detailCard, { backgroundColor: isDark ? '#1A1A2E' : '#F8F7FF' }]}>
             <Text style={[styles.detailTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E' }]}>
-              ❓ {t('help_center')}
+              ❓ {language === 'vi' ? 'Trung tâm trợ giúp' : 'Help Center'}
             </Text>
-            <Text style={[styles.detailDesc, { color: isDark ? C.textSecondary : '#6B7280' }]}>
-              {language === 'vi'
-                ? 'Giải đáp thắc mắc và hỗ trợ người dùng ứng dụng mạng xã hội Masita.'
-                : 'Answers to frequent questions and support for Masita app users.'}
-            </Text>
-            <View style={styles.faqItem}>
-              <Text style={[styles.faqQ, { color: isDark ? C.primaryLight : C.primary }]}>
-                {language === 'vi' ? '1. Làm sao để chia sẻ khoảnh khắc với bạn bè?' : '1. How do I share moments with friends?'}
-              </Text>
-              <Text style={[styles.faqA, { color: isDark ? C.textSecondary : '#4B5563' }]}>
-                {language === 'vi'
-                  ? 'Nhấn nút dấu (+) trên thanh điều hướng để chụp ảnh hoặc chọn ảnh đăng tải.'
-                  : 'Tap the (+) button on the navigation bar to take a photo or select an image to post.'}
-              </Text>
+
+            {/* ─── Tab bar ─────────────────────────────── */}
+            <View style={{
+              flexDirection: 'row',
+              borderRadius: 12,
+              backgroundColor: isDark ? '#0E0E1F' : '#EBEBF0',
+              padding: 4,
+              marginBottom: 18,
+            }}>
+              {(['faq', 'submit', 'history'] as const).map((tab) => {
+                const isActive = helpTab === tab;
+                const labels: Record<string, { vi: string; en: string }> = {
+                  faq: { vi: '❓ FAQ', en: '❓ FAQ' },
+                  submit: { vi: '✉️ Gửi', en: '✉️ Send' },
+                  history: { vi: '📋 Lịch sử', en: '📋 History' },
+                };
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setHelpTab(tab);
+                      if (tab === 'history') fetchMyTickets();
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 8,
+                      borderRadius: 9,
+                      alignItems: 'center',
+                      backgroundColor: isActive ? (isDark ? '#6C63FF' : C.primary) : 'transparent',
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 12,
+                      fontFamily: isActive ? 'Inter_700Bold' : 'Inter_400Regular',
+                      color: isActive ? '#FFF' : (isDark ? C.textMuted : '#6B7280'),
+                    }}>
+                      {language === 'vi' ? labels[tab].vi : labels[tab].en}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            <View style={styles.faqItem}>
-              <Text style={[styles.faqQ, { color: isDark ? C.primaryLight : C.primary }]}>
-                {language === 'vi' ? '2. Làm sao để kết bạn mới?' : '2. How do I make new friends?'}
-              </Text>
-              <Text style={[styles.faqA, { color: isDark ? C.textSecondary : '#4B5563' }]}>
-                {language === 'vi'
-                  ? 'Vào tab Bạn bè, xem mục Gợi ý kết bạn hoặc sử dụng thanh tìm kiếm để kết nối.'
-                  : 'Go to Friends tab, view Friend Suggestions or use the search bar to connect.'}
-              </Text>
-            </View>
-            <View style={styles.faqItem}>
-              <Text style={[styles.faqQ, { color: isDark ? C.primaryLight : C.primary }]}>
-                {language === 'vi' ? '3. Làm sao để đổi ảnh nền cuộc trò chuyện?' : '3. How do I change the chat background?'}
-              </Text>
-              <Text style={[styles.faqA, { color: isDark ? C.textSecondary : '#4B5563' }]}>
-                {language === 'vi'
-                  ? 'Vào phòng chat, nhấn nút bánh răng cài đặt và chọn "Đổi chủ đề chat".'
-                  : 'Open a chat room, tap the settings gear and choose "Change chat theme".'}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.contactBtn, { borderColor: isDark ? `${C.primary}45` : C.primary }]}
-              onPress={() => showToast('info', language === 'vi' ? 'Liên hệ hỗ trợ: support@masita.app' : 'Contact support: support@masita.app')}
-            >
-              <Text style={[styles.contactBtnText, { color: isDark ? C.primaryLight : C.primary }]}>
-                {language === 'vi' ? '📧 Liên hệ đội ngũ hỗ trợ' : '📧 Contact Support Team'}
-              </Text>
-            </TouchableOpacity>
+
+            {/* ─── TAB: FAQ ─────────────────────────────── */}
+            {helpTab === 'faq' && (
+              <View>
+                {[
+                  {
+                    q: language === 'vi' ? '1. Làm sao để chia sẻ khoảnh khắc với bạn bè?' : '1. How do I share moments with friends?',
+                    a: language === 'vi'
+                      ? 'Nhấn nút dấu (+) trên thanh điều hướng để chụp ảnh hoặc chọn ảnh đăng tải.'
+                      : 'Tap the (+) button on the navigation bar to take a photo or select an image to post.',
+                  },
+                  {
+                    q: language === 'vi' ? '2. Làm sao để kết bạn mới?' : '2. How do I make new friends?',
+                    a: language === 'vi'
+                      ? 'Vào tab Bạn bè, xem mục Gợi ý kết bạn hoặc sử dụng thanh tìm kiếm để kết nối.'
+                      : 'Go to Friends tab, view Friend Suggestions or use the search bar to connect.',
+                  },
+                  {
+                    q: language === 'vi' ? '3. Làm sao để đổi ảnh nền cuộc trò chuyện?' : '3. How do I change the chat background?',
+                    a: language === 'vi'
+                      ? 'Vào phòng chat, nhấn nút bánh răng cài đặt và chọn "Đổi chủ đề chat".'
+                      : 'Open a chat room, tap the settings gear and choose "Change chat theme".',
+                  },
+                  {
+                    q: language === 'vi' ? '4. Làm sao để báo cáo tài khoản vi phạm?' : '4. How do I report a violating account?',
+                    a: language === 'vi'
+                      ? 'Vào trang cá nhân của người đó, nhấn biểu tượng 3 chấm (...) và chọn "Báo cáo".'
+                      : "Go to that person's profile, tap the 3-dot menu (...) and select \"Report\".",
+                  },
+                  {
+                    q: language === 'vi' ? '5. Thắc mắc không có trong FAQ?' : '5. Question not in FAQ?',
+                    a: language === 'vi'
+                      ? 'Chuyển sang tab "✉️ Gửi" để gửi trực tiếp câu hỏi tới Admin/Nhân viên. Chúng tôi sẽ phản hồi sớm nhất!'
+                      : 'Switch to the "✉️ Send" tab to send your question directly to Admin/Staff. We will reply as soon as possible!',
+                  },
+                ].map((item, i) => (
+                  <View key={i} style={styles.faqItem}>
+                    <Text style={[styles.faqQ, { color: isDark ? C.primaryLight : C.primary }]}>{item.q}</Text>
+                    <Text style={[styles.faqA, { color: isDark ? C.textSecondary : '#4B5563' }]}>{item.a}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* ─── TAB: SUBMIT TICKET ───────────────────── */}
+            {helpTab === 'submit' && (
+              <View>
+                {ticketSubmitted ? (
+                  <View style={{
+                    alignItems: 'center',
+                    paddingVertical: 30,
+                    gap: 10,
+                  }}>
+                    <Text style={{ fontSize: 48 }}>✅</Text>
+                    <Text style={{
+                      fontSize: 16,
+                      fontFamily: 'Inter_700Bold',
+                      color: '#10B981',
+                      textAlign: 'center',
+                    }}>
+                      {language === 'vi' ? 'Đã gửi thành công!' : 'Submitted successfully!'}
+                    </Text>
+                    <Text style={{
+                      fontSize: 13,
+                      fontFamily: 'Inter_400Regular',
+                      color: isDark ? C.textSecondary : '#6B7280',
+                      textAlign: 'center',
+                      lineHeight: 20,
+                    }}>
+                      {language === 'vi'
+                        ? 'Admin/Nhân viên sẽ giải đáp và bạn sẽ nhận thông báo khi có phản hồi.'
+                        : 'Admin/Staff will reply and you will receive a notification when answered.'}
+                    </Text>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => { setTicketSubmitted(false); setHelpTab('history'); fetchMyTickets(); }}
+                      style={{
+                        marginTop: 8,
+                        paddingHorizontal: 20,
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        backgroundColor: isDark ? '#6C63FF20' : `${C.primary}15`,
+                        borderWidth: 1,
+                        borderColor: isDark ? '#6C63FF60' : `${C.primary}50`,
+                      }}
+                    >
+                      <Text style={{ color: isDark ? '#6C63FF' : C.primary, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>
+                        {language === 'vi' ? '📋 Xem lịch sử thắc mắc' : '📋 View ticket history'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={{ gap: 12 }}>
+                    <Text style={[styles.detailDesc, { color: isDark ? C.textSecondary : '#6B7280', marginBottom: 4 }]}>
+                      {language === 'vi'
+                        ? 'Gửi câu hỏi hoặc báo cáo sự cố trực tiếp tới đội ngũ Admin/Nhân viên.'
+                        : 'Send your question or report an issue directly to our Admin/Staff team.'}
+                    </Text>
+
+                    {/* Category picker */}
+                    <Text style={[{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: isDark ? C.textMuted : '#6B7280', marginBottom: 2 }]}>
+                      {language === 'vi' ? 'DANH MỤC' : 'CATEGORY'}
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {[
+                        { key: 'general', labelVi: '💬 Chung', labelEn: '💬 General' },
+                        { key: 'account', labelVi: '👤 Tài khoản', labelEn: '👤 Account' },
+                        { key: 'bug', labelVi: '🐛 Báo lỗi', labelEn: '🐛 Report Bug' },
+                        { key: 'content', labelVi: '📝 Nội dung', labelEn: '📝 Content' },
+                        { key: 'other', labelVi: '📌 Khác', labelEn: '📌 Other' },
+                      ].map((cat) => (
+                        <TouchableOpacity
+                          key={cat.key}
+                          activeOpacity={0.7}
+                          onPress={() => setTicketCategory(cat.key)}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 20,
+                            borderWidth: 1,
+                            borderColor: ticketCategory === cat.key ? C.primary : (isDark ? '#2E2E48' : '#D1D5DB'),
+                            backgroundColor: ticketCategory === cat.key
+                              ? (isDark ? `${C.primary}30` : `${C.primary}15`)
+                              : (isDark ? '#131224' : '#FFFFFF'),
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 12,
+                            fontFamily: ticketCategory === cat.key ? 'Inter_600SemiBold' : 'Inter_400Regular',
+                            color: ticketCategory === cat.key ? C.primary : (isDark ? C.textSecondary : '#6B7280'),
+                          }}>
+                            {language === 'vi' ? cat.labelVi : cat.labelEn}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {/* Subject */}
+                    <Text style={[{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: isDark ? C.textMuted : '#6B7280', marginTop: 4, marginBottom: 2 }]}>
+                      {language === 'vi' ? 'TIÊU ĐỀ *' : 'SUBJECT *'}
+                    </Text>
+                    <TextInput
+                      value={ticketSubject}
+                      onChangeText={setTicketSubject}
+                      placeholder={language === 'vi' ? 'Nhập tiêu đề ngắn gọn...' : 'Enter a brief subject...'}
+                      placeholderTextColor={isDark ? C.textMuted : '#9CA3AF'}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: isDark ? '#2E2E48' : '#D1D5DB',
+                        borderRadius: 10,
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        fontSize: 14,
+                        fontFamily: 'Inter_400Regular',
+                        color: isDark ? '#FFFFFF' : '#1A1A2E',
+                        backgroundColor: isDark ? '#131224' : '#FFFFFF',
+                      }}
+                    />
+
+                    {/* Message */}
+                    <Text style={[{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: isDark ? C.textMuted : '#6B7280', marginTop: 4, marginBottom: 2 }]}>
+                      {language === 'vi' ? 'NỘI DUNG CHI TIẾT *' : 'DETAILS *'}
+                    </Text>
+                    <TextInput
+                      value={ticketMessage}
+                      onChangeText={setTicketMessage}
+                      placeholder={language === 'vi' ? 'Mô tả chi tiết thắc mắc hoặc sự cố bạn gặp phải...' : 'Describe your question or issue in detail...'}
+                      placeholderTextColor={isDark ? C.textMuted : '#9CA3AF'}
+                      multiline
+                      numberOfLines={5}
+                      textAlignVertical="top"
+                      style={{
+                        borderWidth: 1,
+                        borderColor: isDark ? '#2E2E48' : '#D1D5DB',
+                        borderRadius: 10,
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        fontSize: 14,
+                        fontFamily: 'Inter_400Regular',
+                        color: isDark ? '#FFFFFF' : '#1A1A2E',
+                        backgroundColor: isDark ? '#131224' : '#FFFFFF',
+                        minHeight: 110,
+                      }}
+                    />
+
+                    {/* Submit button */}
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={handleSubmitTicket}
+                      disabled={submittingTicket}
+                      style={{
+                        paddingVertical: 13,
+                        borderRadius: 12,
+                        alignItems: 'center',
+                        backgroundColor: C.primary,
+                        opacity: submittingTicket ? 0.6 : 1,
+                        marginTop: 4,
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      {submittingTicket
+                        ? <ActivityIndicator size="small" color="#FFF" />
+                        : <Text style={{ fontSize: 15, fontFamily: 'Inter_700Bold', color: '#FFF' }}>
+                            {language === 'vi' ? '✉️ Gửi thắc mắc' : '✉️ Send Question'}
+                          </Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* ─── TAB: TICKET HISTORY ─────────────────── */}
+            {helpTab === 'history' && (
+              <View>
+                {loadingTickets ? (
+                  <ActivityIndicator size="large" color={C.primary} style={{ marginVertical: 30 }} />
+                ) : myTickets.length === 0 ? (
+                  <View style={{ alignItems: 'center', paddingVertical: 30, gap: 8 }}>
+                    <Text style={{ fontSize: 36 }}>📭</Text>
+                    <Text style={{
+                      fontSize: 14,
+                      fontFamily: 'Inter_600SemiBold',
+                      color: isDark ? C.textSecondary : '#6B7280',
+                      textAlign: 'center',
+                    }}>
+                      {language === 'vi' ? 'Chưa có thắc mắc nào' : 'No tickets yet'}
+                    </Text>
+                    <Text style={{
+                      fontSize: 12,
+                      fontFamily: 'Inter_400Regular',
+                      color: isDark ? C.textMuted : '#9CA3AF',
+                      textAlign: 'center',
+                    }}>
+                      {language === 'vi' ? 'Gửi câu hỏi đầu tiên của bạn trong tab "✉️ Gửi".' : 'Send your first question in the "✉️ Send" tab.'}
+                    </Text>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => setHelpTab('submit')}
+                      style={{
+                        marginTop: 8,
+                        paddingHorizontal: 18,
+                        paddingVertical: 9,
+                        borderRadius: 10,
+                        backgroundColor: isDark ? `${C.primary}20` : `${C.primary}15`,
+                        borderWidth: 1,
+                        borderColor: isDark ? `${C.primary}50` : `${C.primary}40`,
+                      }}
+                    >
+                      <Text style={{ color: C.primary, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>
+                        {language === 'vi' ? '✉️ Gửi thắc mắc đầu tiên' : '✉️ Send First Question'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={{ gap: 12 }}>
+                    {myTickets.map((ticket) => {
+                      const isAnswered = ticket.status === 'answered';
+                      const statusColor = isAnswered ? '#10B981' : '#F59E0B';
+                      const statusLabel = language === 'vi'
+                        ? (isAnswered ? '✓ Đã được giải đáp' : '⏳ Đang chờ giải đáp')
+                        : (isAnswered ? '✓ Answered' : '⏳ Pending');
+                      return (
+                        <View
+                          key={ticket.id}
+                          style={{
+                            backgroundColor: isDark ? '#131224' : '#FFFFFF',
+                            borderRadius: 14,
+                            borderWidth: 1,
+                            borderColor: isAnswered
+                              ? (isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)')
+                              : (isDark ? '#2E2E48' : '#E5E7EB'),
+                            padding: 14,
+                            gap: 8,
+                          }}
+                        >
+                          {/* Header row */}
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <Text style={{
+                              flex: 1,
+                              fontSize: 14,
+                              fontFamily: 'Inter_600SemiBold',
+                              color: isDark ? '#FFFFFF' : '#1A1A2E',
+                              marginRight: 8,
+                            }} numberOfLines={2}>
+                              {ticket.subject}
+                            </Text>
+                            <View style={{
+                              paddingHorizontal: 8,
+                              paddingVertical: 3,
+                              borderRadius: 20,
+                              backgroundColor: `${statusColor}20`,
+                              borderWidth: 1,
+                              borderColor: `${statusColor}40`,
+                            }}>
+                              <Text style={{ fontSize: 10, fontFamily: 'Inter_600SemiBold', color: statusColor }}>
+                                {statusLabel}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {/* User message */}
+                          <Text style={{
+                            fontSize: 13,
+                            fontFamily: 'Inter_400Regular',
+                            color: isDark ? C.textSecondary : '#4B5563',
+                            lineHeight: 19,
+                          }} numberOfLines={3}>
+                            {ticket.message}
+                          </Text>
+
+                          {/* Staff reply */}
+                          {ticket.staff_reply && (
+                            <View style={{
+                              backgroundColor: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.08)',
+                              borderRadius: 10,
+                              padding: 12,
+                              borderLeftWidth: 3,
+                              borderLeftColor: '#10B981',
+                              gap: 6,
+                            }}>
+                              <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#10B981' }}>
+                                {ticket.responder_name
+                                  ? `${ticket.responder_role === 'admin' ? '👑 Admin' : '🛡️ Nhân viên'} — ${ticket.responder_name}`
+                                  : (language === 'vi' ? '👑 Ban Quản Trị' : '👑 Admin Team')
+                                }
+                              </Text>
+                              <Text style={{
+                                fontSize: 13,
+                                fontFamily: 'Inter_400Regular',
+                                color: isDark ? '#D1FAE5' : '#065F46',
+                                lineHeight: 19,
+                              }}>
+                                {ticket.staff_reply}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Date */}
+                          <Text style={{ fontSize: 11, fontFamily: 'Inter_400Regular', color: isDark ? C.textMuted : '#9CA3AF' }}>
+                            {language === 'vi' ? 'Gửi lúc: ' : 'Sent: '}
+                            {new Date(ticket.created_at).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')}
+                          </Text>
+                        </View>
+                      );
+                    })}
+
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={fetchMyTickets}
+                      style={{
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        alignItems: 'center',
+                        borderWidth: 1,
+                        borderColor: isDark ? '#2E2E48' : '#D1D5DB',
+                        marginTop: 4,
+                      }}
+                    >
+                      <Text style={{ fontSize: 13, fontFamily: 'Inter_600SemiBold', color: isDark ? C.textSecondary : '#6B7280' }}>
+                        🔄 {language === 'vi' ? 'Tải lại' : 'Refresh'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         );
 

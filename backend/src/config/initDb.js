@@ -7,6 +7,8 @@
  * ============================================================
  */
 
+const bcrypt = require('bcryptjs');
+
 const initDatabase = async (pool) => {
   console.log('🔄 [DB Init] Đang kiểm tra cấu trúc Database...');
 
@@ -270,6 +272,41 @@ const initDatabase = async (pool) => {
       KEY idx_notif_created (created_at DESC),
       CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
       CONSTRAINT fk_notif_actor FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    // 17. Bảng admin_users (Tài khoản Quản trị & Nhân viên)
+    `CREATE TABLE IF NOT EXISTS admin_users (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      username VARCHAR(50) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      full_name VARCHAR(100) NOT NULL,
+      email VARCHAR(100) DEFAULT NULL,
+      role ENUM('admin', 'staff') NOT NULL DEFAULT 'staff',
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      last_login DATETIME DEFAULT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    // 18. Bảng support_tickets (Trung tâm trợ giúp & Giải đáp thắc mắc)
+    `CREATE TABLE IF NOT EXISTS support_tickets (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id INT UNSIGNED NOT NULL,
+      subject VARCHAR(255) NOT NULL,
+      category VARCHAR(50) NOT NULL DEFAULT 'general',
+      message TEXT NOT NULL,
+      status ENUM('pending', 'answered', 'closed') NOT NULL DEFAULT 'pending',
+      staff_reply TEXT DEFAULT NULL,
+      replied_by INT UNSIGNED DEFAULT NULL,
+      replied_at DATETIME DEFAULT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_ticket_user (user_id),
+      KEY idx_ticket_status (status),
+      KEY idx_ticket_created (created_at DESC),
+      CONSTRAINT fk_ticket_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
   ];
 
@@ -336,6 +373,26 @@ const initDatabase = async (pool) => {
       await pool.query("ALTER TABLE notifications MODIFY COLUMN type VARCHAR(50) NOT NULL");
     } catch (notifErr) {
       console.warn('⚠️ [DB Init] Cập nhật cột notifications.type:', notifErr.message);
+    }
+
+    // Tự động seed tài khoản admin và staff mặc định nếu bảng admin_users chưa có ai
+    try {
+      const [adminRows] = await pool.query("SELECT COUNT(*) as count FROM admin_users");
+      if (adminRows[0].count === 0) {
+        const adminHash = await bcrypt.hash('admin123', 10);
+        const staffHash = await bcrypt.hash('staff123', 10);
+
+        await pool.query(
+          `INSERT INTO admin_users (username, password_hash, full_name, email, role, is_active)
+           VALUES 
+           ('admin', ?, 'Quản Trị Viên Tối Cao', 'admin@masita.app', 'admin', 1),
+           ('staff', ?, 'Nhân Viên Hỗ Trợ CSKH', 'staff@masita.app', 'staff', 1)`,
+          [adminHash, staffHash]
+        );
+        console.log('✅ [DB Init] Đã khởi tạo 2 tài khoản quản trị mặc định: admin (admin123) & staff (staff123).');
+      }
+    } catch (seedErr) {
+      console.warn('⚠️ [DB Init] Seed admin_users error:', seedErr.message);
     }
 
     console.log('✅ [DB Init] Toàn bộ các bảng đã sẵn sàng & đồng bộ 100%!');

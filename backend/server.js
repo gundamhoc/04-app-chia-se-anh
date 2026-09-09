@@ -16,6 +16,7 @@ const groupRoutes = require('./src/routes/groupRoutes');
 const systemRoutes = require('./src/routes/systemRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
+const supportRoutes = require('./src/routes/supportRoutes');
 
 // ============================================================
 // Khởi tạo Express App
@@ -82,6 +83,7 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/support', supportRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

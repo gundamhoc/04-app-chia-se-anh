@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
 const { getDriveClient } = require('../utils/googleDrive');
+const { generateToken } = require('../utils/jwt');
 const { getOnlineUsers, isUserOnline, sendNotificationToUser, kickUserSockets, getIO } = require('../sockets/socketHandler');
 
 /**
@@ -38,6 +39,17 @@ const getDashboardStats = async (req, res) => {
       FROM password_reset_requests 
       WHERE status = 'pending'
     `);
+
+    // 4.1 Thắc mắc người dùng đang chờ giải đáp
+    let pendingTicketsCount = 0;
+    try {
+      const [[{ pending_tickets }]] = await pool.query(
+        "SELECT COUNT(*) as pending_tickets FROM support_tickets WHERE status = 'pending'"
+      );
+      pendingTicketsCount = Number(pending_tickets) || 0;
+    } catch (tErr) {
+      // Ignored
+    }
 
     // 5. 5 người dùng mới đăng ký gần nhất
     const [recentUsers] = await pool.query(`
@@ -103,6 +115,7 @@ const getDashboardStats = async (req, res) => {
         total_reactions: reactionsCount,
         total_comments: commentsCount,
         pending_reset_requests: pendingResetsCount,
+        pending_tickets: pendingTicketsCount,
         users: { 
           total: usersCount, 
           active: activeUsersCount, 
@@ -753,6 +766,403 @@ const streamPostVideo = async (req, res) => {
   }
 };
 
+/**
+ * 10. Đăng nhập Admin / Nhân viên
+ * POST /api/admin/auth/login
+ * Body: { username, password }
+ */
+const adminLogin = async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.',
+      });
+    }
+
+    const [rows] = await pool.query(
+      'SELECT id, username, password_hash, full_name, email, role, is_active FROM admin_users WHERE username = ?',
+      [username.trim()]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Tài khoản hoặc mật khẩu không chính xác.',
+      });
+    }
+
+    const user = rows[0];
+    if (user.is_active === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Tài khoản này đã bị khóa quyền truy cập hệ thống.',
+      });
+    }
+
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      return res.status(401).json({
+        success: false,
+        message: 'Tài khoản hoặc mật khẩu không chính xác.',
+      });
+    }
+
+    // Cập nhật last_login
+    await pool.query('UPDATE admin_users SET last_login = NOW() WHERE id = ?', [user.id]);
+
+    const token = generateToken({
+      admin_id: user.id,
+      id: user.id,
+      username: user.username,
+      full_name: user.full_name,
+      role: user.role,
+    });
+
+    return res.json({
+      success: true,
+      message: `Đăng nhập thành công với vai trò ${user.role === 'admin' ? 'Quản Trị Viên' : 'Nhân Viên CSKH'}.`,
+      data: {
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          full_name: user.full_name,
+          email: user.email,
+          role: user.role,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Admin login error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi đăng nhập quản trị.',
+    });
+  }
+};
+
+/**
+ * 11. Lấy thông tin tài khoản Admin/Nhân viên hiện tại
+ * GET /api/admin/auth/me
+ */
+const getAdminMe = async (req, res) => {
+  return res.json({
+    success: true,
+    data: req.admin,
+  });
+};
+
+/**
+ * 12. Danh sách Nhân viên & Admin (Chỉ dành cho Admin)
+ * GET /api/admin/staff
+ */
+const getStaffList = async (req, res) => {
+  try {
+    const [staffList] = await pool.query(
+      `SELECT id, username, full_name, email, role, is_active, last_login, created_at
+       FROM admin_users
+       ORDER BY id ASC`
+    );
+
+    return res.json({
+      success: true,
+      data: staffList,
+    });
+  } catch (error) {
+    console.error('Get staff list error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy danh sách nhân viên.',
+    });
+  }
+};
+
+/**
+ * 13. Tạo tài khoản Nhân viên mới (Chỉ dành cho Admin)
+ * POST /api/admin/staff
+ * Body: { username, password, full_name, email, role }
+ */
+const createStaff = async (req, res) => {
+  try {
+    const { username, password, full_name, email, role } = req.body || {};
+    if (!username || !password || !full_name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng cung cấp đầy đủ tên đăng nhập, mật khẩu và họ tên nhân viên.',
+      });
+    }
+
+    const [existing] = await pool.query('SELECT id FROM admin_users WHERE username = ?', [username.trim()]);
+    if (existing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tên đăng nhập này đã được sử dụng.',
+      });
+    }
+
+    const validRole = role === 'admin' ? 'admin' : 'staff';
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const [result] = await pool.query(
+      `INSERT INTO admin_users (username, password_hash, full_name, email, role, is_active, created_at)
+       VALUES (?, ?, ?, ?, ?, 1, NOW())`,
+      [username.trim(), passwordHash, full_name.trim(), email ? email.trim() : null, validRole]
+    );
+
+    return res.json({
+      success: true,
+      message: `Đã tạo tài khoản ${validRole === 'admin' ? 'Quản trị viên' : 'Nhân viên'} thành công.`,
+      data: {
+        id: result.insertId,
+        username: username.trim(),
+        full_name: full_name.trim(),
+        role: validRole,
+      },
+    });
+  } catch (error) {
+    console.error('Create staff error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi tạo tài khoản nhân viên.',
+    });
+  }
+};
+
+/**
+ * 14. Khóa / Mở khóa / Đổi mật khẩu nhân viên
+ * PUT /api/admin/staff/:id
+ * Body: { is_active, role, password }
+ */
+const toggleStaffStatus = async (req, res) => {
+  try {
+    const staffId = parseInt(req.params.id, 10);
+    if (isNaN(staffId)) {
+      return res.status(400).json({ success: false, message: 'ID không hợp lệ.' });
+    }
+
+    const [existing] = await pool.query('SELECT id, username, role, is_active FROM admin_users WHERE id = ?', [staffId]);
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy tài khoản nhân viên.' });
+    }
+
+    // Không cho phép tự khóa tài khoản Admin tối cao đầu tiên (id: 1)
+    if (staffId === 1 && req.body.is_active === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không thể khóa tài khoản Quản trị viên tối cao gốc của hệ thống.',
+      });
+    }
+
+    const { is_active, role, password } = req.body;
+    let updates = [];
+    let params = [];
+
+    if (is_active !== undefined) {
+      updates.push('is_active = ?');
+      params.push(is_active ? 1 : 0);
+    }
+
+    if (role && (role === 'admin' || role === 'staff')) {
+      updates.push('role = ?');
+      params.push(role);
+    }
+
+    if (password && password.trim()) {
+      const hash = await bcrypt.hash(password.trim(), 10);
+      updates.push('password_hash = ?');
+      params.push(hash);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ success: false, message: 'Không có dữ liệu thay đổi.' });
+    }
+
+    params.push(staffId);
+    await pool.query(`UPDATE admin_users SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    return res.json({
+      success: true,
+      message: 'Đã cập nhật thông tin tài khoản nhân viên thành công.',
+    });
+  } catch (error) {
+    console.error('Update staff status error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi cập nhật nhân viên.',
+    });
+  }
+};
+
+/**
+ * 15. Lấy danh sách thắc mắc của người dùng (Support Tickets)
+ * GET /api/admin/support-tickets?status=all|pending|answered&q=...&page=1&limit=20
+ */
+const getSupportTickets = async (req, res) => {
+  try {
+    const status = req.query.status || 'all'; // all | pending | answered
+    const q = (req.query.q || '').trim();
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+
+    let conditions = [];
+    let params = [];
+
+    if (status && status !== 'all') {
+      conditions.push('t.status = ?');
+      params.push(status);
+    }
+
+    if (q) {
+      conditions.push('(t.subject LIKE ? OR t.message LIKE ? OR u.username LIKE ? OR u.full_name LIKE ?)');
+      const term = `%${q}%`;
+      params.push(term, term, term, term);
+    }
+
+    const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) as total FROM support_tickets t JOIN users u ON t.user_id = u.id ${whereSql}`,
+      params
+    );
+
+    const [tickets] = await pool.query(
+      `SELECT 
+        t.id,
+        t.user_id,
+        t.subject,
+        t.category,
+        t.message,
+        t.status,
+        t.staff_reply,
+        t.replied_by,
+        t.replied_at,
+        t.created_at,
+        t.updated_at,
+        u.username,
+        u.full_name,
+        u.avatar_url,
+        a.full_name as responder_name,
+        a.role as responder_role
+       FROM support_tickets t
+       JOIN users u ON t.user_id = u.id
+       LEFT JOIN admin_users a ON t.replied_by = a.id
+       ${whereSql}
+       ORDER BY (CASE WHEN t.status = 'pending' THEN 0 ELSE 1 END), t.id DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    // Thống kê nhanh
+    const [[{ count_pending }]] = await pool.query("SELECT COUNT(*) as count_pending FROM support_tickets WHERE status = 'pending'");
+    const [[{ count_answered }]] = await pool.query("SELECT COUNT(*) as count_answered FROM support_tickets WHERE status = 'answered'");
+
+    return res.json({
+      success: true,
+      data: tickets,
+      counts: {
+        total: Number(total),
+        pending: Number(count_pending),
+        answered: Number(count_answered),
+      },
+      pagination: {
+        total: Number(total),
+        page,
+        limit,
+        total_pages: Math.ceil(Number(total) / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Get support tickets error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy danh sách câu hỏi trợ giúp.',
+    });
+  }
+};
+
+/**
+ * 16. Trả lời giải đáp thắc mắc người dùng
+ * PUT /api/admin/support-tickets/:id/reply
+ * Body: { reply: '...' }
+ */
+const replySupportTicket = async (req, res) => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    const { reply } = req.body || {};
+
+    if (isNaN(ticketId) || !reply || !reply.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng nhập nội dung câu trả lời giải đáp.',
+      });
+    }
+
+    const [rows] = await pool.query(
+      'SELECT id, user_id, subject FROM support_tickets WHERE id = ?',
+      [ticketId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy câu hỏi trợ giúp.' });
+    }
+
+    const ticket = rows[0];
+    const responderId = req.admin ? req.admin.id : null;
+    const responderName = req.admin ? req.admin.full_name : 'Ban Quản Trị Masita';
+
+    // 1. Cập nhật câu trả lời vào ticket
+    await pool.query(
+      `UPDATE support_tickets 
+       SET status = 'answered', staff_reply = ?, replied_by = ?, replied_at = NOW(), updated_at = NOW() 
+       WHERE id = ?`,
+      [reply.trim(), responderId, ticketId]
+    );
+
+    // 2. Gửi thông báo đến tài khoản người dùng
+    const snippet = reply.trim().length > 60 ? `${reply.trim().substring(0, 60)}...` : reply.trim();
+    const notifContent = `Ban Quản Trị đã giải đáp câu hỏi "${ticket.subject}": ${snippet}`;
+
+    try {
+      await pool.query(
+        `INSERT INTO notifications (user_id, actor_id, type, entity_id, content, is_read, created_at)
+         VALUES (?, ?, 'support_reply', ?, ?, 0, NOW())`,
+        [ticket.user_id, ticket.user_id, ticketId, notifContent]
+      );
+
+      // Bắn socket realtime
+      sendNotificationToUser(ticket.user_id, {
+        type: 'support_reply',
+        entity_id: ticketId,
+        content: notifContent,
+        actor_name: 'Ban Quản Trị Masita',
+      });
+    } catch (notifErr) {
+      console.warn('Lỗi gửi thông báo giải đáp:', notifErr.message);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Đã gửi lời giải đáp và thông báo trực tiếp đến người dùng.',
+      data: {
+        ticket_id: ticketId,
+        status: 'answered',
+        reply: reply.trim(),
+        replied_at: new Date().toISOString(),
+        responder_name: responderName,
+      },
+    });
+  } catch (error) {
+    console.error('Reply support ticket error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi gửi giải đáp thắc mắc.',
+    });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getUsers,
@@ -764,4 +1174,11 @@ module.exports = {
   getPosts,
   deletePost,
   streamPostVideo,
+  adminLogin,
+  getAdminMe,
+  getStaffList,
+  createStaff,
+  toggleStaffStatus,
+  getSupportTickets,
+  replySupportTicket,
 };
