@@ -2,7 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Interactive Phone Mockup Tabs (Real App Screenshots)
-  const tabs = document.querySelectorAll('.screen-tab');
+  const tabs = document.querySelectorAll('.mockup-tab-btn');
   const views = document.querySelectorAll('.app-view');
 
   tabs.forEach(tab => {

@@ -109,28 +109,7 @@
           <div class="phone-speaker"></div>
           <div class="phone-camera"></div>
           <div class="phone-screen">
-            <!-- Screen Top Status -->
-            <div class="screen-status-bar">
-              <span>9:41</span>
-              <div class="status-icons">
-                <span>5G</span>
-                <span>100%</span>
-              </div>
-            </div>
-
-            <!-- Screen In-App Header -->
-            <div class="screen-app-header">
-              <div class="screen-brand">
-                <span class="dot-live"></span>
-                <strong>Masita</strong>
-              </div>
-              <div class="screen-header-actions">
-                <span class="screen-icon-btn">🔔</span>
-                <span class="screen-icon-btn">💬</span>
-              </div>
-            </div>
-
-            <!-- Screen Dynamic View Area (Real App Screenshots) -->
+            <!-- Screen Dynamic View Area (Full Real App Screenshots) -->
             <div class="screen-content" id="screen-viewport">
               <!-- View 1: Feed (Default) -->
               <div class="app-view active" id="view-feed">
@@ -146,28 +125,37 @@
               <div class="app-view" id="view-chat">
                 <img src="assets/screen_chat.png" alt="Trò chuyện Masita" class="real-screen-img">
               </div>
-            </div>
 
-            <!-- Screen Bottom Tab Navigation -->
-            <div class="screen-tab-bar">
-              <button class="screen-tab active" data-target="view-feed">
-                <span class="tab-icon">🏠</span>
-                <span class="tab-label">Bảng tin</span>
-              </button>
-              <button class="screen-tab" data-target="view-friends">
-                <span class="tab-icon">👥</span>
-                <span class="tab-label">Bạn bè</span>
-              </button>
-              <button class="screen-tab" data-target="view-chat">
-                <span class="tab-icon">💬</span>
-                <span class="tab-label">Trò chuyện</span>
-              </button>
+              <!-- View 4: Profile -->
+              <div class="app-view" id="view-profile">
+                <img src="assets/screen_profile.png" alt="Hồ sơ Masita" class="real-screen-img">
+              </div>
             </div>
           </div>
         </div>
 
+        <!-- Interactive Screen Switcher Tabs -->
+        <div class="mockup-tab-selector">
+          <button class="mockup-tab-btn active" data-target="view-feed">
+            <span class="tab-icon">🏠</span>
+            <span class="tab-label">Bảng tin</span>
+          </button>
+          <button class="mockup-tab-btn" data-target="view-friends">
+            <span class="tab-icon">👥</span>
+            <span class="tab-label">Bạn bè</span>
+          </button>
+          <button class="mockup-tab-btn" data-target="view-chat">
+            <span class="tab-icon">💬</span>
+            <span class="tab-label">Trò chuyện</span>
+          </button>
+          <button class="mockup-tab-btn" data-target="view-profile">
+            <span class="tab-icon">👤</span>
+            <span class="tab-label">Hồ sơ</span>
+          </button>
+        </div>
+
         <div class="mockup-hint">
-          <span>👆 Hãy bấm vào các tab trên điện thoại để trải nghiệm thử giao diện!</span>
+          <span>👆 Bấm vào các tab trên để xem từng màn hình thực tế của app Masita</span>
         </div>
       </div>
     </div>
