@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 3. Copy APK Download Link
   const copyBtn = document.getElementById('btn-copy-link');
   const copyText = document.getElementById('copy-text');
-  const downloadUrl = 'https://expo.dev/accounts/gundamhoc/projects/masita/builds/71a7907f-ce43-4050-bcd3-e1161ca5b7c9';
+  const downloadUrl = 'https://expo.dev/accounts/gundamhoc/projects/masita/builds/bffef687-4053-405e-b9cc-e62fcfe5f3c3';
 
   if (copyBtn && copyText) {
     copyBtn.addEventListener('click', async () => {
