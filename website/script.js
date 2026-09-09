@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.classList.add('active');
 
       const targetId = tab.getAttribute('data-target');
-      
+
       // Switch view with smooth transition
       views.forEach(view => {
         if (view.id === targetId) {
@@ -112,10 +112,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const rect = heroMockupWrap.getBoundingClientRect();
       const x = e.clientX - rect.left - rect.width / 2;
       const y = e.clientY - rect.top - rect.height / 2;
-      
+
       const rotateX = (-y / rect.height) * 12;
       const rotateY = (x / rect.width) * 12;
-      
+
       phoneFrame.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-8px)`;
     });
 
