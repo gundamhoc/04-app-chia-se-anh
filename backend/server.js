@@ -139,18 +139,33 @@ const startServer = async () => {
     console.log('');
 
     // Khởi chạy Ngrok tự động nếu có biến NGROK_AUTHTOKEN và NGROK_DOMAIN (Cloud 24/7)
+    // Tự động retry mỗi 15 giây nếu máy tính cá nhân đang giữ domain, khi tắt máy cloud sẽ tự chiếm quyền!
     if (process.env.NGROK_AUTHTOKEN && process.env.NGROK_DOMAIN) {
-      try {
-        const ngrok = require('@ngrok/ngrok');
-        const listener = await ngrok.forward({
-          addr: PORT,
-          authtoken: process.env.NGROK_AUTHTOKEN,
-          domain: process.env.NGROK_DOMAIN,
-        });
-        console.log(`🌐 [Ngrok Cloud] Tunnel đã kết nối: ${listener.url()}`);
-      } catch (ngrokErr) {
-        console.warn('⚠️ [Ngrok Cloud] Tunnel:', ngrokErr.message);
-      }
+      let ngrokConnected = false;
+      const connectNgrok = async () => {
+        if (ngrokConnected) return;
+        try {
+          const ngrok = require('@ngrok/ngrok');
+          const listener = await ngrok.forward({
+            addr: PORT,
+            authtoken: process.env.NGROK_AUTHTOKEN,
+            domain: process.env.NGROK_DOMAIN,
+          });
+          ngrokConnected = true;
+          console.log(`🎉 [Ngrok Cloud] Tunnel ĐÃ KẾT NỐI THÀNH CÔNG: ${listener.url()}`);
+        } catch (ngrokErr) {
+          console.warn('⏳ [Ngrok Cloud] Domain đang bận trên máy cá nhân. Đang chờ bạn tắt máy/tắt ngrok local để cloud tự kích hoạt...');
+        }
+      };
+
+      await connectNgrok();
+      const retryTimer = setInterval(async () => {
+        if (!ngrokConnected) {
+          await connectNgrok();
+        } else {
+          clearInterval(retryTimer);
+        }
+      }, 15000);
     }
 
     // Tự động ping giữ máy chủ thức 24/7 (Anti-sleep cho Render free)
