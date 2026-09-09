@@ -942,6 +942,28 @@ export const translations = {
 export type TranslationKey = keyof typeof translations.vi;
 
 /**
+ * Chuẩn hóa chuỗi thời gian đảm bảo luôn nhận đúng UTC từ Database MySQL
+ */
+export const normalizeDate = (dateStrOrDate?: string | Date | null): Date | null => {
+  if (!dateStrOrDate) return null;
+  if (dateStrOrDate instanceof Date) return isNaN(dateStrOrDate.getTime()) ? null : dateStrOrDate;
+  if (typeof dateStrOrDate === 'string') {
+    let s = dateStrOrDate.trim();
+    // Chuyển format "YYYY-MM-DD HH:mm:ss" -> "YYYY-MM-DDTHH:mm:ss"
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) {
+      s = s.replace(' ', 'T');
+    }
+    // Nếu là ISO string chưa có 'Z' và không có timezone offset (+/-), thêm 'Z' (vì DB lưu theo chuẩn UTC)
+    if (s.includes('T') && !s.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(s)) {
+      s = `${s}Z`;
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+};
+
+/**
  * Định dạng thời gian tương đối đa ngôn ngữ (vd: "Vừa xong" / "Just now", "22h trước" / "22h ago", "15p" / "15m")
  */
 export const formatRelativeTime = (
@@ -949,10 +971,9 @@ export const formatRelativeTime = (
   lang: AppLanguage = 'vi',
   shortForm: boolean = false
 ): string => {
-  if (!dateStrOrDate) return '';
+  const date = normalizeDate(dateStrOrDate);
+  if (!date) return '';
   try {
-    const date = typeof dateStrOrDate === 'string' ? new Date(dateStrOrDate) : dateStrOrDate;
-    if (isNaN(date.getTime())) return '';
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -999,10 +1020,9 @@ export const useI18n = () => {
   };
 
   const formatClockTime = (dateStrOrDate?: string | Date | null): string => {
-    if (!dateStrOrDate) return '';
+    const d = normalizeDate(dateStrOrDate);
+    if (!d) return '';
     try {
-      const d = typeof dateStrOrDate === 'string' ? new Date(dateStrOrDate) : dateStrOrDate;
-      if (isNaN(d.getTime())) return '';
       return d.toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
     } catch {
       return '';
@@ -1010,10 +1030,9 @@ export const useI18n = () => {
   };
 
   const formatDateTime = (dateStrOrDate?: string | Date | null, options?: Intl.DateTimeFormatOptions): string => {
-    if (!dateStrOrDate) return '';
+    const d = normalizeDate(dateStrOrDate);
+    if (!d) return '';
     try {
-      const d = typeof dateStrOrDate === 'string' ? new Date(dateStrOrDate) : dateStrOrDate;
-      if (isNaN(d.getTime())) return '';
       return d.toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', options);
     } catch {
       return '';
