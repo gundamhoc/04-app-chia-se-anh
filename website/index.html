@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Masita - Mạng Xã Hội Chia Sẻ Khoảnh Khắc Thế Hệ Mới</title>
+  <meta name="description" content="Khám phá Masita - Ứng dụng mạng xã hội hiện đại: chia sẻ khoảnh khắc, lướt video mượt mà, trò chuyện thời gian thực và kết nối không giới hạn. Tải APK v1.0.3 ngay!">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  
+  <!-- Google Fonts: Outfit & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Background Glow & Mesh Orbs -->
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+  <div class="bg-glow bg-glow-3"></div>
+
+  <!-- Header / Navigation -->
+  <header class="site-header">
+    <div class="container nav-container">
+      <a href="#" class="brand-logo">
+        <img src="assets/app_logo.webp" alt="Masita Logo" class="logo-img" onerror="this.src='assets/icon.png'">
+        <span class="brand-name">Masita<span class="brand-dot">.</span></span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="#features">Tính năng</a>
+        <a href="#preview">Trải nghiệm app</a>
+        <a href="#download">Tải APK</a>
+        <a href="#guide">Hướng dẫn cài</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="https://github.com/gundamhoc/04-app-chia-se-anh" target="_blank" rel="noreferrer" class="btn-github">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          <span>GitHub</span>
+        </a>
+        <a href="#download" class="btn-primary btn-nav">
+          <span>Tải APK v1.0.3</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="container hero-container">
+      <div class="hero-content">
+        <div class="release-badge">
+          <span class="badge-dot"></span>
+          <span>Bản phát hành mới nhất: <strong>v1.0.3 APK</strong></span>
+          <span class="badge-arrow">→</span>
+        </div>
+
+        <h1 class="hero-title">
+          Kết nối cảm xúc,<br>
+          <span class="gradient-text">chia sẻ trọn vẹn</span> khoảnh khắc.
+        </h1>
+
+        <p class="hero-desc">
+          <strong>Masita</strong> là mạng xã hội đa phương tiện thế hệ mới. Trải nghiệm lướt video ngắn mượt mà, trò chuyện thời gian thực, xem và tải ảnh gốc chuẩn HDR với tốc độ siêu tốc.
+        </p>
+
+        <div class="hero-cta-group">
+          <a href="https://expo.dev/accounts/gundamhoc/projects/masita/builds/71a7907f-ce43-4050-bcd3-e1161ca5b7c9" target="_blank" rel="noreferrer" class="btn-primary btn-lg" id="btn-hero-download">
+            <span class="btn-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993s-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9994.4482.9994.9993s-.4483.9997-.9994.9997m11.4045-6.02l1.997-3.4591a.416.416 0 00-.1523-.5676.416.416 0 00-.5677.1523l-2.0223 3.503c-1.6083-.7336-3.428-.1466-5.1362-.1466-1.708 0-3.528-.587-5.1363.1466L4.838 5.447a.416.416 0 00-.5677-.1523.416.416 0 00-.1523.5676l1.997 3.4591C2.688 11.2338 0 15.2605 0 19.8667h24c0-4.6062-2.688-8.6329-6.1185-10.5453"/></svg>
+            </span>
+            <div class="btn-text-wrap">
+              <span class="btn-subtext">Tải file trực tiếp</span>
+              <span class="btn-maintext">Tải APK Android (v1.0.3)</span>
+            </div>
+          </a>
+
+          <button class="btn-secondary btn-lg" id="btn-show-qr">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            <span>Quét mã QR</span>
+          </button>
+        </div>
+
+        <!-- Trust Badges / Stats -->
+        <div class="hero-stats">
+          <div class="stat-item">
+            <span class="stat-num">v1.0.3</span>
+            <span class="stat-label">Bản ổn định nhất</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-num">100%</span>
+            <span class="stat-label">Miễn phí trải nghiệm</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-num">OTA</span>
+            <span class="stat-label">Cập nhật tự động</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hero Phone Mockup (Interactive Showcase) -->
+      <div class="hero-mockup-wrap" id="preview">
+        <div class="phone-frame">
+          <div class="phone-speaker"></div>
+          <div class="phone-camera"></div>
+          <div class="phone-screen">
+            <!-- Screen Top Status -->
+            <div class="screen-status-bar">
+              <span>9:41</span>
+              <div class="status-icons">
+                <span>5G</span>
+                <span>100%</span>
+              </div>
+            </div>
+
+            <!-- Screen In-App Header -->
+            <div class="screen-app-header">
+              <div class="screen-brand">
+                <span class="dot-live"></span>
+                <strong>Masita</strong>
+              </div>
+              <div class="screen-header-actions">
+                <span class="screen-icon-btn">🔔</span>
+                <span class="screen-icon-btn">💬</span>
+              </div>
+            </div>
+
+            <!-- Screen Dynamic View Area -->
+            <div class="screen-content" id="screen-viewport">
+              <!-- View 1: Feed (Default) -->
+              <div class="app-view active" id="view-feed">
+                <div class="feed-story-row">
+                  <div class="story-item story-add">
+                    <div class="avatar-ring add-ring">+</div>
+                    <span>Tin mới</span>
+                  </div>
+                  <div class="story-item">
+                    <div class="avatar-ring online">👤</div>
+                    <span>Phương</span>
+                  </div>
+                  <div class="story-item">
+                    <div class="avatar-ring">👧</div>
+                    <span>Mai Linh</span>
+                  </div>
+                  <div class="story-item">
+                    <div class="avatar-ring">🧑</div>
+                    <span>Hoàng Nam</span>
+                  </div>
+                </div>
+
+                <div class="post-card">
+                  <div class="post-header">
+                    <div class="post-avatar">🧑‍💻</div>
+                    <div class="post-author-meta">
+                      <strong>gundamhoc</strong>
+                      <span class="post-time">Vừa xong • 🌐 Công khai</span>
+                    </div>
+                    <span class="post-menu">•••</span>
+                  </div>
+                  <p class="post-caption">Chào mừng mọi người đến với mạng xã hội Masita v1.0.3! 🚀 Xem video cực mượt và tải ảnh thoải mái nhé.</p>
+                  <div class="post-media-box">
+                    <div class="media-video-badge">▶ Video Full HD</div>
+                    <div class="media-overlay-backdrop"></div>
+                  </div>
+                  <div class="post-actions-row">
+                    <span class="action-btn active">❤️ 128</span>
+                    <span class="action-btn">💬 34</span>
+                    <span class="action-btn">↗️ Chia sẻ</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- View 2: Video Reels -->
+              <div class="app-view" id="view-video">
+                <div class="reels-card">
+                  <div class="reels-bg-ambient"></div>
+                  <div class="reels-center-icon">▶</div>
+                  <div class="reels-overlay-info">
+                    <strong>@vietnam_travel</strong>
+                    <p>Hoàng hôn tuyệt đẹp trên bãi biển Đà Nẵng 🌅 #masita #chill</p>
+                    <span class="music-tag">🎵 Âm thanh gốc - chill vibe</span>
+                  </div>
+                  <div class="reels-side-actions">
+                    <div class="side-btn"><span>❤️</span><small>2.4k</small></div>
+                    <div class="side-btn"><span>💬</span><small>180</small></div>
+                    <div class="side-btn"><span>⭐</span><small>Lưu</small></div>
+                    <div class="side-btn"><span>⬇️</span><small>Tải</small></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- View 3: Chat -->
+              <div class="app-view" id="view-chat">
+                <div class="chat-conv-item unread">
+                  <div class="chat-avatar">👧<span class="chat-online-dot"></span></div>
+                  <div class="chat-info">
+                    <div class="chat-name-row">
+                      <strong>Phương Hoa</strong>
+                      <span class="chat-time">10:24</span>
+                    </div>
+                    <p class="chat-preview">App lướt thích thật ấy, gửi video nét ghê! ✨</p>
+                  </div>
+                  <span class="unread-pill">2</span>
+                </div>
+                <div class="chat-conv-item">
+                  <div class="chat-avatar">👥</div>
+                  <div class="chat-info">
+                    <div class="chat-name-row">
+                      <strong>Hội Lập Trình Masita</strong>
+                      <span class="chat-time">Hôm qua</span>
+                    </div>
+                    <p class="chat-preview">Nam: Đã cập nhật bản vá video nhé anh em!</p>
+                  </div>
+                </div>
+                <div class="chat-conv-item">
+                  <div class="chat-avatar">🧑</div>
+                  <div class="chat-info">
+                    <div class="chat-name-row">
+                      <strong>Trần Đạt</strong>
+                      <span class="chat-time">2 ngày trước</span>
+                    </div>
+                    <p class="chat-preview">Mai đi cafe test app tiếp nha ông</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- View 4: Profile -->
+              <div class="app-view" id="view-profile">
+                <div class="profile-card-mini">
+                  <div class="profile-cover-demo"></div>
+                  <div class="profile-avatar-demo">👨‍🚀</div>
+                  <h4 class="profile-name">Phương Học</h4>
+                  <p class="profile-bio">Yêu thích công nghệ & xây dựng sản phẩm số ✨</p>
+                  <div class="profile-stats-row">
+                    <div><strong>24</strong><span>Bài viết</span></div>
+                    <div><strong>1.2k</strong><span>Bạn bè</span></div>
+                    <div><strong>850</strong><span>Đang theo dõi</span></div>
+                  </div>
+                  <div class="profile-gallery-grid">
+                    <div class="grid-img img-1"></div>
+                    <div class="grid-img img-2"></div>
+                    <div class="grid-img img-3"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Screen Bottom Tab Navigation -->
+            <div class="screen-tab-bar">
+              <button class="screen-tab active" data-target="view-feed">
+                <span class="tab-icon">🏠</span>
+                <span class="tab-label">Feed</span>
+              </button>
+              <button class="screen-tab" data-target="view-video">
+                <span class="tab-icon">🎬</span>
+                <span class="tab-label">Video</span>
+              </button>
+              <button class="screen-tab" data-target="view-chat">
+                <span class="tab-icon">💬</span>
+                <span class="tab-label">Chat</span>
+              </button>
+              <button class="screen-tab" data-target="view-profile">
+                <span class="tab-icon">👤</span>
+                <span class="tab-label">Hồ sơ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mockup-hint">
+          <span>👆 Hãy bấm vào các tab trên điện thoại để trải nghiệm thử giao diện!</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Bento Grid -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <div class="section-head text-center">
+        <span class="section-tag">TÍNH NĂNG ĐỈNH CAO</span>
+        <h2 class="section-title">Mọi trải nghiệm bạn yêu thích, trong một ứng dụng duy nhất.</h2>
+        <p class="section-subtitle">Được tối ưu hoá từng mili-giây với kiến trúc hiện đại, đảm bảo mượt mà và bảo mật tối đa.</p>
+      </div>
+
+      <div class="bento-grid">
+        <!-- Feature 1 -->
+        <div class="bento-card bento-lg">
+          <div class="bento-badge">🎬 Đa phương tiện</div>
+          <h3>Lướt Reels & Video Feed Facebook-Style</h3>
+          <p>Tự động phát mượt mà khi cuộn đến với phông nền mờ thích ứng (Adaptive Blur), hỗ trợ streaming video độ phân giải cao trực tiếp.</p>
+          <div class="bento-preview-box video-showcase-box">
+            <div class="player-mock">
+              <span class="play-pulse">▶</span>
+              <div class="stream-progress">
+                <div class="progress-bar-fill"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="bento-card">
+          <div class="bento-badge">💬 Thời gian thực</div>
+          <h3>Chat 1-1 & Nhóm Siêu Tốc</h3>
+          <p>Nhắn tin tức thời với Socket.io, gửi ảnh, video, tài liệu dung lượng lớn và tùy biến màu theme riêng cho từng cuộc trò chuyện.</p>
+          <div class="chat-bubble-preview">
+            <div class="msg-bubble msg-incoming">Chào bạn! Ảnh chuyến đi chụp nét quá 🔥</div>
+            <div class="msg-bubble msg-outgoing">Cảm ơn nhé! Bấm vào xem full rồi tải về máy luôn được á! 📸</div>
+          </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="bento-card">
+          <div class="bento-badge">🖼️ Chất lượng gốc</div>
+          <h3>Xem & Tải Ảnh Toàn Màn Hình</h3>
+          <p>Chạm vào avatar, ảnh bìa hoặc bài viết để mở trình xem ảnh cao cấp, cử chỉ phóng to thu nhỏ 2 ngón tay và tải trực tiếp vào điện thoại.</p>
+          <div class="photo-tools-preview">
+            <span class="tool-tag">🔍 Phóng to 2.5x</span>
+            <span class="tool-tag">⬇️ Lưu vào máy</span>
+            <span class="tool-tag">✨ Giữ nguyên HDR</span>
+          </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="bento-card bento-wide">
+          <div class="bento-badge">🔔 Tương tác thông minh</div>
+          <div class="bento-content-side">
+            <h3>Thông báo tức thì & Đồng ý kết bạn trong 1 giây</h3>
+            <p>Hệ thống thông báo đẩy theo thời gian thực kèm nút Chấp thuận / Từ chối lời mời kết bạn ngay trong thanh thông báo mà không cần chuyển trang.</p>
+          </div>
+          <div class="notif-sample-box">
+            <div class="notif-item-demo">
+              <div class="notif-icon">👋</div>
+              <div class="notif-text">
+                <strong>Minh Khôi</strong> đã gửi lời mời kết bạn
+                <div class="notif-btns">
+                  <button class="btn-sm btn-accept">Chấp nhận</button>
+                  <button class="btn-sm btn-decline">Từ chối</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="bento-card">
+          <div class="bento-badge">☁️ Đám mây</div>
+          <h3>Cập Nhật Tức Thì (OTA Updates)</h3>
+          <p>Tự động nhận các bản vá lỗi và tính năng mới nhất qua đám mây mà không cần phải tải lại file cài đặt APK.</p>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="bento-card">
+          <div class="bento-badge">🔒 Riêng tư</div>
+          <h3>Bảo Mật Quyền Riêng Tư</h3>
+          <p>Tùy chọn chia sẻ Công khai, Bạn bè hoặc Chỉ mình tôi cho từng bức ảnh và video của bạn.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download & QR Section -->
+  <section class="download-section" id="download">
+    <div class="container">
+      <div class="download-banner">
+        <div class="download-info">
+          <span class="badge-accent">SẴN SÀNG TRẢI NGHIỆM</span>
+          <h2 class="download-title">Tải ngay Masita cho Android</h2>
+          <p class="download-desc">Phiên bản <strong>v1.0.3</strong> mới nhất đã hoàn thiện, fix toàn diện các lỗi xem video và tối ưu hóa hiệu năng pin.</p>
+          
+          <div class="specs-list">
+            <div class="spec-row">
+              <span>Phiên bản:</span>
+              <strong>v1.0.3 (Build 4)</strong>
+            </div>
+            <div class="spec-row">
+              <span>Hệ điều hành:</span>
+              <strong>Android 8.0 trở lên</strong>
+            </div>
+            <div class="spec-row">
+              <span>Định dạng:</span>
+              <strong>File APK cài đặt độc lập</strong>
+            </div>
+          </div>
+
+          <div class="download-btn-group">
+            <a href="https://expo.dev/accounts/gundamhoc/projects/masita/builds/71a7907f-ce43-4050-bcd3-e1161ca5b7c9" target="_blank" rel="noreferrer" class="btn-primary btn-xl">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Tải file APK trực tiếp</span>
+            </a>
+            <button class="btn-secondary" id="btn-copy-link">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span id="copy-text">Sao chép link tải</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="download-qr-box">
+          <div class="qr-card">
+            <!-- Dynamic SVG QR Code pointing to EAS Build URL -->
+            <div class="qr-code-img">
+              <svg viewBox="0 0 100 100" class="qr-svg">
+                <!-- Outer Border / Mock QR Pattern -->
+                <rect width="100" height="100" fill="#ffffff" rx="10"/>
+                <!-- Top-Left Target -->
+                <rect x="10" y="10" width="24" height="24" fill="#000" rx="3"/>
+                <rect x="14" y="14" width="16" height="16" fill="#fff" rx="2"/>
+                <rect x="18" y="18" width="8" height="8" fill="#6C63FF" rx="1"/>
+                <!-- Top-Right Target -->
+                <rect x="66" y="10" width="24" height="24" fill="#000" rx="3"/>
+                <rect x="70" y="14" width="16" height="16" fill="#fff" rx="2"/>
+                <rect x="74" y="18" width="8" height="8" fill="#6C63FF" rx="1"/>
+                <!-- Bottom-Left Target -->
+                <rect x="10" y="66" width="24" height="24" fill="#000" rx="3"/>
+                <rect x="14" y="70" width="16" height="16" fill="#fff" rx="2"/>
+                <rect x="18" y="74" width="8" height="8" fill="#6C63FF" rx="1"/>
+                <!-- Data Dots -->
+                <rect x="38" y="12" width="6" height="6" fill="#111"/>
+                <rect x="48" y="12" width="6" height="6" fill="#111"/>
+                <rect x="42" y="22" width="8" height="6" fill="#6C63FF"/>
+                <rect x="54" y="22" width="6" height="6" fill="#111"/>
+                <rect x="38" y="32" width="6" height="8" fill="#111"/>
+                <rect x="48" y="34" width="8" height="6" fill="#111"/>
+                <rect x="12" y="42" width="8" height="6" fill="#111"/>
+                <rect x="24" y="42" width="6" height="6" fill="#111"/>
+                <rect x="68" y="42" width="8" height="6" fill="#6C63FF"/>
+                <rect x="80" y="42" width="8" height="8" fill="#111"/>
+                <rect x="12" y="52" width="6" height="8" fill="#111"/>
+                <rect x="38" y="46" width="10" height="10" fill="#000"/>
+                <rect x="52" y="48" width="8" height="8" fill="#6C63FF"/>
+                <rect x="66" y="54" width="6" height="6" fill="#111"/>
+                <rect x="76" y="54" width="12" height="6" fill="#111"/>
+                <rect x="38" y="66" width="8" height="8" fill="#111"/>
+                <rect x="50" y="66" width="6" height="6" fill="#111"/>
+                <rect x="42" y="78" width="6" height="10" fill="#6C63FF"/>
+                <rect x="52" y="76" width="8" height="6" fill="#111"/>
+                <rect x="66" y="70" width="8" height="8" fill="#111"/>
+                <rect x="78" y="70" width="10" height="6" fill="#6C63FF"/>
+                <rect x="70" y="82" width="8" height="8" fill="#111"/>
+                <rect x="82" y="82" width="6" height="6" fill="#111"/>
+              </svg>
+            </div>
+            <p class="qr-caption">📱 Dùng camera điện thoại quét mã để tải về tức thì</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Installation Guide -->
+  <section class="guide-section" id="guide">
+    <div class="container">
+      <div class="section-head text-center">
+        <span class="section-tag">HƯỚNG DẪN CÀI ĐẶT</span>
+        <h2 class="section-title">3 Bước Đơn Giản Để Cài Đặt Masita</h2>
+        <p class="section-subtitle">Chỉ mất chưa đầy 1 phút để cài đặt ứng dụng lên máy điện thoại Android của bạn.</p>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">01</div>
+          <div class="step-icon">⬇️</div>
+          <h4>Tải file APK</h4>
+          <p>Bấm nút <strong>Tải file APK</strong> hoặc quét mã QR ở trên bằng điện thoại để tải file cài đặt <code>masita-v1.0.3.apk</code> về máy.</p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">02</div>
+          <div class="step-icon">⚙️</div>
+          <h4>Cho phép cài đặt</h4>
+          <p>Mở file vừa tải về, nếu hệ điều hành Android hỏi xác nhận, chọn <strong>"Cho phép cài đặt từ nguồn này"</strong> (Chrome/Trình quản lý tệp).</p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">03</div>
+          <div class="step-icon">🚀</div>
+          <h4>Đăng ký & Trải nghiệm</h4>
+          <p>Mở ứng dụng Masita, tạo tài khoản cá nhân trong 10 giây và bắt đầu chia sẻ những khoảnh khắc tuyệt vời cùng bạn bè!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-brand">
+        <div class="brand-logo">
+          <img src="assets/app_logo.webp" alt="Masita" class="logo-img" onerror="this.src='assets/icon.png'">
+          <span class="brand-name">Masita<span class="brand-dot">.</span></span>
+        </div>
+        <p class="footer-tagline">Nền tảng mạng xã hội kết nối cảm xúc & chia sẻ khoảnh khắc thế hệ mới.</p>
+      </div>
+
+      <div class="footer-links-group">
+        <div class="footer-col">
+          <h5>Ứng Dụng</h5>
+          <a href="#features">Tính năng chính</a>
+          <a href="#preview">Mô phỏng app</a>
+          <a href="#download">Tải bản APK v1.0.3</a>
+          <a href="#guide">Hướng dẫn cài đặt</a>
+        </div>
+
+        <div class="footer-col">
+          <h5>Phát Triển</h5>
+          <a href="https://github.com/gundamhoc/04-app-chia-se-anh" target="_blank" rel="noreferrer">Mã nguồn GitHub</a>
+          <a href="https://expo.dev/accounts/gundamhoc/projects/masita" target="_blank" rel="noreferrer">Expo EAS Project</a>
+          <a href="#">Nhật ký phiên bản (Changelog)</a>
+        </div>
+
+        <div class="footer-col">
+          <h5>Liên Hệ</h5>
+          <a href="#">Hỗ trợ người dùng</a>
+          <a href="#">Điều khoản sử dụng</a>
+          <a href="#">Chính sách bảo mật</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div class="container bottom-container">
+        <p>© 2026 Masita. Xây dựng với niềm đam mê bởi <strong>gundamhoc</strong>.</p>
+        <span class="badge-status">🟢 Hệ thống Online</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- QR Code Modal (Popup) -->
+  <div class="modal-overlay" id="qr-modal">
+    <div class="modal-box">
+      <button class="modal-close" id="modal-close-btn">&times;</button>
+      <h3>Quét mã để cài Masita</h3>
+      <p>Mở camera điện thoại Android của bạn và quét mã dưới đây để tải trực tiếp:</p>
+      <div class="modal-qr-img">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=https://expo.dev/accounts/gundamhoc/projects/masita/builds/71a7907f-ce43-4050-bcd3-e1161ca5b7c9" alt="QR Code Tải APK" class="qr-server-img">
+      </div>
+      <a href="https://expo.dev/accounts/gundamhoc/projects/masita/builds/71a7907f-ce43-4050-bcd3-e1161ca5b7c9" target="_blank" rel="noreferrer" class="btn-primary btn-block">Mở link tải trên trình duyệt</a>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
