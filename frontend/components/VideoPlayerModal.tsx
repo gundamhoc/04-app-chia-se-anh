@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Modal,
   StyleSheet,
@@ -11,10 +11,18 @@ import {
   Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import * as Linking from 'expo-linking';
 import { saveVideoToDevice } from '../utils/mediaSaver';
 import { useToast } from '../hooks/useToast';
+
+// expo-video không hỗ trợ Web — chỉ import trên Native
+let useVideoPlayer: any;
+let VideoView: any;
+if (Platform.OS !== 'web') {
+  const expoVideo = require('expo-video');
+  useVideoPlayer = expoVideo.useVideoPlayer;
+  VideoView = expoVideo.VideoView;
+}
 
 interface VideoPlayerModalProps {
   visible: boolean;
@@ -25,12 +33,40 @@ interface VideoPlayerModalProps {
   onClose: () => void;
 }
 
+/** Trình phát HTML5 <video> thuần cho Web */
+const WebModalVideoPlayer: React.FC<{ videoUrl: string }> = ({ videoUrl }) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  return (
+    <video
+      ref={videoRef as any}
+      src={videoUrl}
+      autoPlay
+      controls
+      playsInline
+      loop={false}
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain',
+        display: 'block',
+        backgroundColor: '#000',
+      }}
+    />
+  );
+};
+
 /**
  * Trình phát video chuyên biệt gắn liền với vòng đời modal mở/đóng.
  * Tránh tạo player rỗng khi modal chưa hiển thị và ngăn ngừa lỗi SharedObject released trên Android.
  */
 const ModalVideoPlayer: React.FC<{ videoUrl: string }> = ({ videoUrl }) => {
-  const player = useVideoPlayer(videoUrl, (p) => {
+  // Web: dùng <video> HTML5 thuần
+  if (Platform.OS === 'web') {
+    return <WebModalVideoPlayer videoUrl={videoUrl} />;
+  }
+
+  // Native: expo-video
+  const player = useVideoPlayer(videoUrl, (p: any) => {
     p.loop = false;
     try {
       p.play();

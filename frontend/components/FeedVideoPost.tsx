@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,18 @@ import {
   Image,
   Platform,
 } from 'react-native';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import { Photo } from '../types';
 import { photoService } from '../services/photoService';
 import { useAuth } from '../hooks/useAuth';
+
+// expo-video chỉ hoạt động trên iOS/Android — trên Web dùng thẻ <video> HTML5 thuần
+let useVideoPlayer: any;
+let VideoView: any;
+if (Platform.OS !== 'web') {
+  const expoVideo = require('expo-video');
+  useVideoPlayer = expoVideo.useVideoPlayer;
+  VideoView = expoVideo.VideoView;
+}
 
 interface FeedVideoPostProps {
   post: Photo;
@@ -24,16 +32,52 @@ interface FeedVideoPostProps {
   totalReactionsCount?: number;
 }
 
+/** Trình phát video HTML5 cho Web — thẻ <video> thuần, không dùng expo-video */
+const WebVideoPlayer: React.FC<{ sourceUrl: string; isMuted: boolean }> = ({ sourceUrl, isMuted }) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  return (
+    <video
+      ref={videoRef as any}
+      src={sourceUrl}
+      autoPlay
+      loop
+      muted={isMuted}
+      playsInline
+      controls={false}
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain',
+        display: 'block',
+        backgroundColor: 'transparent',
+      }}
+    />
+  );
+};
+
 /**
  * Component trình phát video chuyên dụng khi bài đăng ĐANG ACTIVE trên màn hình.
- * Tách biệt lifecycle để đảm bảo useVideoPlayer và VideoView luôn unmount đồng thời,
- * triệt tiêu hoàn toàn lỗi "Cannot set prop player on view SurfaceVideoView: Cannot use shared object that was already released".
+ * - Web: dùng <video> HTML5 thuần
+ * - iOS/Android: dùng expo-video VideoView
  */
 const ActiveVideoPlayer: React.FC<{ sourceUrl: string; isMuted: boolean }> = ({
   sourceUrl,
   isMuted,
 }) => {
-  const player = useVideoPlayer(sourceUrl, (p) => {
+  // Web path
+  if (Platform.OS === 'web') {
+    return <WebVideoPlayer sourceUrl={sourceUrl} isMuted={isMuted} />;
+  }
+
+  // Native path (iOS / Android)
+  const player = useVideoPlayer(sourceUrl, (p: any) => {
     p.loop = true;
     p.muted = isMuted;
     try {
