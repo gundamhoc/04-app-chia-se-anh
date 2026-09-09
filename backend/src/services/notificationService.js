@@ -6,9 +6,9 @@ const { sendNotificationToUser } = require('../sockets/socketHandler');
  * @param {Object} params
  * @param {number} params.userId - Người nhận thông báo
  * @param {number} params.actorId - Người thực hiện tương tác
- * @param {'like_post'|'comment_post'|'reply_comment'|'friend_request'|'friend_accept'|'like_comment'|'group_invite'|'new_post'} params.type
- * @param {number|null} [params.entityId] - ID của bài viết / comment / group liên quan
- * @param {string} [params.content] - Nội dung tóm tắt hiển thị
+ * @param {'like_post'|'comment_post'|'reply_comment'|'friend_request'|'friend_accept'|'like_comment'|'group_invite'|'new_post'|'post_deleted'|'support_reply'} params.type
+ * @param {number|null} [params.entityId] - ID của bài viết / comment / group / ticket liên quan
+ * @param {string} [params.content] - Nội dung tóm tắt hiển thị rõ ràng (Actor + hành động + snippet)
  * @param {Object} [params.io] - Đối tượng Socket.IO Server
  */
 const createNotification = async ({ userId, actorId, type, entityId = null, content = '', io = null }) => {

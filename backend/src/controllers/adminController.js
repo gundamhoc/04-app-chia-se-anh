@@ -550,26 +550,41 @@ const deletePost = async (req, res) => {
     const notifContent = `Bài viết ${captionPreview} đã bị Quản trị viên gỡ bỏ. Lý do: ${deleteReason}`;
 
     try {
-      await pool.query(
+      const [notifResult] = await pool.query(
         `INSERT INTO notifications (user_id, actor_id, type, entity_id, content, is_read, created_at)
-         VALUES (?, ?, 'post_deleted', 0, ?, 0, NOW())`,
-        [post.user_id, post.user_id, notifContent]
+         VALUES (?, ?, 'post_deleted', ?, ?, 0, NOW())`,
+        [post.user_id, post.user_id, postId, notifContent]
       );
+      const notifId = notifResult.insertId;
+      const [[{ unread_count }]] = await pool.query(
+        `SELECT COUNT(*) AS unread_count FROM notifications WHERE user_id = ? AND is_read = 0`,
+        [post.user_id]
+      );
+
+      // 3. Gửi sự kiện realtime chuẩn 'new_notification' để app cập nhật badge + Toast rõ ràng
+      const io = req.app.get('io') || req.io;
+      if (io) {
+        sendNotificationToUser(io, post.user_id, 'new_notification', {
+          notification: {
+            id: notifId,
+            user_id: post.user_id,
+            actor_id: post.user_id,
+            actor_name: 'Ban Quản Trị Masita',
+            actor_username: 'admin',
+            actor_avatar: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=100',
+            type: 'post_deleted',
+            entity_id: postId,
+            content: notifContent,
+            is_read: false,
+            photo_thumbnail: null,
+            photo_media_type: 'image',
+            created_at: new Date().toISOString(),
+          },
+          unread_count: unread_count || 1,
+        });
+      }
     } catch (notifErr) {
       console.warn('⚠️ Could not insert notification for post deletion:', notifErr.message);
-    }
-
-    // 3. Gửi sự kiện realtime qua Socket.io nếu tác giả đang online
-    const io = req.app.get('io') || req.io;
-    if (io) {
-      sendNotificationToUser(io, post.user_id, 'notification', {
-        type: 'post_deleted',
-        title: 'Bài viết đã bị gỡ bỏ',
-        message: notifContent,
-        reason: deleteReason,
-        postId,
-        created_at: new Date().toISOString(),
-      });
     }
 
     return res.json({
@@ -1126,19 +1141,39 @@ const replySupportTicket = async (req, res) => {
     const notifContent = `Ban Quản Trị đã giải đáp câu hỏi "${ticket.subject}": ${snippet}`;
 
     try {
-      await pool.query(
+      const [notifResult] = await pool.query(
         `INSERT INTO notifications (user_id, actor_id, type, entity_id, content, is_read, created_at)
          VALUES (?, ?, 'support_reply', ?, ?, 0, NOW())`,
         [ticket.user_id, ticket.user_id, ticketId, notifContent]
       );
+      const notifId = notifResult.insertId;
+      const [[{ unread_count }]] = await pool.query(
+        `SELECT COUNT(*) AS unread_count FROM notifications WHERE user_id = ? AND is_read = 0`,
+        [ticket.user_id]
+      );
 
-      // Bắn socket realtime
-      sendNotificationToUser(ticket.user_id, {
-        type: 'support_reply',
-        entity_id: ticketId,
-        content: notifContent,
-        actor_name: 'Ban Quản Trị Masita',
-      });
+      // Bắn socket realtime chuẩn 'new_notification' (fix sai signature cũ thiếu io/event)
+      const io = req.app.get('io') || req.io;
+      if (io) {
+        sendNotificationToUser(io, ticket.user_id, 'new_notification', {
+          notification: {
+            id: notifId,
+            user_id: ticket.user_id,
+            actor_id: ticket.user_id,
+            actor_name: 'Ban Quản Trị Masita',
+            actor_username: 'admin',
+            actor_avatar: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=100',
+            type: 'support_reply',
+            entity_id: ticketId,
+            content: notifContent,
+            is_read: false,
+            photo_thumbnail: null,
+            photo_media_type: 'image',
+            created_at: new Date().toISOString(),
+          },
+          unread_count: unread_count || 1,
+        });
+      }
     } catch (notifErr) {
       console.warn('Lỗi gửi thông báo giải đáp:', notifErr.message);
     }

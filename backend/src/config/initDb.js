@@ -262,7 +262,7 @@ const initDatabase = async (pool) => {
       id INT UNSIGNED NOT NULL AUTO_INCREMENT,
       user_id INT UNSIGNED NOT NULL,
       actor_id INT UNSIGNED NOT NULL,
-      type ENUM('like_post', 'comment_post', 'reply_comment', 'friend_request', 'friend_accept', 'like_comment', 'group_invite', 'new_post') NOT NULL,
+      type ENUM('like_post', 'comment_post', 'reply_comment', 'friend_request', 'friend_accept', 'like_comment', 'group_invite', 'new_post', 'post_deleted', 'support_reply') NOT NULL,
       entity_id INT UNSIGNED DEFAULT NULL,
       content VARCHAR(255) DEFAULT NULL,
       is_read TINYINT(1) NOT NULL DEFAULT 0,

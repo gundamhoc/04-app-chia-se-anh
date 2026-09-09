@@ -499,6 +499,8 @@ async function loadUsers(page = 1) {
       return;
     }
 
+    const isAdmin = Boolean(state.adminUser && state.adminUser.role === 'admin');
+
     tbody.innerHTML = users.map(user => {
       let statusPillHtml = '';
       if (user.is_active) {
@@ -828,11 +830,16 @@ function openPostReviewModal(postId) {
           src="${videoStreamUrl}" 
           controls 
           autoplay 
+          muted
           playsinline 
+          preload="auto"
           class="modal-video-player" 
-          style="max-height: 55vh; width: 100%; background: #000;"
+          style="max-height: 55vh; width: 100%; background: #000; border-radius: 8px;"
           onerror="handleVideoPlayerError(this, ${post.id})"
         ></video>
+        <div id="video-stream-hint" style="margin-top: 8px; font-size: 12px; color: #9ca3af; display: flex; align-items: center; gap: 6px;">
+          <span>💡 Video đang phát tự động ở chế độ tắt tiếng. Bấm biểu tượng loa trên thanh điều khiển để nghe âm thanh.</span>
+        </div>
         <div id="video-stream-warning" style="display: none; padding: 10px; color: #f87171; text-align: center; font-size: 13px;">
           ⚠️ Không thể phát video trực tiếp qua trình phát này. 
           <a href="${videoStreamUrl}" target="_blank" style="color: #60a5fa; text-decoration: underline; margin-left: 6px;">Mở tab mới để xem</a>
@@ -869,6 +876,21 @@ function openPostReviewModal(postId) {
   `;
 
   openModal('modal-media-preview');
+
+  if (isVideo) {
+    setTimeout(() => {
+      const vid = document.getElementById('admin-video-element');
+      if (vid) {
+        vid.muted = true;
+        const playPromise = vid.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(err => {
+            console.warn('Browser autoplay policy prevented playback:', err);
+          });
+        }
+      }
+    }, 150);
+  }
 }
 
 function previewMedia(url, type, caption) {

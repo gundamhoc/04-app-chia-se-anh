@@ -194,13 +194,14 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   // Nhấn vào thông báo để điều hướng
   const handleNotificationPress = async (item: NotificationItem) => {
     await handleMarkAsRead(item);
-    onClose();
 
     // Điều hướng theo loại thông báo
-    if (['like_post', 'comment_post', 'reply_comment'].includes(item.type) && item.entity_id) {
+    if (['like_post', 'comment_post', 'reply_comment', 'new_post'].includes(item.type) && item.entity_id) {
       if (onSelectPhoto) {
+        onClose();
         onSelectPhoto(item.entity_id);
       } else {
+        onClose();
         router.push({
           pathname: '/',
           params: { highlightPhotoId: item.entity_id.toString() },
@@ -208,13 +209,25 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       }
     } else if (['friend_request', 'friend_accept'].includes(item.type) && item.actor_id) {
       if (onSelectUser) {
+        onClose();
         onSelectUser(item.actor_id);
       } else {
+        onClose();
         router.push({
           pathname: '/user/[id]',
           params: { id: item.actor_id.toString() },
         });
       }
+    } else if (item.type === 'group_invite' && item.entity_id) {
+      onClose();
+      router.push({
+        pathname: '/group-chat/[id]',
+        params: { id: item.entity_id.toString() },
+      });
+    } else if (item.type === 'like_comment' && item.entity_id) {
+      // like_comment lưu commentId nên không mở ảnh được — chỉ đánh dấu đã đọc, giữ modal để user đọc nội dung
+    } else {
+      // post_deleted / support_reply: chỉ hiển thị chi tiết, không điều hướng
     }
   };
 
@@ -233,6 +246,12 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         return { icon: '👥', bg: '#10b981' };
       case 'friend_accept':
         return { icon: '🎉', bg: '#ec4899' };
+      case 'group_invite':
+        return { icon: '👨‍👩‍👧', bg: '#06b6d4' };
+      case 'new_post':
+        return { icon: '📸', bg: '#8b5cf6' };
+      case 'support_reply':
+        return { icon: '🎧', bg: '#10b981' };
       case 'post_deleted':
         return { icon: '🗑️', bg: '#ef4444' };
       default:
@@ -257,6 +276,10 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         return t('notifications_friend_accept');
       case 'group_invite':
         return t('notifications_group_invite');
+      case 'new_post':
+        return t('notifications_new_post');
+      case 'support_reply':
+        return t('notifications_support_reply');
       case 'post_deleted':
         return t('notifications_post_deleted');
       default:
@@ -282,7 +305,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           <Image
             source={{
               uri:
-                item.type === 'post_deleted'
+                item.type === 'post_deleted' || item.type === 'support_reply'
                   ? 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=100&auto=format&fit=crop&q=80'
                   : item.actor_avatar ||
                     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
@@ -300,15 +323,15 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         <View style={styles.contentWrapper}>
           <Text style={styles.actionText} numberOfLines={2}>
             <Text style={styles.actorName}>
-              {item.type === 'post_deleted' ? 'Ban Quản Trị Masita' : (item.actor_name || item.actor_username)}
+              {item.type === 'post_deleted' || item.type === 'support_reply' ? 'Ban Quản Trị Masita' : (item.actor_name || item.actor_username)}
             </Text>{' '}
             {actionText}
           </Text>
 
-          {/* Trích dẫn nội dung cho các loại thông báo có content */}
-          {item.content && (item.type === 'comment_post' || item.type === 'reply_comment' || item.type === 'like_comment') ? (
-            <Text style={styles.quoteText} numberOfLines={1}>
-              "{item.content}"
+          {/* Trích dẫn nội dung chi tiết — hiển thị cho mọi loại để không bị trống/mờ */}
+          {item.content && (item.type !== 'post_deleted' && item.type !== 'support_reply' && item.type !== 'friend_request') ? (
+            <Text style={styles.quoteText} numberOfLines={2}>
+              &quot;{item.content}&quot;
             </Text>
           ) : null}
 
@@ -316,6 +339,13 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           {item.type === 'post_deleted' && item.content ? (
             <View style={styles.postDeletedBox}>
               <Text style={styles.postDeletedText}>{item.content}</Text>
+            </View>
+          ) : null}
+
+          {/* Hộp thông báo giải đáp hỗ trợ từ Ban Quản Trị */}
+          {item.type === 'support_reply' && item.content ? (
+            <View style={styles.supportReplyBox}>
+              <Text style={styles.supportReplyText}>{item.content}</Text>
             </View>
           ) : null}
 
@@ -722,6 +752,20 @@ const createStyles = (C: ColorScheme, isDark: boolean) =>
     },
     postDeletedText: {
       color: '#F87171',
+      fontSize: 12,
+      lineHeight: 16,
+      fontFamily: 'Inter_500Medium',
+    },
+    supportReplyBox: {
+      backgroundColor: 'rgba(16, 185, 129, 0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(16, 185, 129, 0.3)',
+      borderRadius: 8,
+      padding: 8,
+      marginTop: 6,
+    },
+    supportReplyText: {
+      color: '#10B981',
       fontSize: 12,
       lineHeight: 16,
       fontFamily: 'Inter_500Medium',

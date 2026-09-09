@@ -295,7 +295,8 @@ export type NotificationType =
   | 'friend_accept'
   | 'group_invite'
   | 'new_post'
-  | 'post_deleted';
+  | 'post_deleted'
+  | 'support_reply';
 
 export interface NotificationItem {
   id: number;

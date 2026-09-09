@@ -126,7 +126,7 @@ export default function HomeScreen() {
       .catch(() => {});
   }, []);
 
-  // Lắng nghe realtime sự kiện thông báo mới từ Socket.IO
+  // Lắng nghe realtime sự kiện thông báo mới từ Socket.IO (chỉ cập nhật badge — Toast đã do useSocket xử lý tập trung để tránh double)
   useEffect(() => {
     if (!socket) return;
     const handleNewNotification = (data: any) => {
@@ -135,16 +135,13 @@ export default function HomeScreen() {
       } else {
         setUnreadNotificationCount((prev) => prev + 1);
       }
-      if (data?.notification?.content) {
-        showToast('info', data.notification.content, 4000);
-      }
     };
 
     socket.on('new_notification', handleNewNotification);
     return () => {
       socket.off('new_notification', handleNewNotification);
     };
-  }, [socket, showToast]);
+  }, [socket]);
 
   const fetchFeed = useCallback(async (query?: string, scope: 'all' | 'friends' | 'public' = searchScope) => {
     try {

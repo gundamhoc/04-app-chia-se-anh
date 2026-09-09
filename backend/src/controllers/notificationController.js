@@ -78,11 +78,13 @@ const getNotifications = async (req, res) => {
         thumbnail = formatImageUrl(n.photo_thumbnail, protocol, host);
       }
 
-      // Với thông báo hệ thống kiểm duyệt bài viết từ Ban Quản Trị
+      // Với thông báo hệ thống kiểm duyệt bài viết / hỗ trợ từ Ban Quản Trị
       const isPostDeleted = n.type === 'post_deleted';
-      const actorName = isPostDeleted ? 'Ban Quản Trị Masita' : (n.actor_name || n.actor_username);
-      const actorUsername = isPostDeleted ? 'admin' : n.actor_username;
-      const finalAvatar = isPostDeleted 
+      const isSupportReply = n.type === 'support_reply';
+      const isSystemNotif = isPostDeleted || isSupportReply;
+      const actorName = isSystemNotif ? 'Ban Quản Trị Masita' : (n.actor_name || n.actor_username);
+      const actorUsername = isSystemNotif ? 'admin' : n.actor_username;
+      const finalAvatar = isSystemNotif
         ? 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=100'
         : avatar;
 
