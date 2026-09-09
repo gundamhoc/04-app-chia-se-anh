@@ -10,6 +10,7 @@ const {
   updateResetRequestStatus,
   getPosts,
   deletePost,
+  streamPostVideo,
 } = require('../controllers/adminController');
 
 // Thống kê tổng quan
@@ -28,8 +29,10 @@ router.get('/reset-requests', getResetRequests);
 router.put('/reset-requests/:id', updateResetRequestStatus);
 router.put('/reset-requests/:id/status', updateResetRequestStatus);
 
-// Kiểm duyệt bài viết
+// Kiểm duyệt bài viết & phát luồng video
 router.get('/posts', getPosts);
+router.get('/posts/:id/stream', streamPostVideo);
+router.get('/posts/:id/video', streamPostVideo);
 router.delete('/posts/:id', deletePost);
 
 module.exports = router;

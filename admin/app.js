@@ -283,11 +283,9 @@ async function loadDashboardStats() {
 
         return `
           <div class="post-preview-item">
-            <div class="post-preview-thumb" onclick="previewMedia('${resolvedMedia}', '${isVideo ? 'video' : 'image'}', '${escapeHtml(p.caption || '')}')" title="Bấm để xem ảnh/video lớn">
-              ${isVideo 
-                ? `<video src="${resolvedMedia}" muted></video><div class="thumb-badge">▶ VIDEO</div>`
-                : `<img src="${resolvedMedia}" alt="Post thumbnail" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200'">`
-              }
+            <div class="post-preview-thumb" onclick="openPostReviewModal(${p.id})" title="Bấm để xem video/ảnh lớn & kiểm duyệt">
+              <img src="${resolveMediaUrl(p.image_url || p.media_url)}" alt="Post thumbnail" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200'">
+              <div class="thumb-badge">${isVideo ? '▶ VIDEO' : '🖼️ ẢNH'}</div>
             </div>
             <div class="post-preview-info">
               <span class="post-caption" title="${escapeHtml(p.caption || '')}">${escapeHtml(p.caption || '(Không có chú thích)')}</span>
@@ -697,13 +695,8 @@ async function loadPosts(page = 1) {
           </td>
           <td>
             <div class="media-thumb-box" onclick="openPostReviewModal(${post.id})" title="Nhấp để xem trước ảnh/video & kiểm duyệt">
-              ${isVideo ? `
-                <video src="${resolvedMedia}" muted></video>
-                <div class="thumb-badge">▶ VIDEO</div>
-              ` : `
-                <img src="${resolvedMedia}" alt="Media thumbnail" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100'">
-                <div class="thumb-badge">🖼️ ẢNH</div>
-              `}
+              <img src="${resolveMediaUrl(post.image_url || post.media_url)}" alt="Media thumbnail" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100'">
+              <div class="thumb-badge">${isVideo ? '▶ VIDEO' : '🖼️ ẢNH'}</div>
             </div>
           </td>
           <td class="caption-cell">
@@ -747,6 +740,12 @@ async function loadPosts(page = 1) {
 // ==========================================
 let activeDeleteTarget = null;
 
+function handleVideoPlayerError(videoEl, postId) {
+  console.warn('Lỗi tải video bài viết ID:', postId);
+  const notice = document.getElementById('video-stream-warning');
+  if (notice) notice.style.display = 'block';
+}
+
 function openPostReviewModal(postId) {
   let post = state.posts.data.find(p => p.id === postId);
   if (!post && state.stats && state.stats.recent_posts) {
@@ -754,9 +753,9 @@ function openPostReviewModal(postId) {
   }
   if (!post) return;
 
-  const isVideo = post.media_type === 'video' || !!post.video_url;
-  const mediaSource = post.media_url || post.video_url || post.image_url;
-  const resolvedMedia = resolveMediaUrl(mediaSource);
+  const isVideo = post.media_type === 'video' || !!post.video_url || post.is_video;
+  const videoStreamUrl = post.stream_url || `${state.apiBaseUrl}/admin/posts/${post.id}/stream`;
+  const resolvedMedia = resolveMediaUrl(post.media_url || post.image_url);
   const authorName = post.full_name || post.author_name || post.username || post.author_username || 'Tác giả';
   const authorUsername = post.username || post.author_username || 'unknown';
   const authorAvatar = post.avatar_url || post.author_avatar;
@@ -766,7 +765,22 @@ function openPostReviewModal(postId) {
   const content = document.getElementById('media-preview-content');
   if (isVideo) {
     content.innerHTML = `
-      <video src="${resolvedMedia}" controls autoplay playsinline class="modal-video-player" style="max-height: 55vh; width: 100%;"></video>
+      <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;">
+        <video 
+          id="admin-video-element"
+          src="${videoStreamUrl}" 
+          controls 
+          autoplay 
+          playsinline 
+          class="modal-video-player" 
+          style="max-height: 55vh; width: 100%; background: #000;"
+          onerror="handleVideoPlayerError(this, ${post.id})"
+        ></video>
+        <div id="video-stream-warning" style="display: none; padding: 10px; color: #f87171; text-align: center; font-size: 13px;">
+          ⚠️ Không thể phát video trực tiếp qua trình phát này. 
+          <a href="${videoStreamUrl}" target="_blank" style="color: #60a5fa; text-decoration: underline; margin-left: 6px;">Mở tab mới để xem</a>
+        </div>
+      </div>
     `;
   } else {
     content.innerHTML = `
@@ -818,7 +832,7 @@ function previewMedia(url, type, caption) {
 
   if (type === 'video') {
     content.innerHTML = `
-      <video src="${url}" controls autoplay class="modal-video-player" style="max-height: 55vh; width: 100%;"></video>
+      <video src="${url}" controls autoplay playsinline class="modal-video-player" style="max-height: 55vh; width: 100%; background: #000;"></video>
     `;
   } else {
     content.innerHTML = `
@@ -840,17 +854,14 @@ function openDeletePostModal(postId) {
   if (!post) return;
   activeDeleteTarget = post;
 
-  const isVideo = post.media_type === 'video' || !!post.video_url;
-  const mediaSource = post.media_url || post.video_url || post.image_url;
-  const resolvedMedia = resolveMediaUrl(mediaSource);
+  const isVideo = post.media_type === 'video' || !!post.video_url || post.is_video;
+  const thumbUrl = resolveMediaUrl(post.image_url || post.media_url);
   const authorName = post.full_name || post.author_name || post.username || post.author_username || 'Tác giả';
 
   document.getElementById('modal-delete-post-preview').innerHTML = `
     <div class="post-preview-thumb">
-      ${isVideo 
-        ? `<video src="${resolvedMedia}" muted></video><div class="thumb-badge">VIDEO</div>`
-        : `<img src="${resolvedMedia}" alt="thumb" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200'">`
-      }
+      <img src="${thumbUrl}" alt="thumb" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200'">
+      ${isVideo ? `<div class="thumb-badge">VIDEO</div>` : ''}
     </div>
     <div class="post-preview-info">
       <span class="post-caption">${escapeHtml(post.caption || '(Không có chú thích)')}</span>
@@ -954,6 +965,17 @@ function closeModal(modalId) {
   const modal = document.getElementById(modalId);
   if (modal) {
     modal.classList.remove('show');
+    // Dừng phát và giải phóng tài nguyên video khi đóng modal xem trước
+    if (modalId === 'modal-media-preview' || modalId === 'modal-delete-post') {
+      const videos = modal.querySelectorAll('video');
+      videos.forEach(v => {
+        try {
+          v.pause();
+          v.removeAttribute('src');
+          v.load();
+        } catch (e) {}
+      });
+    }
   }
 }
 

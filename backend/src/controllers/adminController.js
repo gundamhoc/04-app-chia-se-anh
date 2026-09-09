@@ -1,5 +1,8 @@
 const { pool } = require('../config/db');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
+const { getDriveClient } = require('../utils/googleDrive');
 const { getOnlineUsers, isUserOnline, sendNotificationToUser, kickUserSockets, getIO } = require('../sockets/socketHandler');
 
 /**
@@ -75,6 +78,17 @@ const getDashboardStats = async (req, res) => {
       is_online: isUserOnline(u.id),
     }));
 
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const recentPostsFormatted = recentPosts.map(p => {
+      const isVideo = p.media_type === 'video' || !!p.video_url;
+      return {
+        ...p,
+        is_video: isVideo,
+        stream_url: isVideo ? `${protocol}://${host}/api/admin/posts/${p.id}/stream` : null,
+      };
+    });
+
     return res.json({
       success: true,
       message: 'Lấy thống kê hệ thống thành công.',
@@ -98,7 +112,7 @@ const getDashboardStats = async (req, res) => {
         interactions: { reactions: reactionsCount, comments: commentsCount },
         pending_resets: pendingResetsCount,
         recent_users: recentUsersWithPresence,
-        recent_posts: recentPosts,
+        recent_posts: recentPostsFormatted,
       },
     });
   } catch (error) {
@@ -455,10 +469,21 @@ const getPosts = async (req, res) => {
       [...params, limit, offset]
     );
 
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const formattedPosts = posts.map(p => {
+      const isVideo = p.media_type === 'video' || !!p.video_url;
+      return {
+        ...p,
+        is_video: isVideo,
+        stream_url: isVideo ? `${protocol}://${host}/api/admin/posts/${p.id}/stream` : null,
+      };
+    });
+
     return res.json({
       success: true,
       message: 'Lấy danh sách bài đăng thành công.',
-      data: posts,
+      data: formattedPosts,
       pagination: {
         total: Number(total),
         page,
@@ -548,6 +573,186 @@ const deletePost = async (req, res) => {
   }
 };
 
+/**
+ * 9. Stream video bài viết phục vụ Admin kiểm duyệt (Hỗ trợ HTTP 206 Partial Content / Range requests)
+ * GET /api/admin/posts/:id/stream
+ */
+const streamPostVideo = async (req, res) => {
+  try {
+    const postId = parseInt(req.params.id, 10);
+    if (isNaN(postId)) {
+      return res.status(400).json({ success: false, message: 'ID bài viết không hợp lệ.' });
+    }
+
+    const [rows] = await pool.query(
+      'SELECT id, video_url, image_url, media_type FROM photos WHERE id = ?',
+      [postId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy bài viết.' });
+    }
+
+    const post = rows[0];
+    const targetUrl = post.video_url || post.image_url;
+    if (!targetUrl) {
+      return res.status(404).json({ success: false, message: 'Bài viết này không có video.' });
+    }
+
+    // CORS & Cache headers cho phát video trên web/file
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length, Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
+    let mimeType = 'video/mp4';
+
+    // 1. Nếu video lưu trên Google Drive
+    let fileId = null;
+    const matchD = targetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (matchD && matchD[1]) {
+      fileId = matchD[1];
+    } else {
+      const matchId = targetUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (matchId && matchId[1]) fileId = matchId[1];
+    }
+
+    if (fileId) {
+      const drive = getDriveClient();
+      if (!drive) {
+        return res.status(500).json({ success: false, message: 'Google Drive client chưa sẵn sàng.' });
+      }
+
+      let totalSize = null;
+      try {
+        const meta = await drive.files.get({ fileId, fields: 'size, mimeType' });
+        if (meta.data.size) totalSize = parseInt(meta.data.size, 10);
+        if (meta.data.mimeType && meta.data.mimeType.startsWith('video/')) {
+          mimeType = meta.data.mimeType;
+        }
+      } catch (mErr) {
+        console.warn('Admin stream size read error:', mErr.message);
+      }
+
+      if (req.method === 'HEAD') {
+        res.writeHead(200, {
+          'Accept-Ranges': 'bytes',
+          'Content-Type': mimeType,
+          ...(totalSize ? { 'Content-Length': totalSize } : {}),
+        });
+        return res.end();
+      }
+
+      const range = req.headers.range;
+      if (range && totalSize) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+        const chunkSize = end - start + 1;
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': mimeType,
+          'Cache-Control': 'no-cache',
+        });
+
+        const driveStream = await drive.files.get(
+          { fileId, alt: 'media' },
+          {
+            responseType: 'stream',
+            headers: {
+              Range: `bytes=${start}-${end}`,
+            },
+          }
+        );
+
+        driveStream.data.on('error', (streamErr) => {
+          if (!res.headersSent) res.status(500).end();
+        });
+
+        return driveStream.data.pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Accept-Ranges': 'bytes',
+          'Content-Type': mimeType,
+          ...(totalSize ? { 'Content-Length': totalSize } : {}),
+        });
+
+        const driveStream = await drive.files.get(
+          { fileId, alt: 'media' },
+          { responseType: 'stream' }
+        );
+
+        driveStream.data.on('error', (streamErr) => {
+          if (!res.headersSent) res.status(500).end();
+        });
+
+        return driveStream.data.pipe(res);
+      }
+    }
+
+    // 2. Nếu video lưu cục bộ trong /uploads/
+    if (targetUrl.includes('/uploads/')) {
+      const matchLocal = targetUrl.match(/\/uploads\/([a-zA-Z0-9_.-]+)/);
+      const fname = matchLocal ? matchLocal[1] : path.basename(targetUrl);
+      const localPath = path.join(__dirname, '../../uploads', fname);
+
+      if (fs.existsSync(localPath)) {
+        const stat = fs.statSync(localPath);
+        const fileSize = stat.size;
+        const range = req.headers.range;
+
+        if (req.method === 'HEAD') {
+          res.writeHead(200, {
+            'Accept-Ranges': 'bytes',
+            'Content-Type': mimeType,
+            'Content-Length': fileSize,
+          });
+          return res.end();
+        }
+
+        if (range) {
+          const parts = range.replace(/bytes=/, '').split('-');
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+          const chunkSize = end - start + 1;
+
+          res.writeHead(206, {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunkSize,
+            'Content-Type': mimeType,
+          });
+
+          const fileStream = fs.createReadStream(localPath, { start, end });
+          return fileStream.pipe(res);
+        } else {
+          res.writeHead(200, {
+            'Content-Length': fileSize,
+            'Accept-Ranges': 'bytes',
+            'Content-Type': mimeType,
+          });
+          return fs.createReadStream(localPath).pipe(res);
+        }
+      }
+    }
+
+    // 3. Fallback chuyển hướng
+    return res.redirect(targetUrl);
+  } catch (error) {
+    console.error('Admin stream video error:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, message: 'Lỗi phát luồng video bài viết.' });
+    }
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getUsers,
@@ -558,4 +763,5 @@ module.exports = {
   updateResetRequestStatus,
   getPosts,
   deletePost,
+  streamPostVideo,
 };
