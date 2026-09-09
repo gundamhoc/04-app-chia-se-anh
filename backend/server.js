@@ -15,6 +15,7 @@ const messageRoutes = require('./src/routes/messageRoutes');
 const groupRoutes = require('./src/routes/groupRoutes');
 const systemRoutes = require('./src/routes/systemRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
+const adminRoutes = require('./src/routes/adminRoutes');
 
 // ============================================================
 // Khởi tạo Express App
@@ -60,8 +61,9 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Serve static files (ảnh upload)
+// Serve static files (ảnh upload & admin web portal)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/admin', express.static(path.join(__dirname, '../admin')));
 
 // Attach io to req
 app.use((req, res, next) => {
@@ -79,6 +81,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
