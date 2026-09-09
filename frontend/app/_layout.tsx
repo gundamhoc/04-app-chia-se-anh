@@ -14,6 +14,8 @@ import { Platform } from 'react-native';
 // Giữ splash screen cho đến khi sẵn sàng
 SplashScreen.preventAutoHideAsync();
 
+import { BannedAccountModal } from '../components/BannedAccountModal';
+
 // Inner layout component — dùng theme context để set statusbar
 function InnerLayout() {
   const { isDark, colors } = useTheme();
@@ -31,10 +33,12 @@ function InnerLayout() {
           <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="user/[id]" options={{ animation: 'slide_from_right' }} />
         </Stack>
+        <BannedAccountModal />
       </ToastProvider>
     </SafeAreaProvider>
   );
 }
+
 
 export default function RootLayout() {
   const loadStoredAuth = useAuthStore((s) => s.loadStoredAuth);

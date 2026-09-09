@@ -57,63 +57,108 @@ const getSocketId = (userId) => {
   return set && set.size > 0 ? Array.from(set)[0] : null;
 };
 
-const initSocketHandler = (io) => {
-  io.on('connection', (socket) => {
-    console.log(`🔌 Socket connected: ${socket.id}`);
+let ioInstance = null;
 
+const initSocketHandler = (io) => {
+  ioInstance = io;
+  // -------------------------------------------------------
+  // Middleware xác thực socket (optional ở sprint 1)
+  // Giai đoạn sau: verify JWT từ socket.handshake.auth.token
+  // -------------------------------------------------------
+  io.use((socket, next) => {
+    // Tạm thời cho phép tất cả kết nối
+    next();
+  });
+
+  io.on('connection', (socket) => {
     // -------------------------------------------------------
     // Event: user_online
-    // Client gửi khi đã đăng nhập thành công
-    // payload: { userId }
+    // Client gửi khi đăng nhập thành công hoặc reconnect
     // -------------------------------------------------------
-    socket.on('user_online', ({ userId }) => {
-      const uid = parseInt(userId, 10);
-      if (uid && !isNaN(uid)) {
-        socket.userId = uid;
-        const becameOnline = addUserSocket(uid, socket.id);
-        const onlineList = getOnlineUsers();
-        console.log(`🟢 [Presence Engine] 👤 User ${uid} vừa Online (socket: ${socket.id}). Hiện có ${onlineList.length} người đang Online [IDs: ${onlineList.join(', ')}]`);
-
-        // Gửi xác nhận cho client
-        socket.emit('user_online_ack', { status: 'online', userId: uid });
-
-        // Gửi toàn bộ danh sách online users hiện thời cho chính client này
-        socket.emit('online_users_list', { onlineUserIds: onlineList });
-
-        // Nếu user này vừa mới chuyển trạng thái sang online -> broadcast cho TẤT CẢ các client khác
+    socket.on('user_online', (data) => {
+      const { userId } = data;
+      if (userId) {
+        socket.userId = userId;
+        const becameOnline = addUserSocket(userId, socket.id);
+        console.log(`👤 User ${userId} is online (socket: ${socket.id}, active sockets: ${connectedUsers.get(parseInt(userId, 10))?.size || 1})`);
+        
         if (becameOnline) {
-          socket.broadcast.emit('user_status_changed', { userId: uid, status: 'online' });
+          const onlineList = getOnlineUsers();
+          console.log(`🟢 [Presence Engine] 👤 User ${userId} vừa Online (socket: ${socket.id}). Hiện có ${onlineList.length} người đang Online [IDs: ${onlineList.join(', ')}]`);
+          io.emit('user_status_changed', { userId: Number(userId), status: 'online' });
         }
+        
+        // Gửi lại danh sách các user online hiện tại cho client này
+        socket.emit('online_users_list', { onlineUserIds: getOnlineUsers() });
       }
     });
 
     // -------------------------------------------------------
-    // Event: get_online_users (Client chủ động yêu cầu danh sách)
+    // Event: get_online_users
+    // Client yêu cầu danh sách user online
     // -------------------------------------------------------
     socket.on('get_online_users', () => {
       socket.emit('online_users_list', { onlineUserIds: getOnlineUsers() });
     });
 
     // -------------------------------------------------------
-    // Event: user_offline (Client chủ động báo ngắt kết nối / đăng xuất)
+    // Event: user_offline
+    // Client gửi khi chủ động đăng xuất
     // -------------------------------------------------------
-    socket.on('user_offline', ({ userId }) => {
-      const uid = parseInt(userId || socket.userId, 10);
-      if (uid && !isNaN(uid)) {
-        const becameOffline = removeUserSocket(uid, socket.id);
+    socket.on('user_offline', (data) => {
+      const { userId } = data;
+      if (userId) {
+        const becameOffline = removeUserSocket(userId, socket.id);
         if (becameOffline) {
           const onlineList = getOnlineUsers();
-          console.log(`🔴 [Presence Engine] 👤 User ${uid} vừa Offline (manual logout). Hiện còn ${onlineList.length} người đang Online [IDs: ${onlineList.join(', ')}]`);
-          io.emit('user_status_changed', { userId: uid, status: 'offline' });
+          console.log(`🔴 [Presence Engine] 👤 User ${userId} đã Offline. Hiện còn ${onlineList.length} người đang Online [IDs: ${onlineList.join(', ')}]`);
+          io.emit('user_status_changed', { userId: Number(userId), status: 'offline' });
         }
       }
     });
 
     // -------------------------------------------------------
-    // Event: typing_start & typing_stop
+    // Event: join_conversation / leave_conversation (1-1 chat)
     // -------------------------------------------------------
-    socket.on('typing_start', ({ receiverId }) => {
-      if (socket.userId && receiverId) {
+    socket.on('join_conversation', (data) => {
+      const { conversationId, friendId } = data || {};
+      const roomId = conversationId || (friendId ? [socket.userId, friendId].sort().join('_') : null);
+      if (roomId) {
+        socket.join(`chat_${roomId}`);
+      }
+    });
+
+    socket.on('leave_conversation', (data) => {
+      const { conversationId, friendId } = data || {};
+      const roomId = conversationId || (friendId ? [socket.userId, friendId].sort().join('_') : null);
+      if (roomId) {
+        socket.leave(`chat_${roomId}`);
+      }
+    });
+
+    // -------------------------------------------------------
+    // Event: join_group / leave_group (Group chat)
+    // -------------------------------------------------------
+    socket.on('join_group', (data) => {
+      const groupId = data?.groupId;
+      if (groupId) {
+        socket.join(`group_${groupId}`);
+      }
+    });
+
+    socket.on('leave_group', (data) => {
+      const groupId = data?.groupId;
+      if (groupId) {
+        socket.leave(`group_${groupId}`);
+      }
+    });
+
+    // -------------------------------------------------------
+    // Event: typing indicators
+    // -------------------------------------------------------
+    socket.on('typing_start', (data) => {
+      const { receiverId } = data || {};
+      if (receiverId) {
         sendNotificationToUser(io, receiverId, 'user_typing', {
           senderId: socket.userId,
           isTyping: true,
@@ -121,31 +166,13 @@ const initSocketHandler = (io) => {
       }
     });
 
-    socket.on('typing_stop', ({ receiverId }) => {
-      if (socket.userId && receiverId) {
+    socket.on('typing_stop', (data) => {
+      const { receiverId } = data || {};
+      if (receiverId) {
         sendNotificationToUser(io, receiverId, 'user_typing', {
           senderId: socket.userId,
           isTyping: false,
         });
-      }
-    });
-
-    // -------------------------------------------------------
-    // Event: Group Chat Rooms (Gia nhập & rời phòng chat nhóm)
-    // -------------------------------------------------------
-    socket.on('join_group', (data) => {
-      const groupId = typeof data === 'object' && data !== null ? data.groupId : data;
-      if (groupId) {
-        socket.join(`group_${groupId}`);
-        console.log(`👥 User ${socket.userId || socket.id} joined room group_${groupId}`);
-      }
-    });
-
-    socket.on('leave_group', (data) => {
-      const groupId = typeof data === 'object' && data !== null ? data.groupId : data;
-      if (groupId) {
-        socket.leave(`group_${groupId}`);
-        console.log(`🚪 User ${socket.userId || socket.id} left room group_${groupId}`);
       }
     });
 
@@ -204,15 +231,40 @@ const initSocketHandler = (io) => {
   console.log('✅ Socket.io handler initialized with Realtime Presence Engine');
 };
 
+const getIO = () => ioInstance;
+
 /**
  * Gửi thông báo tới 1 user cụ thể nếu họ đang online (hỗ trợ đa socket)
  */
 const sendNotificationToUser = (io, targetUserId, eventName, payload) => {
+  const theIO = io || ioInstance;
   const uid = parseInt(targetUserId, 10);
   const socketIds = connectedUsers.get(uid);
-  if (socketIds && socketIds.size > 0 && io) {
+  if (socketIds && socketIds.size > 0 && theIO) {
     socketIds.forEach((sId) => {
-      io.to(sId).emit(eventName, payload);
+      theIO.to(sId).emit(eventName, payload);
+    });
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Ngắt kết nối socket của user và cưỡng chế đăng xuất (Ban / Force Logout)
+ */
+const kickUserSockets = (io, targetUserId, eventName, payload) => {
+  const theIO = io || ioInstance;
+  const uid = parseInt(targetUserId, 10);
+  const socketIds = connectedUsers.get(uid);
+  if (socketIds && socketIds.size > 0 && theIO) {
+    socketIds.forEach((sId) => {
+      theIO.to(sId).emit(eventName || 'force_logout', payload);
+      setTimeout(() => {
+        const sock = theIO.sockets?.sockets?.get(sId);
+        if (sock) {
+          try { sock.disconnect(true); } catch (e) {}
+        }
+      }, 500);
     });
     return true;
   }
@@ -223,9 +275,10 @@ const sendNotificationToUser = (io, targetUserId, eventName, payload) => {
  * Gửi thông báo tới nhiều users cùng lúc
  */
 const broadcastToUsers = (io, targetUserIds, eventName, payload) => {
-  if (!Array.isArray(targetUserIds) || !io) return;
+  const theIO = io || ioInstance;
+  if (!Array.isArray(targetUserIds) || !theIO) return;
   targetUserIds.forEach((uId) => {
-    sendNotificationToUser(io, uId, eventName, payload);
+    sendNotificationToUser(theIO, uId, eventName, payload);
   });
 };
 
@@ -233,8 +286,9 @@ const broadcastToUsers = (io, targetUserIds, eventName, payload) => {
  * Gửi thông báo tới cả phòng nhóm (room group_${groupId})
  */
 const sendNotificationToGroup = (io, groupId, eventName, payload) => {
-  if (!io || !groupId) return false;
-  io.to(`group_${groupId}`).emit(eventName, payload);
+  const theIO = io || ioInstance;
+  if (!theIO || !groupId) return false;
+  theIO.to(`group_${groupId}`).emit(eventName, payload);
   return true;
 };
 

@@ -1,8 +1,17 @@
 import { create } from 'zustand';
 import { storage } from '../utils/storage';
-import api from '../services/api';
+import api, { setOnBannedCallback } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socketService';
 import type { User, LoginPayload, RegisterPayload } from '../types';
+
+
+export interface BanModalInfo {
+  visible: boolean;
+  reason: string;
+  banned_until: string | null;
+  type: 'temporary' | 'permanent';
+  message: string;
+}
 
 interface AuthState {
   user: User | null;
@@ -16,6 +25,7 @@ interface AuthState {
    */
   isInitializing: boolean;
   isAuthenticated: boolean;
+  banInfo: BanModalInfo | null;
 
   // Actions
   login: (payload: LoginPayload) => Promise<void>;
@@ -23,6 +33,8 @@ interface AuthState {
   logout: () => Promise<void>;
   loadStoredAuth: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
+  handleBanned: (info: { reason?: string; banned_until?: string | null; message?: string; type?: string }) => void;
+  dismissBanModal: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -31,6 +43,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isInitializing: true,   // ← chỉ true khi app mới mở, chưa check storage
   isAuthenticated: false,
+  banInfo: null,
 
   // -------------------------------------------------------
   // Đăng nhập
@@ -142,7 +155,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           if (status === 401 || status === 403) {
             await storage.deleteItem('auth_token');
             await storage.deleteItem('auth_user');
-            set({ user: null, token: null, isAuthenticated: false, isInitializing: false });
+            if (status === 403 && error?.response?.data?.banned) {
+              get().handleBanned({
+                reason: error.response.data.reason,
+                banned_until: error.response.data.banned_until,
+                message: error.response.data.message,
+              });
+            } else {
+              set({ user: null, token: null, isAuthenticated: false, isInitializing: false });
+            }
           } else {
             // Lỗi mạng / server — giữ nguyên trạng thái auth cũ
             set({ user, token, isAuthenticated: true, isInitializing: false });
@@ -167,4 +188,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       storage.setItem('auth_user', JSON.stringify(updated));
     }
   },
+
+  // -------------------------------------------------------
+  // Cưỡng chế đăng xuất khi bị Ban / Khóa tài khoản
+  // -------------------------------------------------------
+  handleBanned: (info) => {
+    disconnectSocket();
+    storage.deleteItem('auth_token');
+    storage.deleteItem('auth_user');
+    const isTemporary = !!info.banned_until;
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isInitializing: false,
+      banInfo: {
+        visible: true,
+        reason: info.reason || 'Vi phạm tiêu chuẩn cộng đồng',
+        banned_until: info.banned_until || null,
+        type: (info.type === 'permanent' || !isTemporary) ? 'permanent' : 'temporary',
+        message: info.message || 'Tài khoản của bạn đã bị khóa bởi quản trị viên.',
+      },
+    });
+  },
+
+  // Đóng modal thông báo ban
+  dismissBanModal: () => {
+    set({ banInfo: null });
+  },
 }));
+
+// Đăng ký callback toàn cục với Axios interceptor
+setOnBannedCallback((info) => {
+  useAuthStore.getState().handleBanned(info);
+});
+
+

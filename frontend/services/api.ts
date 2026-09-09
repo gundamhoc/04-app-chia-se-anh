@@ -108,12 +108,34 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Callback xử lý khi bị ban tài khoản (tránh circular dependency với authStore)
+type BannedCallback = (info: { reason?: string; banned_until?: string | null; message?: string }) => void;
+let onBannedHandler: BannedCallback | null = null;
+export const setOnBannedCallback = (cb: BannedCallback) => {
+  onBannedHandler = cb;
+};
+
 // Response interceptor: xử lý lỗi global
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // 1. Nếu token hết hạn hoặc không hợp lệ -> xóa token
     if (error.response?.status === 401) {
       await storage.deleteItem('auth_token');
+      await storage.deleteItem('auth_user');
+    }
+
+    // 2. Nếu tài khoản bị Quản trị viên Khóa / Ban (HTTP 403)
+    if (error.response?.status === 403 && error.response?.data?.banned) {
+      await storage.deleteItem('auth_token');
+      await storage.deleteItem('auth_user');
+      if (onBannedHandler) {
+        onBannedHandler({
+          reason: error.response.data.reason,
+          banned_until: error.response.data.banned_until,
+          message: error.response.data.message,
+        });
+      }
     }
 
     // Nhận diện lỗi khi tunnel ngrok offline hoặc server trả về HTML error page thay vì JSON API
@@ -135,3 +157,4 @@ api.interceptors.response.use(
 
 export default api;
 export { BASE_URL };
+

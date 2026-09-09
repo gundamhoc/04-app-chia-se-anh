@@ -1,6 +1,6 @@
 const { pool } = require('../config/db');
 const bcrypt = require('bcryptjs');
-const { getOnlineUsers, isUserOnline, sendNotificationToUser } = require('../sockets/socketHandler');
+const { getOnlineUsers, isUserOnline, sendNotificationToUser, kickUserSockets, getIO } = require('../sockets/socketHandler');
 
 /**
  * 1. Lấy thống kê tổng quan hệ thống cho Admin Dashboard
@@ -249,14 +249,15 @@ const banUser = async (req, res) => {
     }
 
     // 3. Nếu người dùng đang online, ngắt socket và gửi thông báo cưỡng chế đăng xuất
-    const io = req.app.get('io') || req.io;
-    if (io) {
-      sendNotificationToUser(io, userId, 'force_logout', {
-        reason: banReason,
-        banned_until: bannedUntil,
-        message: `Tài khoản của bạn đã bị khóa: ${banReason}`,
-      });
-    }
+    const io = getIO() || req.app.get('io') || req.io;
+    kickUserSockets(io, userId, 'force_logout', {
+      reason: banReason,
+      banned_until: bannedUntil,
+      type: type === 'temporary' ? 'temporary' : 'permanent',
+      message: type === 'temporary' 
+        ? `Tài khoản của bạn đã bị khóa tạm thời. Lý do: ${banReason}`
+        : `Tài khoản của bạn đã bị khóa vĩnh viễn. Lý do: ${banReason}`,
+    });
 
     return res.json({
       success: true,

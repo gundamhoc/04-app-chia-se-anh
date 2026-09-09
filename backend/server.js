@@ -125,6 +125,7 @@ const io = new Server(httpServer, {
 
 // Khởi tạo socket handler
 initSocketHandler(io);
+app.set('io', io);
 
 // ============================================================
 // Khởi động server

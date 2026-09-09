@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import { BASE_URL } from './api';
 import { usePresenceStore } from '../store/presenceStore';
+import { useAuthStore } from '../store/authStore';
 
 // Socket server URL (không có /api prefix)
 const SOCKET_URL = BASE_URL.replace('/api', '');
@@ -56,6 +57,18 @@ export const connectSocket = (userId: number): Socket => {
       }
     }
   });
+
+  // Nhận sự kiện cưỡng chế đăng xuất (bị Khóa / Ban tài khoản từ Quản trị viên)
+  socket.on('force_logout', (data: { reason?: string; banned_until?: string; message?: string; type?: string }) => {
+    console.warn('⛔ [Socket] Nhận tín hiệu cưỡng chế đăng xuất (Ban):', data);
+    useAuthStore.getState().handleBanned({
+      reason: data?.reason,
+      banned_until: data?.banned_until,
+      message: data?.message,
+      type: data?.type,
+    });
+  });
+
 
   socket.on('connect_error', (err) => {
     console.warn('❌ Socket connect error:', err.message);
