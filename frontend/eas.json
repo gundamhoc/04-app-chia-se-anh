@@ -14,7 +14,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://reassure-limelight-twiddle.ngrok-free.dev"
+        "EXPO_PUBLIC_API_URL": "https://zero4-app-chia-se-anh.onrender.com"
       },
       "channel": "preview"
     },
