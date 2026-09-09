@@ -50,11 +50,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user, token, isAuthenticated: true, isLoading: false });
     } catch (error: any) {
       set({ isLoading: false });
-      const rawMsg = error?.response?.data?.message || error?.message;
-      const isNetworkErr = error?.message === 'Network Error' || !error?.response;
+      const isNgrokOrTunnelErr =
+        error?.isNetworkOrTunnelError ||
+        (typeof error?.response?.data === 'string' &&
+          (error.response.data.includes('ERR_NGROK') ||
+            error.response.data.includes('<!DOCTYPE') ||
+            error.response.data.includes('<html'))) ||
+        (error?.response?.status === 404 && typeof error?.response?.data !== 'object');
+      const isNetworkErr = error?.message === 'Network Error' || !error?.response || isNgrokOrTunnelErr;
+      const backendMsg =
+        typeof error?.response?.data?.message === 'string'
+          ? error.response.data.message
+          : error?.userFriendlyMessage;
       const message = isNetworkErr
-        ? 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra IP backend / ngrok hoặc kết nối mạng.'
-        : rawMsg || 'Đăng nhập thất bại. Vui lòng thử lại.';
+        ? error?.userFriendlyMessage ||
+          'Không thể kết nối đến máy chủ backend (Ngrok đang tắt hoặc kết nối mạng bị gián đoạn).'
+        : backendMsg || error?.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
       const err = new Error(message);
       (err as any).status = error?.response?.status;
       throw err;
@@ -78,11 +89,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user, token, isAuthenticated: true, isLoading: false });
     } catch (error: any) {
       set({ isLoading: false });
-      const rawMsg = error?.response?.data?.message || error?.message;
-      const isNetworkErr = error?.message === 'Network Error' || !error?.response;
+      const isNgrokOrTunnelErr =
+        error?.isNetworkOrTunnelError ||
+        (typeof error?.response?.data === 'string' &&
+          (error.response.data.includes('ERR_NGROK') ||
+            error.response.data.includes('<!DOCTYPE') ||
+            error.response.data.includes('<html'))) ||
+        (error?.response?.status === 404 && typeof error?.response?.data !== 'object');
+      const isNetworkErr = error?.message === 'Network Error' || !error?.response || isNgrokOrTunnelErr;
+      const backendMsg =
+        typeof error?.response?.data?.message === 'string'
+          ? error.response.data.message
+          : error?.userFriendlyMessage;
       const message = isNetworkErr
-        ? 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra IP backend / ngrok hoặc kết nối mạng.'
-        : rawMsg || 'Đăng ký thất bại. Vui lòng thử lại.';
+        ? error?.userFriendlyMessage ||
+          'Không thể kết nối đến máy chủ backend (Ngrok đang tắt hoặc kết nối mạng bị gián đoạn).'
+        : backendMsg || error?.message || 'Đăng ký thất bại. Vui lòng thử lại.';
       const err = new Error(message);
       (err as any).status = error?.response?.status;
       throw err;

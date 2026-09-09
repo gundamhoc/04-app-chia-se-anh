@@ -115,6 +115,20 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       await storage.deleteItem('auth_token');
     }
+
+    // Nhận diện lỗi khi tunnel ngrok offline hoặc server trả về HTML error page thay vì JSON API
+    const isHtmlResponse =
+      typeof error?.response?.data === 'string' &&
+      (error.response.data.includes('<!DOCTYPE') ||
+        error.response.data.includes('<html') ||
+        error.response.data.includes('ERR_NGROK'));
+
+    if (isHtmlResponse || error.message === 'Network Error' || !error.response) {
+      (error as any).isNetworkOrTunnelError = true;
+      (error as any).userFriendlyMessage =
+        'Không thể kết nối đến máy chủ backend (Ngrok đang ngoại tuyến hoặc đường truyền mạng bị gián đoạn). Vui lòng kiểm tra lại.';
+    }
+
     return Promise.reject(error);
   }
 );

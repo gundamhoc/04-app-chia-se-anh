@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -17,6 +18,8 @@ import { useToast } from '../../hooks/useToast';
 import { Colors, ColorScheme } from '../../constants/Colors';
 import { useTheme } from '../../context/ThemeContext';
 import { useI18n } from '../../utils/i18n';
+
+const APP_LOGO_IMAGE = require('../../assets/app_logo.webp');
 
 export default function RegisterScreen() {
   const { colors: C, isDark } = useTheme();
@@ -72,8 +75,9 @@ export default function RegisterScreen() {
       }, 1500);
     } catch (error: any) {
       const msg =
+        error?.userFriendlyMessage ||
         error?.message ||
-        error?.response?.data?.message ||
+        (typeof error?.response?.data?.message === 'string' ? error.response.data.message : null) ||
         t('register_failed');
       console.warn('[RegisterScreen] register error:', msg);
       showToast('error', msg);
@@ -122,11 +126,16 @@ export default function RegisterScreen() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-        {/* Header */}
+        {/* Header với Logo Anime và Tên App */}
         <View style={styles.header}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>MXH</Text>
+          <View style={styles.logoCircleWrapper}>
+            <Image
+              source={APP_LOGO_IMAGE}
+              style={styles.logoImage}
+              resizeMode="cover"
+            />
           </View>
+          <Text style={styles.appName}>Masita</Text>
           <Text style={styles.title}>{t('register_btn')}</Text>
           <Text style={styles.subtitle}>{t('join_community')}</Text>
         </View>
@@ -185,25 +194,35 @@ const createStyles = (C: ColorScheme, isDark: boolean) =>
       alignItems: 'center',
       marginBottom: 36,
     },
-    logoCircle: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
+    logoCircleWrapper: {
+      width: 90,
+      height: 90,
+      borderRadius: 45,
       backgroundColor: C.primary,
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: 16,
+      marginBottom: 12,
+      borderWidth: 2,
+      borderColor: C.primary,
       shadowColor: C.primary,
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.5,
       shadowRadius: 16,
       elevation: 12,
+      overflow: 'hidden',
     },
-    logoText: {
-      fontSize: 20,
+    logoImage: {
+      width: 90,
+      height: 90,
+      borderRadius: 45,
+    },
+    appName: {
+      fontSize: 22,
       fontFamily: 'Inter_700Bold',
-      color: '#fff',
-      letterSpacing: 1,
+      color: isDark ? '#B0AAFF' : C.primary,
+      letterSpacing: 1.5,
+      marginBottom: 4,
+      textTransform: 'uppercase',
     },
     title: {
       fontSize: 26,
