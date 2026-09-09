@@ -463,6 +463,7 @@ export const translations = {
     notifications_friend_request: 'đã gửi lời mời kết bạn cho bạn',
     notifications_friend_accept: 'đã chấp nhận lời mời kết bạn',
     notifications_group_invite: 'đã mời bạn vào nhóm',
+    notifications_post_deleted: 'bài viết của bạn đã bị gỡ bỏ do vi phạm quy định',
     notifications_delete: 'Xóa thông báo',
 
     // Image Viewer & Download
@@ -927,6 +928,7 @@ export const translations = {
     notifications_friend_request: 'sent you a friend request',
     notifications_friend_accept: 'accepted your friend request',
     notifications_group_invite: 'invited you to a group',
+    notifications_post_deleted: 'your post was removed for violation',
     notifications_delete: 'Delete notification',
 
     // Image Viewer & Download

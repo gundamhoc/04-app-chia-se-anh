@@ -294,7 +294,8 @@ export type NotificationType =
   | 'friend_request'
   | 'friend_accept'
   | 'group_invite'
-  | 'new_post';
+  | 'new_post'
+  | 'post_deleted';
 
 export interface NotificationItem {
   id: number;
@@ -310,5 +311,7 @@ export interface NotificationItem {
   created_at: string;
   photo_thumbnail: string | null;
   photo_media_type?: 'image' | 'video' | null;
+  friendship_status?: 'pending' | 'accepted' | 'rejected' | null;
 }
+
 

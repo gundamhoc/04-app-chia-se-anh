@@ -141,7 +141,10 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     setProcessingIds((prev) => new Set(prev).add(item.id));
     try {
       await friendService.acceptFriendRequest(item.actor_id);
-      // Cập nhật thông báo thành đã đọc và xóa khỏi danh sách
+    } catch (err) {
+      console.warn('Lỗi chấp nhận kết bạn:', err);
+    } finally {
+      // Luôn dọn thông báo này khỏi danh sách UI để tránh bị kẹt nút
       setNotifications((prev) => prev.filter((n) => n.id !== item.id));
       if (!item.is_read) {
         const newCount = Math.max(0, unreadCount - 1);
@@ -149,9 +152,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         onUnreadCountChange?.(newCount);
       }
       try { await notificationService.markAsRead(item.id); } catch { /* ignored */ }
-    } catch (err) {
-      console.warn('Lỗi chấp nhận kết bạn:', err);
-    } finally {
       setProcessingIds((prev) => { const s = new Set(prev); s.delete(item.id); return s; });
     }
   };
@@ -162,6 +162,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     setProcessingIds((prev) => new Set(prev).add(item.id));
     try {
       await friendService.rejectOrCancelRequest(item.actor_id);
+    } catch (err) {
+      console.warn('Lỗi từ chối kết bạn:', err);
+    } finally {
       setNotifications((prev) => prev.filter((n) => n.id !== item.id));
       if (!item.is_read) {
         const newCount = Math.max(0, unreadCount - 1);
@@ -169,9 +172,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         onUnreadCountChange?.(newCount);
       }
       try { await notificationService.deleteNotification(item.id); } catch { /* ignored */ }
-    } catch (err) {
-      console.warn('Lỗi từ chối kết bạn:', err);
-    } finally {
       setProcessingIds((prev) => { const s = new Set(prev); s.delete(item.id); return s; });
     }
   };
@@ -233,6 +233,8 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         return { icon: '👥', bg: '#10b981' };
       case 'friend_accept':
         return { icon: '🎉', bg: '#ec4899' };
+      case 'post_deleted':
+        return { icon: '🗑️', bg: '#ef4444' };
       default:
         return { icon: '🔔', bg: C.primary };
     }
@@ -255,6 +257,8 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         return t('notifications_friend_accept');
       case 'group_invite':
         return t('notifications_group_invite');
+      case 'post_deleted':
+        return t('notifications_post_deleted');
       default:
         return '';
     }
@@ -278,8 +282,10 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           <Image
             source={{
               uri:
-                item.actor_avatar ||
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+                item.type === 'post_deleted'
+                  ? 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=100&auto=format&fit=crop&q=80'
+                  : item.actor_avatar ||
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
             }}
             style={styles.avatar}
             resizeMode="cover"
@@ -293,7 +299,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         {/* Nội dung thông báo */}
         <View style={styles.contentWrapper}>
           <Text style={styles.actionText} numberOfLines={2}>
-            <Text style={styles.actorName}>{item.actor_name || item.actor_username}</Text>{' '}
+            <Text style={styles.actorName}>
+              {item.type === 'post_deleted' ? 'Ban Quản Trị Masita' : (item.actor_name || item.actor_username)}
+            </Text>{' '}
             {actionText}
           </Text>
 
@@ -304,30 +312,43 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             </Text>
           ) : null}
 
+          {/* Hộp thông báo chi tiết khi bài viết bị xóa kèm lý do */}
+          {item.type === 'post_deleted' && item.content ? (
+            <View style={styles.postDeletedBox}>
+              <Text style={styles.postDeletedText}>{item.content}</Text>
+            </View>
+          ) : null}
+
           {/* Nút Chấp nhận / Từ chối cho lời mời kết bạn */}
           {item.type === 'friend_request' ? (
-            <View style={styles.friendActionRow}>
-              <TouchableOpacity
-                style={styles.friendAcceptBtn}
-                onPress={(e) => { e.stopPropagation?.(); handleAcceptFriendRequest(item); }}
-                disabled={processingIds.has(item.id)}
-                activeOpacity={0.8}
-              >
-                {processingIds.has(item.id) ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.friendAcceptText}>✓ Chấp nhận</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.friendRejectBtn}
-                onPress={(e) => { e.stopPropagation?.(); handleRejectFriendRequest(item); }}
-                disabled={processingIds.has(item.id)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.friendRejectText}>✕ Từ chối</Text>
-              </TouchableOpacity>
-            </View>
+            item.friendship_status === 'accepted' ? (
+              <View style={styles.friendAcceptedBadge}>
+                <Text style={styles.friendAcceptedBadgeText}>✓ Hai bạn đã là bạn bè</Text>
+              </View>
+            ) : (
+              <View style={styles.friendActionRow}>
+                <TouchableOpacity
+                  style={styles.friendAcceptBtn}
+                  onPress={(e) => { e.stopPropagation?.(); handleAcceptFriendRequest(item); }}
+                  disabled={processingIds.has(item.id)}
+                  activeOpacity={0.8}
+                >
+                  {processingIds.has(item.id) ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.friendAcceptText}>✓ Chấp nhận</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.friendRejectBtn}
+                  onPress={(e) => { e.stopPropagation?.(); handleRejectFriendRequest(item); }}
+                  disabled={processingIds.has(item.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.friendRejectText}>✕ Từ chối</Text>
+                </TouchableOpacity>
+              </View>
+            )
           ) : null}
 
           <View style={styles.timeRow}>
@@ -691,4 +712,34 @@ const createStyles = (C: ColorScheme, isDark: boolean) =>
       fontSize: 13,
       fontWeight: '600',
     },
+    postDeletedBox: {
+      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(239, 68, 68, 0.3)',
+      borderRadius: 8,
+      padding: 8,
+      marginTop: 6,
+    },
+    postDeletedText: {
+      color: '#F87171',
+      fontSize: 12,
+      lineHeight: 16,
+      fontFamily: 'Inter_500Medium',
+    },
+    friendAcceptedBadge: {
+      backgroundColor: 'rgba(16, 185, 129, 0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(16, 185, 129, 0.3)',
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      alignSelf: 'flex-start',
+      marginTop: 6,
+    },
+    friendAcceptedBadgeText: {
+      color: '#10B981',
+      fontSize: 12,
+      fontFamily: 'Inter_600SemiBold',
+    },
   });
+

@@ -15,7 +15,19 @@ const getNotifications = async (req, res) => {
     const protocol = req.protocol;
     const host = req.get('host');
 
-    // Lấy danh sách thông báo
+    // 1. Tự động dọn dẹp các thông báo kết bạn mà hai bên ĐÃ LÀ BẠN BÈ từ trước
+    try {
+      await pool.query(
+        `DELETE n FROM notifications n
+         JOIN friendships f ON ((f.requester_id = n.actor_id AND f.receiver_id = n.user_id) OR (f.requester_id = n.user_id AND f.receiver_id = n.actor_id))
+         WHERE n.type = 'friend_request' AND n.user_id = ? AND f.status = 'accepted'`,
+        [currentUserId]
+      );
+    } catch (cleanErr) {
+      console.warn('⚠️ Lỗi dọn dẹp thông báo kết bạn cũ:', cleanErr.message);
+    }
+
+    // 2. Lấy danh sách thông báo
     const [rows] = await pool.query(
       `
       SELECT 
@@ -31,7 +43,13 @@ const getNotifications = async (req, res) => {
         u.full_name AS actor_name,
         u.avatar_url AS actor_avatar,
         p.image_url AS photo_thumbnail,
-        p.media_type AS photo_media_type
+        p.media_type AS photo_media_type,
+        (
+          SELECT f.status FROM friendships f 
+          WHERE (f.requester_id = n.actor_id AND f.receiver_id = n.user_id)
+             OR (f.requester_id = n.user_id AND f.receiver_id = n.actor_id)
+          LIMIT 1
+        ) AS friendship_status
       FROM notifications n
       JOIN users u ON n.actor_id = u.id
       LEFT JOIN photos p ON (n.type IN ('like_post', 'comment_post', 'reply_comment', 'new_post') AND n.entity_id = p.id)
@@ -60,22 +78,32 @@ const getNotifications = async (req, res) => {
         thumbnail = formatImageUrl(n.photo_thumbnail, protocol, host);
       }
 
+      // Với thông báo hệ thống kiểm duyệt bài viết từ Ban Quản Trị
+      const isPostDeleted = n.type === 'post_deleted';
+      const actorName = isPostDeleted ? 'Ban Quản Trị Masita' : (n.actor_name || n.actor_username);
+      const actorUsername = isPostDeleted ? 'admin' : n.actor_username;
+      const finalAvatar = isPostDeleted 
+        ? 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=100'
+        : avatar;
+
       return {
         id: n.id,
         user_id: n.user_id,
         actor_id: n.actor_id,
-        actor_name: n.actor_name || n.actor_username,
-        actor_username: n.actor_username,
-        actor_avatar: avatar,
+        actor_name: actorName,
+        actor_username: actorUsername,
+        actor_avatar: finalAvatar,
         type: n.type,
         entity_id: n.entity_id,
         content: n.content,
         is_read: Boolean(n.is_read),
         photo_thumbnail: thumbnail,
         photo_media_type: n.photo_media_type || 'image',
+        friendship_status: n.friendship_status || null,
         created_at: n.created_at,
       };
     });
+
 
     return res.status(200).json({
       success: true,

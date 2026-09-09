@@ -246,11 +246,34 @@ const acceptFriendRequest = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
+      // Kiểm tra xem hai bạn đã là bạn bè từ trước hay chưa
+      const [alreadyFriends] = await pool.query(
+        `SELECT id FROM friendships WHERE ((requester_id = ? AND receiver_id = ?) OR (requester_id = ? AND receiver_id = ?)) AND status = 'accepted'`,
+        [requesterId, currentUserId, currentUserId, requesterId]
+      );
+      if (alreadyFriends.length > 0) {
+        // Xóa thông báo lời mời kết bạn cũ bị tồn đọng
+        await pool.query(
+          `DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = 'friend_request'`,
+          [currentUserId, requesterId]
+        );
+        return res.json({
+          success: true,
+          message: 'Hai bạn đã là bạn bè từ trước.',
+        });
+      }
+
       return res.status(404).json({
         success: false,
         message: 'Không tìm thấy lời mời kết bạn đang chờ phù hợp.',
       });
     }
+
+    // Dọn dẹp thông báo lời mời kết bạn đang chờ
+    await pool.query(
+      `DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = 'friend_request'`,
+      [currentUserId, requesterId]
+    );
 
     // Gửi socket notification & lưu thông báo tới requesterId
     try {
@@ -281,6 +304,7 @@ const acceptFriendRequest = async (req, res) => {
       success: true,
       message: 'Đã chấp nhận lời mời kết bạn.',
     });
+
   } catch (error) {
     console.error('Accept friend request error:', error);
     return res.status(500).json({
@@ -314,6 +338,12 @@ const rejectOrCancelRequest = async (req, res) => {
       [currentUserId, targetId, targetId, currentUserId]
     );
 
+    // Dọn dẹp thông báo kết bạn liên quan
+    await pool.query(
+      `DELETE FROM notifications WHERE ((user_id = ? AND actor_id = ?) OR (user_id = ? AND actor_id = ?)) AND type = 'friend_request'`,
+      [currentUserId, targetId, targetId, currentUserId]
+    );
+
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
@@ -325,6 +355,7 @@ const rejectOrCancelRequest = async (req, res) => {
       success: true,
       message: 'Đã xử lý hủy / từ chối kết bạn thành công.',
     });
+
   } catch (error) {
     console.error('Reject or cancel friend request error:', error);
     return res.status(500).json({
