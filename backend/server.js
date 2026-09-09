@@ -130,13 +130,42 @@ const startServer = async () => {
   // Kiểm tra kết nối DB trước khi start
   await testConnection();
 
-  httpServer.listen(PORT, () => {
+  httpServer.listen(PORT, async () => {
     console.log('');
     console.log('🚀 Masita Backend đang chạy!');
     console.log(`📡 HTTP API  : http://localhost:${PORT}/api`);
     console.log(`🔌 Socket.io : ws://localhost:${PORT}`);
     console.log(`🌿 ENV       : ${process.env.NODE_ENV || 'development'}`);
     console.log('');
+
+    // Khởi chạy Ngrok tự động nếu có biến NGROK_AUTHTOKEN và NGROK_DOMAIN (Cloud 24/7)
+    if (process.env.NGROK_AUTHTOKEN && process.env.NGROK_DOMAIN) {
+      try {
+        const ngrok = require('@ngrok/ngrok');
+        const listener = await ngrok.forward({
+          addr: PORT,
+          authtoken: process.env.NGROK_AUTHTOKEN,
+          domain: process.env.NGROK_DOMAIN,
+        });
+        console.log(`🌐 [Ngrok Cloud] Tunnel đã kết nối: ${listener.url()}`);
+      } catch (ngrokErr) {
+        console.warn('⚠️ [Ngrok Cloud] Tunnel:', ngrokErr.message);
+      }
+    }
+
+    // Tự động ping giữ máy chủ thức 24/7 (Anti-sleep cho Render free)
+    const externalUrl = process.env.RENDER_EXTERNAL_URL;
+    if (externalUrl) {
+      console.log(`🛡️ [Keep-Alive] Kích hoạt chống ngủ đông cho ${externalUrl}`);
+      setInterval(async () => {
+        try {
+          await fetch(`${externalUrl}/api/health`);
+          console.log('💓 [Keep-Alive] Ping máy chủ thành công');
+        } catch (e) {
+          // Silent catch
+        }
+      }, 9 * 60 * 1000); // 9 phút một lần (Render ngủ sau 15p)
+    }
   });
 };
 

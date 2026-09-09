@@ -116,11 +116,11 @@ const initDatabase = async (pool) => {
       name VARCHAR(100) NOT NULL,
       avatar_url VARCHAR(500) DEFAULT NULL,
       background_url VARCHAR(500) DEFAULT NULL,
-      created_by INT UNSIGNED NOT NULL,
+      creator_id INT UNSIGNED NOT NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
-      CONSTRAINT fk_groups_creator FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE CASCADE
+      CONSTRAINT fk_groups_creator FOREIGN KEY (creator_id) REFERENCES users (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
 
     // 8. Bảng group_members
@@ -215,13 +215,16 @@ const initDatabase = async (pool) => {
     `CREATE TABLE IF NOT EXISTS login_sessions (
       id INT UNSIGNED NOT NULL AUTO_INCREMENT,
       user_id INT UNSIGNED NOT NULL,
-      device_info VARCHAR(255) DEFAULT NULL,
+      device_name VARCHAR(255) DEFAULT 'Thiết bị không xác định',
       ip_address VARCHAR(45) DEFAULT NULL,
-      last_active DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      token_hash VARCHAR(64) DEFAULT NULL,
+      last_active DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
       PRIMARY KEY (id),
-      KEY idx_ls_user (user_id),
-      CONSTRAINT fk_ls_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      KEY idx_user_id (user_id),
+      KEY idx_token_hash (token_hash),
+      CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
 
     // 14. Bảng saved_photos (Lưu bài viết)
