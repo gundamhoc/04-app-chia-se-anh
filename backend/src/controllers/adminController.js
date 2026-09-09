@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const bcrypt = require('bcryptjs');
+const { getOnlineUsers, isUserOnline, sendNotificationToUser } = require('../sockets/socketHandler');
 
 /**
  * 1. Lấy thống kê tổng quan hệ thống cho Admin Dashboard
@@ -37,7 +38,7 @@ const getDashboardStats = async (req, res) => {
 
     // 5. 5 người dùng mới đăng ký gần nhất
     const [recentUsers] = await pool.query(`
-      SELECT id, username, email, full_name, avatar_url, is_active, created_at
+      SELECT id, username, email, full_name, avatar_url, is_active, banned_until, ban_reason, created_at
       FROM users
       ORDER BY id DESC
       LIMIT 5
@@ -64,23 +65,39 @@ const getDashboardStats = async (req, res) => {
     const commentsCount = Number(total_comments) || 0;
     const pendingResetsCount = Number(pending_reset_requests) || 0;
 
+    // Lấy thông tin thời gian thực từ Socket.io presence engine
+    const onlineUserIds = getOnlineUsers();
+    const onlineUsersCount = onlineUserIds.length;
+
+    // Bổ sung trạng thái online vào recent_users
+    const recentUsersWithPresence = recentUsers.map(u => ({
+      ...u,
+      is_online: isUserOnline(u.id),
+    }));
+
     return res.json({
       success: true,
       message: 'Lấy thống kê hệ thống thành công.',
       data: {
         total_users: usersCount,
         active_users: activeUsersCount,
+        online_users: onlineUsersCount,
+        online_user_ids: onlineUserIds,
         total_posts: postsCount,
         total_photos: photosCount,
         total_videos: videosCount,
         total_reactions: reactionsCount,
         total_comments: commentsCount,
         pending_reset_requests: pendingResetsCount,
-        users: { total: usersCount, active: activeUsersCount },
+        users: { 
+          total: usersCount, 
+          active: activeUsersCount, 
+          online: onlineUsersCount 
+        },
         posts: { total: postsCount, photos: photosCount, videos: videosCount },
         interactions: { reactions: reactionsCount, comments: commentsCount },
         pending_resets: pendingResetsCount,
-        recent_users: recentUsers,
+        recent_users: recentUsersWithPresence,
         recent_posts: recentPosts,
       },
     });
@@ -137,6 +154,8 @@ const getUsers = async (req, res) => {
         u.avatar_url, 
         u.bio, 
         u.is_active, 
+        u.banned_until,
+        u.ban_reason,
         u.is_private_account,
         u.created_at,
         (SELECT COUNT(*) FROM photos WHERE user_id = u.id) as posts_count,
@@ -149,10 +168,16 @@ const getUsers = async (req, res) => {
       [...params, limit, offset]
     );
 
+    // Bổ sung trạng thái online thời gian thực
+    const usersWithPresence = users.map(u => ({
+      ...u,
+      is_online: isUserOnline(u.id),
+    }));
+
     return res.json({
       success: true,
       message: 'Lấy danh sách người dùng thành công.',
-      data: users,
+      data: usersWithPresence,
       pagination: {
         total: Number(total),
         page,
@@ -170,39 +195,84 @@ const getUsers = async (req, res) => {
 };
 
 /**
- * 3. Khóa / Mở khóa tài khoản người dùng
+ * 3. Khóa / Mở khóa tài khoản người dùng (Hỗ trợ tạm thời theo ngày hoặc vĩnh viễn kèm lý do)
+ * PUT /api/admin/users/:id/ban
  * PUT /api/admin/users/:id/toggle-status
+ * Body: { action: 'ban'|'unban', type: 'temporary'|'permanent', days: 7, reason: '...' }
  */
-const toggleUserStatus = async (req, res) => {
+const banUser = async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
     if (isNaN(userId)) {
       return res.status(400).json({ success: false, message: 'ID người dùng không hợp lệ.' });
     }
 
-    const [users] = await pool.query('SELECT id, username, is_active FROM users WHERE id = ?', [userId]);
+    const [users] = await pool.query('SELECT id, username, is_active, banned_until, ban_reason FROM users WHERE id = ?', [userId]);
     if (users.length === 0) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng.' });
     }
 
-    const newStatus = (req.body && req.body.is_active !== undefined)
-      ? (Number(req.body.is_active) === 1 ? 1 : 0)
-      : (users[0].is_active ? 0 : 1);
-    await pool.query('UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ?', [newStatus, userId]);
+    const { action, type, days, reason, is_active } = req.body || {};
+
+    // 1. Nếu mở khóa (unban)
+    if (action === 'unban' || is_active === 1 || (action === undefined && is_active === undefined && users[0].is_active === 0)) {
+      await pool.query('UPDATE users SET is_active = 1, banned_until = NULL, ban_reason = NULL, updated_at = NOW() WHERE id = ?', [userId]);
+      return res.json({
+        success: true,
+        message: 'Đã mở khóa tài khoản thành công.',
+        data: { id: userId, is_active: 1, banned_until: null, ban_reason: null },
+      });
+    }
+
+    // 2. Nếu khóa (ban)
+    const banReason = (reason && typeof reason === 'string' && reason.trim()) ? reason.trim() : 'Vi phạm tiêu chuẩn cộng đồng';
+    let bannedUntil = null;
+    let message = '';
+    const numDays = parseInt(days, 10);
+
+    if (type === 'temporary' && !isNaN(numDays) && numDays > 0) {
+      // Khóa tạm thời theo số ngày
+      await pool.query(
+        'UPDATE users SET is_active = 0, banned_until = DATE_ADD(NOW(), INTERVAL ? DAY), ban_reason = ?, updated_at = NOW() WHERE id = ?',
+        [numDays, banReason, userId]
+      );
+      const [[{ calculated_until }]] = await pool.query('SELECT banned_until as calculated_until FROM users WHERE id = ?', [userId]);
+      bannedUntil = calculated_until;
+      message = `Đã khóa tài khoản trong ${numDays} ngày. Lý do: "${banReason}".`;
+    } else {
+      // Khóa vĩnh viễn
+      await pool.query(
+        'UPDATE users SET is_active = 0, banned_until = NULL, ban_reason = ?, updated_at = NOW() WHERE id = ?',
+        [banReason, userId]
+      );
+      message = `Đã khóa vĩnh viễn tài khoản. Lý do: "${banReason}".`;
+    }
+
+    // 3. Nếu người dùng đang online, ngắt socket và gửi thông báo cưỡng chế đăng xuất
+    const io = req.app.get('io') || req.io;
+    if (io) {
+      sendNotificationToUser(io, userId, 'force_logout', {
+        reason: banReason,
+        banned_until: bannedUntil,
+        message: `Tài khoản của bạn đã bị khóa: ${banReason}`,
+      });
+    }
 
     return res.json({
       success: true,
-      message: newStatus === 1 ? 'Đã kích hoạt lại tài khoản thành công.' : 'Đã khóa tài khoản người dùng thành công.',
-      data: { id: userId, is_active: newStatus },
+      message,
+      data: { id: userId, is_active: 0, banned_until: bannedUntil, ban_reason: banReason },
     });
   } catch (error) {
-    console.error('Admin toggle user status error:', error);
+    console.error('Admin ban user error:', error);
     return res.status(500).json({
       success: false,
-      message: 'Lỗi máy chủ khi thay đổi trạng thái tài khoản.',
+      message: 'Lỗi máy chủ khi thay đổi trạng thái khóa tài khoản.',
     });
   }
 };
+
+const toggleUserStatus = banUser;
 
 /**
  * 4. Đặt lại mật khẩu trực tiếp cho người dùng từ Admin Dashboard
@@ -408,6 +478,11 @@ const getPosts = async (req, res) => {
  * 8. Xóa bài viết vi phạm (Quản trị viên)
  * DELETE /api/admin/posts/:id
  */
+/**
+ * 8. Xóa bài viết vi phạm (Quản trị viên kèm lý do & gửi thông báo đến tác giả)
+ * DELETE /api/admin/posts/:id
+ * Body: { reason: 'Hình ảnh không phù hợp' }
+ */
 const deletePost = async (req, res) => {
   try {
     const postId = parseInt(req.params.id, 10);
@@ -415,17 +490,53 @@ const deletePost = async (req, res) => {
       return res.status(400).json({ success: false, message: 'ID bài viết không hợp lệ.' });
     }
 
-    const [existing] = await pool.query('SELECT id FROM photos WHERE id = ?', [postId]);
+    const [existing] = await pool.query(
+      'SELECT id, user_id, caption, image_url, video_url, media_type FROM photos WHERE id = ?',
+      [postId]
+    );
     if (existing.length === 0) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy bài viết.' });
     }
 
+    const post = existing[0];
+    const deleteReason = (req.body && req.body.reason && typeof req.body.reason === 'string' && req.body.reason.trim())
+      ? req.body.reason.trim()
+      : 'Vi phạm tiêu chuẩn cộng đồng';
+
+    // 1. Xóa bài viết khỏi cơ sở dữ liệu
     await pool.query('DELETE FROM photos WHERE id = ?', [postId]);
+
+    // 2. Gửi thông báo đến tài khoản tác giả
+    const captionPreview = post.caption ? `"${post.caption.substring(0, 35)}..."` : 'Khoảnh khắc của bạn';
+    const notifContent = `Bài viết ${captionPreview} đã bị Quản trị viên gỡ bỏ. Lý do: ${deleteReason}`;
+
+    try {
+      await pool.query(
+        `INSERT INTO notifications (user_id, actor_id, type, entity_id, content, is_read, created_at)
+         VALUES (?, ?, 'post_deleted', 0, ?, 0, NOW())`,
+        [post.user_id, post.user_id, notifContent]
+      );
+    } catch (notifErr) {
+      console.warn('⚠️ Could not insert notification for post deletion:', notifErr.message);
+    }
+
+    // 3. Gửi sự kiện realtime qua Socket.io nếu tác giả đang online
+    const io = req.app.get('io') || req.io;
+    if (io) {
+      sendNotificationToUser(io, post.user_id, 'notification', {
+        type: 'post_deleted',
+        title: 'Bài viết đã bị gỡ bỏ',
+        message: notifContent,
+        reason: deleteReason,
+        postId,
+        created_at: new Date().toISOString(),
+      });
+    }
 
     return res.json({
       success: true,
-      message: 'Đã xóa bài viết vi phạm thành công.',
-      data: { id: postId },
+      message: `Đã xóa bài viết và gửi thông báo tới người đăng (Lý do: "${deleteReason}").`,
+      data: { id: postId, author_id: post.user_id, reason: deleteReason },
     });
   } catch (error) {
     console.error('Admin delete post error:', error);
@@ -440,6 +551,7 @@ module.exports = {
   getDashboardStats,
   getUsers,
   toggleUserStatus,
+  banUser,
   adminResetPassword,
   getResetRequests,
   updateResetRequestStatus,

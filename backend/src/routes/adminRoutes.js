@@ -4,6 +4,7 @@ const {
   getDashboardStats,
   getUsers,
   toggleUserStatus,
+  banUser,
   adminResetPassword,
   getResetRequests,
   updateResetRequestStatus,
@@ -18,6 +19,7 @@ router.get('/stats', getDashboardStats);
 router.get('/users', getUsers);
 router.put('/users/:id/toggle-status', toggleUserStatus);
 router.put('/users/:id/status', toggleUserStatus);
+router.put('/users/:id/ban', banUser);
 router.put('/users/:id/reset-password', adminResetPassword);
 router.post('/users/:id/reset-password', adminResetPassword);
 

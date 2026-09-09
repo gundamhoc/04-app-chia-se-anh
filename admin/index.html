@@ -73,6 +73,11 @@
         </div>
 
         <div class="topbar-actions">
+          <div class="online-pill" id="topbar-online-pill" title="Người dùng đang kết nối Socket.io thời gian thực">
+            <span class="pulse-green"></span>
+            <span id="topbar-online-text">0 trực tuyến</span>
+          </div>
+
           <button class="btn btn-secondary btn-sm" id="btn-refresh" title="Làm mới dữ liệu">
             <span class="btn-icon">🔄</span> Làm mới
           </button>
@@ -98,6 +103,7 @@
             <div class="stat-value" id="stat-total-users">--</div>
             <div class="stat-meta">
               <span class="meta-highlight" id="stat-active-users">-- hoạt động</span>
+              <span class="meta-online" id="stat-online-users">• 🟢 0 trực tuyến</span>
             </div>
           </div>
 
@@ -361,15 +367,119 @@
     </div>
   </div>
 
-  <!-- Media Preview Modal -->
+  <!-- Ban User Modal (Khóa tài khoản theo ngày hoặc vĩnh viễn kèm lý do) -->
+  <div class="modal-overlay" id="modal-ban-user">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-ban-title">Khóa tài khoản người dùng</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-ban-user')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="user-item mb-16" id="modal-ban-user-card">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div class="form-group">
+          <label>Thời hạn khóa tài khoản:</label>
+          <div class="ban-duration-options">
+            <label class="radio-card active">
+              <input type="radio" name="ban-type" value="temporary" checked onchange="toggleBanDurationFields()">
+              <div class="radio-card-content">
+                <strong>⏳ Tạm thời</strong>
+                <span>Khóa theo số ngày</span>
+              </div>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="ban-type" value="permanent" onchange="toggleBanDurationFields()">
+              <div class="radio-card-content">
+                <strong>⛔ Vĩnh viễn</strong>
+                <span>Khóa không giới hạn</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" id="group-ban-days">
+          <label for="ban-days-select">Chọn số ngày tạm khóa:</label>
+          <select id="ban-days-select" class="form-control" onchange="handleBanDaysChange(this.value)">
+            <option value="1">1 ngày (24 giờ)</option>
+            <option value="3">3 ngày</option>
+            <option value="7" selected>7 ngày (1 tuần)</option>
+            <option value="14">14 ngày (2 tuần)</option>
+            <option value="30">30 ngày (1 tháng)</option>
+            <option value="custom">Tùy chọn số ngày khác...</option>
+          </select>
+          <div id="custom-days-wrapper" style="display: none; margin-top: 10px;">
+            <input type="number" id="ban-days-custom" class="form-control" placeholder="Nhập số ngày muốn khóa (ví dụ: 60)" min="1" max="3650">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="ban-reason-preset">Lý do khóa tài khoản:</label>
+          <select id="ban-reason-preset" class="form-control mb-8" onchange="handleBanPresetChange(this.value)">
+            <option value="Vi phạm tiêu chuẩn cộng đồng">Vi phạm tiêu chuẩn cộng đồng</option>
+            <option value="Đăng tải hình ảnh / video nhạy cảm, không phù hợp">Đăng tải hình ảnh / video nhạy cảm, không phù hợp</option>
+            <option value="Spam tin nhắn hoặc đăng bài rác liên tục">Spam tin nhắn hoặc đăng bài rác liên tục</option>
+            <option value="Sử dụng ngôn từ thù ghét, lăng mạ xúc phạm người khác">Sử dụng ngôn từ thù ghét, lăng mạ xúc phạm người khác</option>
+            <option value="Giả mạo hoặc mạo danh người khác">Giả mạo hoặc mạo danh người khác</option>
+            <option value="custom">Lý do khác (Tự nhập chi tiết)...</option>
+          </select>
+          <textarea id="ban-reason-text" class="form-control" rows="3" placeholder="Nhập lý do khóa chi tiết để người dùng biết khi đăng nhập..."></textarea>
+          <small class="form-hint">Lý do này sẽ hiển thị trực tiếp cho người dùng khi họ mở app hoặc cố gắng đăng nhập.</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-ban-user')">Hủy</button>
+        <button class="btn btn-danger" id="btn-confirm-ban" onclick="submitBanUserAction()">🔒 Xác nhận khóa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Post with Reason Modal -->
+  <div class="modal-overlay" id="modal-delete-post">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Xác nhận gỡ bài viết vi phạm</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-delete-post')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="post-preview-item mb-16" id="modal-delete-post-preview">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div class="form-group">
+          <label for="delete-post-reason-preset">Lý do gỡ bỏ bài viết:</label>
+          <select id="delete-post-reason-preset" class="form-control mb-8" onchange="handleDeletePostPresetChange(this.value)">
+            <option value="Hình ảnh / Video nhạy cảm, vi phạm tiêu chuẩn cộng đồng">Hình ảnh / Video nhạy cảm, vi phạm tiêu chuẩn cộng đồng</option>
+            <option value="Nội dung vi phạm bản quyền hình ảnh / âm nhạc">Nội dung vi phạm bản quyền hình ảnh / âm nhạc</option>
+            <option value="Nội dung quảng cáo, spam bài rác trái phép">Nội dung quảng cáo, spam bài rác trái phép</option>
+            <option value="Bạo lực, đe dọa hoặc ngôn từ kích động thù địch">Bạo lực, đe dọa hoặc ngôn từ kích động thù địch</option>
+            <option value="Thông tin sai lệch hoặc lừa đảo">Thông tin sai lệch hoặc lừa đảo</option>
+            <option value="custom">Lý do khác (Tự nhập chi tiết)...</option>
+          </select>
+          <textarea id="delete-post-reason-text" class="form-control" rows="3" placeholder="Nhập lý do gửi thông báo đến tác giả bài viết..."></textarea>
+          <small class="form-hint">Hệ thống sẽ xóa bài vĩnh viễn và tự động gửi thông báo (kèm thông báo đẩy realtime) đến tài khoản của người đăng.</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-delete-post')">Hủy</button>
+        <button class="btn btn-danger" id="btn-confirm-delete-post" onclick="submitDeletePostAction()">🗑️ Xác nhận gỡ & Gửi thông báo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Post Review & Media Preview Modal -->
   <div class="modal-overlay" id="modal-media-preview">
     <div class="modal-card modal-media-card">
       <div class="modal-header">
-        <h3 id="media-preview-title">Xem nội dung bài viết</h3>
+        <h3 id="media-preview-title">Xem chi tiết bài viết</h3>
         <button class="modal-close-btn" onclick="closeModal('modal-media-preview')">✕</button>
       </div>
       <div class="modal-body modal-media-body" id="media-preview-content">
         <!-- Dynamic video or image -->
+      </div>
+      <div class="modal-review-footer" id="media-preview-meta">
+        <!-- Post meta & quick action -->
       </div>
     </div>
   </div>

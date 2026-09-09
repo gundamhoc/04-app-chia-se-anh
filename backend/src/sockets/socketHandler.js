@@ -71,13 +71,14 @@ const initSocketHandler = (io) => {
       if (uid && !isNaN(uid)) {
         socket.userId = uid;
         const becameOnline = addUserSocket(uid, socket.id);
-        console.log(`👤 User ${uid} is online (socket: ${socket.id}, active sockets: ${connectedUsers.get(uid)?.size})`);
+        const onlineList = getOnlineUsers();
+        console.log(`🟢 [Presence Engine] 👤 User ${uid} vừa Online (socket: ${socket.id}). Hiện có ${onlineList.length} người đang Online [IDs: ${onlineList.join(', ')}]`);
 
         // Gửi xác nhận cho client
         socket.emit('user_online_ack', { status: 'online', userId: uid });
 
         // Gửi toàn bộ danh sách online users hiện thời cho chính client này
-        socket.emit('online_users_list', { onlineUserIds: getOnlineUsers() });
+        socket.emit('online_users_list', { onlineUserIds: onlineList });
 
         // Nếu user này vừa mới chuyển trạng thái sang online -> broadcast cho TẤT CẢ các client khác
         if (becameOnline) {
@@ -101,7 +102,8 @@ const initSocketHandler = (io) => {
       if (uid && !isNaN(uid)) {
         const becameOffline = removeUserSocket(uid, socket.id);
         if (becameOffline) {
-          console.log(`🔴 User ${uid} went offline (manual logout)`);
+          const onlineList = getOnlineUsers();
+          console.log(`🔴 [Presence Engine] 👤 User ${uid} vừa Offline (manual logout). Hiện còn ${onlineList.length} người đang Online [IDs: ${onlineList.join(', ')}]`);
           io.emit('user_status_changed', { userId: uid, status: 'offline' });
         }
       }
@@ -189,7 +191,8 @@ const initSocketHandler = (io) => {
         const becameOffline = removeUserSocket(uid, socket.id);
         console.log(`👋 Socket disconnected for user ${uid} (socket: ${socket.id}, reason: ${reason})`);
         if (becameOffline) {
-          console.log(`🔴 User ${uid} went completely offline`);
+          const onlineList = getOnlineUsers();
+          console.log(`🔴 [Presence Engine] 👤 User ${uid} đã Offline. Hiện còn ${onlineList.length} người đang Online [IDs: ${onlineList.join(', ')}]`);
           io.emit('user_status_changed', { userId: uid, status: 'offline' });
         }
       } else {

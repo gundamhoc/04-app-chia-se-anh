@@ -97,7 +97,7 @@ const login = async (req, res) => {
 
   try {
     const [rows] = await pool.query(
-      'SELECT id, username, email, password_hash, full_name, avatar_url, is_active FROM users WHERE email = ?',
+      'SELECT id, username, email, password_hash, full_name, avatar_url, is_active, banned_until, ban_reason FROM users WHERE email = ?',
       [email]
     );
 
@@ -110,11 +110,32 @@ const login = async (req, res) => {
 
     const user = rows[0];
 
+    // Kiểm tra trạng thái khóa tài khoản
     if (!user.is_active) {
-      return res.status(403).json({
-        success: false,
-        message: 'Tài khoản đã bị vô hiệu hóa.',
-      });
+      if (user.banned_until) {
+        const banExpiry = new Date(user.banned_until);
+        const now = new Date();
+        if (banExpiry <= now) {
+          // Hạn khóa tạm thời đã hết -> tự động mở khóa lại
+          await pool.query('UPDATE users SET is_active = 1, banned_until = NULL, ban_reason = NULL, updated_at = NOW() WHERE id = ?', [user.id]);
+          user.is_active = 1;
+        } else {
+          const formattedDate = banExpiry.toLocaleString('vi-VN', {
+            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'
+          });
+          const reasonText = user.ban_reason ? ` Lý do: ${user.ban_reason}.` : '';
+          return res.status(403).json({
+            success: false,
+            message: `Tài khoản của bạn đang bị tạm khóa đến ${formattedDate}.${reasonText}`,
+          });
+        }
+      } else {
+        const reasonText = user.ban_reason ? ` Lý do: ${user.ban_reason}.` : '';
+        return res.status(403).json({
+          success: false,
+          message: `Tài khoản của bạn đã bị khóa vĩnh viễn.${reasonText}`,
+        });
+      }
     }
 
     // So sánh password

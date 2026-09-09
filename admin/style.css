@@ -1156,26 +1156,156 @@ body {
 }
 
 .modal-media-card {
-  max-width: 800px;
+  max-width: 860px;
 }
 
 .modal-media-body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #000;
-  min-height: 400px;
-  max-height: 75vh;
+  background-color: #05050A;
+  min-height: 380px;
+  max-height: 65vh;
   overflow: hidden;
   padding: 0;
+  position: relative;
 }
 
 .modal-media-body img,
 .modal-media-body video {
   max-width: 100%;
-  max-height: 75vh;
+  max-height: 65vh;
   object-fit: contain;
+  display: block;
 }
+
+.modal-review-footer {
+  padding: 18px 24px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background-color: var(--bg-card);
+}
+
+.review-author-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.review-caption-box {
+  background-color: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.review-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Online Presence Indicators */
+.online-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  color: #10B981;
+}
+
+.pulse-green {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10B981;
+  box-shadow: 0 0 8px #10B981;
+  animation: pulse-dot 1.8s infinite;
+}
+
+.meta-online {
+  color: #10B981;
+  font-weight: 600;
+}
+
+.presence-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.presence-online {
+  background-color: #10B981;
+  box-shadow: 0 0 6px #10B981;
+}
+
+.presence-offline {
+  background-color: #64748B;
+}
+
+/* Ban Duration Radio Cards */
+.ban-duration-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background-color: var(--bg-input);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.radio-card:hover {
+  border-color: rgba(108, 99, 255, 0.4);
+}
+
+.radio-card.active, .radio-card:has(input:checked) {
+  border-color: var(--primary);
+  background-color: rgba(108, 99, 255, 0.1);
+}
+
+.radio-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.radio-card-content strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.radio-card-content span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.mb-8 { margin-bottom: 8px; }
+.mb-16 { margin-bottom: 16px; }
 
 /* Toast Notification Container */
 .toast-container {

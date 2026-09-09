@@ -218,6 +218,13 @@ async function loadDashboardStats() {
     // Stat Cards
     document.getElementById('stat-total-users').textContent = stats.users.total.toLocaleString();
     document.getElementById('stat-active-users').textContent = `${stats.users.active.toLocaleString()} tài khoản hoạt động`;
+    
+    // Cập nhật chỉ số trực tuyến realtime từ Socket presence
+    const onlineCount = stats.online_users !== undefined ? stats.online_users : (stats.users?.online || 0);
+    const onlineStatElem = document.getElementById('stat-online-users');
+    if (onlineStatElem) onlineStatElem.textContent = `• 🟢 ${onlineCount} trực tuyến`;
+    const topbarOnlineText = document.getElementById('topbar-online-text');
+    if (topbarOnlineText) topbarOnlineText.textContent = `${onlineCount} trực tuyến`;
 
     document.getElementById('stat-total-posts').textContent = stats.posts.total.toLocaleString();
     document.getElementById('stat-media-breakdown').textContent = `${stats.posts.photos} ảnh • ${stats.posts.videos} video`;
@@ -247,7 +254,10 @@ async function loadDashboardStats() {
       recentUsersContainer.innerHTML = stats.recent_users.map(u => `
         <div class="user-item">
           <div class="user-item-main">
-            <img src="${resolveMediaUrl(u.avatar_url)}" alt="${escapeHtml(u.username)}" class="user-avatar" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'">
+            <div style="position: relative; flex-shrink: 0;">
+              <img src="${resolveMediaUrl(u.avatar_url)}" alt="${escapeHtml(u.username)}" class="user-avatar" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'">
+              <span class="presence-dot ${u.is_online ? 'presence-online' : 'presence-offline'}" style="position: absolute; bottom: 0; right: 0; border: 2px solid var(--bg-card);" title="${u.is_online ? 'Đang online' : 'Ngoại tuyến'}"></span>
+            </div>
             <div class="user-details">
               <span class="user-name">${escapeHtml(u.full_name || u.username)}</span>
               <span class="user-sub">@${escapeHtml(u.username)} • ${formatDate(u.created_at)}</span>
@@ -434,39 +444,55 @@ async function loadUsers(page = 1) {
       return;
     }
 
-    tbody.innerHTML = users.map(user => `
-      <tr>
-        <td>#${user.id}</td>
-        <td>
-          <div class="user-inline">
-            <img src="${resolveMediaUrl(user.avatar_url)}" alt="avatar" class="avatar-sm" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=60'">
-            <div>
-              <strong>${escapeHtml(user.full_name || user.username)}</strong>
-              <div class="sub-text">@${escapeHtml(user.username)}</div>
+    tbody.innerHTML = users.map(user => {
+      let statusPillHtml = '';
+      if (user.is_active) {
+        statusPillHtml = '<span class="status-pill status-active">✓ Hoạt động</span>';
+      } else if (user.banned_until) {
+        statusPillHtml = `<span class="status-pill status-pending" title="Lý do: ${escapeHtml(user.ban_reason || 'Không có')}">⏳ Khóa đến ${formatDate(user.banned_until)}</span>`;
+      } else {
+        statusPillHtml = `<span class="status-pill status-inactive" title="Lý do: ${escapeHtml(user.ban_reason || 'Không có')}">⛔ Khóa vĩnh viễn</span>`;
+      }
+
+      return `
+        <tr>
+          <td>#${user.id}</td>
+          <td>
+            <div class="user-inline">
+              <div style="position: relative; flex-shrink: 0;">
+                <img src="${resolveMediaUrl(user.avatar_url)}" alt="avatar" class="avatar-sm" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=60'">
+                <span class="presence-dot ${user.is_online ? 'presence-online' : 'presence-offline'}" style="position: absolute; bottom: 0; right: 0; border: 2px solid var(--bg-card);" title="${user.is_online ? 'Đang trực tuyến' : 'Ngoại tuyến'}"></span>
+              </div>
+              <div>
+                <strong>${escapeHtml(user.full_name || user.username)}</strong>
+                <div class="sub-text">@${escapeHtml(user.username)}</div>
+              </div>
             </div>
-          </div>
-        </td>
-        <td>${escapeHtml(user.email)}</td>
-        <td><strong>${user.posts_count || user.post_count || 0}</strong></td>
-        <td>${user.friends_count || user.friend_count || 0}</td>
-        <td>${formatDate(user.created_at)}</td>
-        <td>
-          <span class="status-pill status-${user.is_active ? 'active' : 'inactive'}">
-            ${user.is_active ? 'Hoạt động' : 'Đang khóa'}
-          </span>
-        </td>
-        <td>
-          <div class="action-buttons">
-            <button class="btn btn-sm ${user.is_active ? 'btn-danger' : 'btn-success'}" onclick="toggleUserActive(${user.id}, ${user.is_active})">
-              ${user.is_active ? '🔒 Khóa' : '🔓 Mở khóa'}
-            </button>
-            <button class="btn btn-sm btn-secondary" onclick="openResetModalDirect(${user.id}, '${escapeHtml(user.email)}', '${escapeHtml(user.username)}')">
-              🔑 Mật khẩu
-            </button>
-          </div>
-        </td>
-      </tr>
-    `).join('');
+          </td>
+          <td>${escapeHtml(user.email)}</td>
+          <td><strong>${user.posts_count || user.post_count || 0}</strong></td>
+          <td>${user.friends_count || user.friend_count || 0}</td>
+          <td>${formatDate(user.created_at)}</td>
+          <td>${statusPillHtml}</td>
+          <td>
+            <div class="action-buttons">
+              ${user.is_active ? `
+                <button class="btn btn-sm btn-danger" onclick="openBanUserModal(${user.id})" title="Khóa tài khoản kèm lý do và thời hạn">
+                  🔒 Khóa
+                </button>
+              ` : `
+                <button class="btn btn-sm btn-success" onclick="unbanUserDirect(${user.id}, '${escapeHtml(user.username)}')" title="Mở khóa tài khoản ngay">
+                  🔓 Mở khóa
+                </button>
+              `}
+              <button class="btn btn-sm btn-secondary" onclick="openResetModalDirect(${user.id}, '${escapeHtml(user.email)}', '${escapeHtml(user.username)}')">
+                🔑 Mật khẩu
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
 
     renderPagination('users-pagination', pagination, loadUsers);
 
@@ -476,27 +502,137 @@ async function loadUsers(page = 1) {
   }
 }
 
-async function toggleUserActive(userId, currentStatus) {
-  const newStatus = currentStatus ? 0 : 1;
-  const actionText = newStatus === 0 ? 'KHÓA' : 'MỞ KHÓA';
-  
-  if (!confirm(`Bạn có chắc muốn ${actionText} tài khoản người dùng #${userId}?`)) {
+// ==========================================
+// BAN USER CONTROLLERS
+// ==========================================
+let activeBanTarget = null;
+
+function openBanUserModal(userId) {
+  const user = state.users.data.find(u => u.id === userId);
+  if (!user) return;
+  activeBanTarget = user;
+
+  document.getElementById('modal-ban-title').textContent = `Khóa tài khoản @${escapeHtml(user.username)}`;
+  document.getElementById('modal-ban-user-card').innerHTML = `
+    <div class="user-item-main">
+      <img src="${resolveMediaUrl(user.avatar_url)}" alt="avatar" class="user-avatar" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'">
+      <div class="user-details">
+        <span class="user-name">${escapeHtml(user.full_name || user.username)}</span>
+        <span class="user-sub">@${escapeHtml(user.username)} • ${escapeHtml(user.email)}</span>
+      </div>
+    </div>
+    <span class="status-pill status-${user.is_active ? 'active' : 'inactive'}">
+      ${user.is_active ? '✓ Đang hoạt động' : '🔒 Đã khóa'}
+    </span>
+  `;
+
+  // Reset form controls
+  const temporaryRadio = document.querySelector('input[name="ban-type"][value="temporary"]');
+  if (temporaryRadio) temporaryRadio.checked = true;
+  const daysSelect = document.getElementById('ban-days-select');
+  if (daysSelect) daysSelect.value = '7';
+  const customDays = document.getElementById('ban-days-custom');
+  if (customDays) customDays.value = '';
+  const customWrapper = document.getElementById('custom-days-wrapper');
+  if (customWrapper) customWrapper.style.display = 'none';
+  const reasonPreset = document.getElementById('ban-reason-preset');
+  if (reasonPreset) reasonPreset.value = 'Vi phạm tiêu chuẩn cộng đồng';
+  const reasonText = document.getElementById('ban-reason-text');
+  if (reasonText) reasonText.value = 'Vi phạm tiêu chuẩn cộng đồng';
+  const groupDays = document.getElementById('group-ban-days');
+  if (groupDays) groupDays.style.display = 'block';
+
+  openModal('modal-ban-user');
+}
+
+function toggleBanDurationFields() {
+  const isTemporary = document.querySelector('input[name="ban-type"]:checked')?.value === 'temporary';
+  const groupDays = document.getElementById('group-ban-days');
+  if (groupDays) groupDays.style.display = isTemporary ? 'block' : 'none';
+}
+
+function handleBanDaysChange(value) {
+  const customWrapper = document.getElementById('custom-days-wrapper');
+  if (customWrapper) customWrapper.style.display = value === 'custom' ? 'block' : 'none';
+}
+
+function handleBanPresetChange(value) {
+  const reasonText = document.getElementById('ban-reason-text');
+  if (!reasonText) return;
+  if (value === 'custom') {
+    reasonText.value = '';
+    reasonText.focus();
+  } else {
+    reasonText.value = value;
+  }
+}
+
+async function submitBanUserAction() {
+  if (!activeBanTarget) return;
+  const isTemporary = document.querySelector('input[name="ban-type"]:checked')?.value === 'temporary';
+  const presetDays = document.getElementById('ban-days-select').value;
+  let days = presetDays === 'custom' 
+    ? parseInt(document.getElementById('ban-days-custom').value, 10) 
+    : parseInt(presetDays, 10);
+
+  if (isTemporary && (!days || isNaN(days) || days <= 0)) {
+    showToast('Vui lòng chọn hoặc nhập số ngày khóa hợp lệ (tối thiểu 1 ngày)!', 'warning');
     return;
   }
 
+  const reason = document.getElementById('ban-reason-text').value.trim();
+  if (!reason) {
+    showToast('Vui lòng nhập lý do khóa tài khoản!', 'warning');
+    return;
+  }
+
+  const btnConfirm = document.getElementById('btn-confirm-ban');
+  btnConfirm.disabled = true;
+  btnConfirm.textContent = 'Đang xử lý...';
+
   try {
-    const res = await apiRequest(`/admin/users/${userId}/status`, {
+    const res = await apiRequest(`/admin/users/${activeBanTarget.id}/ban`, {
       method: 'PUT',
-      body: JSON.stringify({ is_active: newStatus }),
+      body: JSON.stringify({
+        action: 'ban',
+        type: isTemporary ? 'temporary' : 'permanent',
+        days: isTemporary ? days : null,
+        reason,
+      }),
     });
 
     if (res.success) {
-      showToast(`Đã ${actionText.toLowerCase()} tài khoản thành công!`, 'success');
+      showToast(res.message || 'Đã khóa tài khoản thành công!', 'success');
+      closeModal('modal-ban-user');
       loadUsers(state.users.page);
       loadDashboardStats();
     }
   } catch (error) {
-    showToast(`Không thể thay đổi trạng thái: ${error.message}`, 'error');
+    showToast(`Không thể khóa tài khoản: ${error.message}`, 'error');
+  } finally {
+    btnConfirm.disabled = false;
+    btnConfirm.textContent = '🔒 Xác nhận khóa';
+  }
+}
+
+async function unbanUserDirect(userId, username) {
+  if (!confirm(`Bạn có chắc muốn MỞ KHÓA tài khoản @${username}? Người dùng sẽ có thể đăng nhập bình thường.`)) {
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/admin/users/${userId}/ban`, {
+      method: 'PUT',
+      body: JSON.stringify({ action: 'unban' }),
+    });
+
+    if (res.success) {
+      showToast(`Đã mở khóa tài khoản @${username} thành công!`, 'success');
+      loadUsers(state.users.page);
+      loadDashboardStats();
+    }
+  } catch (error) {
+    showToast(`Không thể mở khóa: ${error.message}`, 'error');
   }
 }
 
@@ -560,7 +696,7 @@ async function loadPosts(page = 1) {
             </div>
           </td>
           <td>
-            <div class="media-thumb-box" onclick="previewMedia('${resolvedMedia}', '${post.media_type}', '${escapeHtml(post.caption)}')">
+            <div class="media-thumb-box" onclick="openPostReviewModal(${post.id})" title="Nhấp để xem trước ảnh/video & kiểm duyệt">
               ${isVideo ? `
                 <video src="${resolvedMedia}" muted></video>
                 <div class="thumb-badge">▶ VIDEO</div>
@@ -585,9 +721,14 @@ async function loadPosts(page = 1) {
           </td>
           <td>${formatDate(post.created_at)}</td>
           <td>
-            <button class="btn btn-sm btn-danger" onclick="deletePostItem(${post.id})">
-              🗑️ Xóa bài
-            </button>
+            <div class="action-buttons">
+              <button class="btn btn-sm btn-secondary" onclick="openPostReviewModal(${post.id})" title="Xem đầy đủ ảnh hoặc phát video trực tiếp">
+                👁️ Xem
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="openDeletePostModal(${post.id})" title="Gỡ bài viết kèm lý do và gửi thông báo tới tác giả">
+                🗑️ Xóa bài
+              </button>
+            </div>
           </td>
         </tr>
       `;
@@ -601,44 +742,173 @@ async function loadPosts(page = 1) {
   }
 }
 
-async function deletePostItem(postId) {
-  if (!confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn bài đăng #${postId}? Hành động này sẽ gỡ bỏ tất cả ảnh/video và bình luận liên quan.`)) {
-    return;
+// ==========================================
+// POST MODERATION & REVIEW CONTROLLERS
+// ==========================================
+let activeDeleteTarget = null;
+
+function openPostReviewModal(postId) {
+  let post = state.posts.data.find(p => p.id === postId);
+  if (!post && state.stats && state.stats.recent_posts) {
+    post = state.stats.recent_posts.find(p => p.id === postId);
+  }
+  if (!post) return;
+
+  const isVideo = post.media_type === 'video' || !!post.video_url;
+  const mediaSource = post.media_url || post.video_url || post.image_url;
+  const resolvedMedia = resolveMediaUrl(mediaSource);
+  const authorName = post.full_name || post.author_name || post.username || post.author_username || 'Tác giả';
+  const authorUsername = post.username || post.author_username || 'unknown';
+  const authorAvatar = post.avatar_url || post.author_avatar;
+
+  document.getElementById('media-preview-title').textContent = isVideo ? 'Xem trước Video & Kiểm duyệt' : 'Xem trước Hình ảnh & Kiểm duyệt';
+
+  const content = document.getElementById('media-preview-content');
+  if (isVideo) {
+    content.innerHTML = `
+      <video src="${resolvedMedia}" controls autoplay playsinline class="modal-video-player" style="max-height: 55vh; width: 100%;"></video>
+    `;
+  } else {
+    content.innerHTML = `
+      <img src="${resolvedMedia}" alt="Full media" class="modal-image-preview" style="max-height: 55vh;">
+    `;
   }
 
-  try {
-    const res = await apiRequest(`/admin/posts/${postId}`, {
-      method: 'DELETE',
-    });
+  const meta = document.getElementById('media-preview-meta');
+  meta.innerHTML = `
+    <div class="review-author-row">
+      <div class="user-inline">
+        <img src="${resolveMediaUrl(authorAvatar)}" class="avatar-sm" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=60'">
+        <div>
+          <strong>${escapeHtml(authorName)}</strong>
+          <div class="sub-text">@${escapeHtml(authorUsername)} • ${formatDate(post.created_at)}</div>
+        </div>
+      </div>
+      <span class="privacy-badge privacy-${post.privacy_level || post.privacy || 'friends'}">
+        ${(post.privacy_level === 'public' || post.privacy === 'public') ? '🌐 Công khai' : (post.privacy_level === 'friends' || post.privacy === 'friends') ? '👥 Bạn bè' : '🔒 Riêng tư'}
+      </span>
+    </div>
+    ${post.caption ? `<div class="review-caption-box">${escapeHtml(post.caption)}</div>` : '<div class="sub-text">(Bài viết không có chú thích)</div>'}
+    <div class="review-actions-row">
+      <div class="engagement-pill">❤️ ${post.reactions_count || 0} cảm xúc • 💬 ${post.comments_count || 0} bình luận</div>
+      <button class="btn btn-sm btn-danger" onclick="closeModal('modal-media-preview'); openDeletePostModal(${post.id});">
+        🗑️ Gỡ bài này (kèm lý do)
+      </button>
+    </div>
+  `;
 
-    if (res.success) {
-      showToast('Đã gỡ bài viết thành công!', 'success');
-      loadPosts(state.posts.page);
-      loadDashboardStats();
-    }
-  } catch (error) {
-    showToast(`Không thể xóa bài viết: ${error.message}`, 'error');
-  }
+  openModal('modal-media-preview');
 }
 
 function previewMedia(url, type, caption) {
+  // Backward compatibility: find if any post has this media url
+  let post = state.posts.data.find(p => (p.media_url === url || p.image_url === url || p.video_url === url));
+  if (!post && state.stats && state.stats.recent_posts) {
+    post = state.stats.recent_posts.find(p => (p.media_url === url || p.image_url === url || p.video_url === url));
+  }
+
+  if (post) {
+    openPostReviewModal(post.id);
+    return;
+  }
+
   const content = document.getElementById('media-preview-content');
   const title = document.getElementById('media-preview-title');
   title.textContent = type === 'video' ? 'Xem trước Video' : 'Xem trước Hình ảnh';
 
   if (type === 'video') {
     content.innerHTML = `
-      <video src="${url}" controls autoplay class="modal-video-player"></video>
-      <p class="modal-media-caption">${caption}</p>
+      <video src="${url}" controls autoplay class="modal-video-player" style="max-height: 55vh; width: 100%;"></video>
     `;
   } else {
     content.innerHTML = `
-      <img src="${url}" alt="Full media" class="modal-image-preview">
-      <p class="modal-media-caption">${caption}</p>
+      <img src="${url}" alt="Full media" class="modal-image-preview" style="max-height: 55vh;">
     `;
   }
 
+  const meta = document.getElementById('media-preview-meta');
+  meta.innerHTML = caption ? `<div class="review-caption-box">${escapeHtml(caption)}</div>` : '';
+
   openModal('modal-media-preview');
+}
+
+function openDeletePostModal(postId) {
+  let post = state.posts.data.find(p => p.id === postId);
+  if (!post && state.stats && state.stats.recent_posts) {
+    post = state.stats.recent_posts.find(p => p.id === postId);
+  }
+  if (!post) return;
+  activeDeleteTarget = post;
+
+  const isVideo = post.media_type === 'video' || !!post.video_url;
+  const mediaSource = post.media_url || post.video_url || post.image_url;
+  const resolvedMedia = resolveMediaUrl(mediaSource);
+  const authorName = post.full_name || post.author_name || post.username || post.author_username || 'Tác giả';
+
+  document.getElementById('modal-delete-post-preview').innerHTML = `
+    <div class="post-preview-thumb">
+      ${isVideo 
+        ? `<video src="${resolvedMedia}" muted></video><div class="thumb-badge">VIDEO</div>`
+        : `<img src="${resolvedMedia}" alt="thumb" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200'">`
+      }
+    </div>
+    <div class="post-preview-info">
+      <span class="post-caption">${escapeHtml(post.caption || '(Không có chú thích)')}</span>
+      <div class="post-meta-line">
+        <span>Tác giả: <strong>@${escapeHtml(post.username || post.author_username || '')}</strong> (${escapeHtml(authorName)})</span>
+        <span>• ID: #${post.id}</span>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('delete-post-reason-preset').value = 'Hình ảnh / Video nhạy cảm, vi phạm tiêu chuẩn cộng đồng';
+  document.getElementById('delete-post-reason-text').value = 'Hình ảnh / Video nhạy cảm, vi phạm tiêu chuẩn cộng đồng';
+
+  openModal('modal-delete-post');
+}
+
+function handleDeletePostPresetChange(value) {
+  const reasonText = document.getElementById('delete-post-reason-text');
+  if (!reasonText) return;
+  if (value === 'custom') {
+    reasonText.value = '';
+    reasonText.focus();
+  } else {
+    reasonText.value = value;
+  }
+}
+
+async function submitDeletePostAction() {
+  if (!activeDeleteTarget) return;
+  const reason = document.getElementById('delete-post-reason-text').value.trim();
+
+  if (!reason) {
+    showToast('Vui lòng nhập lý do gỡ bài để thông báo cho tác giả!', 'warning');
+    return;
+  }
+
+  const btnConfirm = document.getElementById('btn-confirm-delete-post');
+  btnConfirm.disabled = true;
+  btnConfirm.textContent = 'Đang xóa...';
+
+  try {
+    const res = await apiRequest(`/admin/posts/${activeDeleteTarget.id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ reason }),
+    });
+
+    if (res.success) {
+      showToast(res.message || 'Đã gỡ bài viết vi phạm và gửi thông báo tới người đăng!', 'success');
+      closeModal('modal-delete-post');
+      loadPosts(state.posts.page);
+      loadDashboardStats();
+    }
+  } catch (error) {
+    showToast(`Không thể xóa bài viết: ${error.message}`, 'error');
+  } finally {
+    btnConfirm.disabled = false;
+    btnConfirm.textContent = '🗑️ Xác nhận gỡ & Gửi thông báo';
+  }
 }
 
 // ==========================================

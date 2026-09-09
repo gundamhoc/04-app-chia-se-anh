@@ -310,6 +310,34 @@ const initDatabase = async (pool) => {
       console.warn('⚠️ [DB Init] Kiểm tra cột media_type:', colErr.message);
     }
 
+    // Tự động kiểm tra và thêm cột banned_until & ban_reason vào bảng users
+    try {
+      const [banCols] = await pool.query("SHOW COLUMNS FROM users LIKE 'banned_until'");
+      if (banCols.length === 0) {
+        await pool.query("ALTER TABLE users ADD COLUMN banned_until DATETIME DEFAULT NULL AFTER is_active");
+        console.log('✅ [DB Init] Đã bổ sung cột banned_until vào bảng users.');
+      }
+    } catch (banErr) {
+      console.warn('⚠️ [DB Init] Kiểm tra cột banned_until:', banErr.message);
+    }
+
+    try {
+      const [reasonCols] = await pool.query("SHOW COLUMNS FROM users LIKE 'ban_reason'");
+      if (reasonCols.length === 0) {
+        await pool.query("ALTER TABLE users ADD COLUMN ban_reason VARCHAR(255) DEFAULT NULL AFTER banned_until");
+        console.log('✅ [DB Init] Đã bổ sung cột ban_reason vào bảng users.');
+      }
+    } catch (reasonErr) {
+      console.warn('⚠️ [DB Init] Kiểm tra cột ban_reason:', reasonErr.message);
+    }
+
+    // Nới lỏng type của notifications để hỗ trợ thông báo hệ thống / xóa bài
+    try {
+      await pool.query("ALTER TABLE notifications MODIFY COLUMN type VARCHAR(50) NOT NULL");
+    } catch (notifErr) {
+      console.warn('⚠️ [DB Init] Cập nhật cột notifications.type:', notifErr.message);
+    }
+
     console.log('✅ [DB Init] Toàn bộ các bảng đã sẵn sàng & đồng bộ 100%!');
   } catch (err) {
     console.error('⚠️ [DB Init Error]:', err.message);
