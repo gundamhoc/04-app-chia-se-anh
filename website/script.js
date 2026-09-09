@@ -1,7 +1,7 @@
 // Masita Landing Page Interactive Scripts
 
 document.addEventListener('DOMContentLoaded', () => {
-  // 1. Interactive Phone Mockup Tabs
+  // 1. Interactive Phone Mockup Tabs (Real App Screenshots)
   const tabs = document.querySelectorAll('.screen-tab');
   const views = document.querySelectorAll('.app-view');
 
@@ -25,34 +25,58 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 2. QR Code Modal Popup
-  const showQrBtn = document.getElementById('btn-show-qr');
-  const qrModal = document.getElementById('qr-modal');
-  const closeQrBtn = document.getElementById('modal-close-btn');
+  // 2. Generic Modal Manager (QR, Changelog, Support, Terms, Privacy)
+  const openModal = (modalId) => {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.add('active');
+      document.body.style.overflow = 'hidden'; // prevent background scrolling
+    }
+  };
 
-  if (showQrBtn && qrModal) {
-    showQrBtn.addEventListener('click', () => {
-      qrModal.classList.add('active');
+  const closeModal = (modal) => {
+    if (modal) {
+      modal.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+  };
+
+  // Triggers
+  document.getElementById('btn-show-qr')?.addEventListener('click', () => openModal('qr-modal'));
+  document.getElementById('btn-changelog')?.addEventListener('click', () => openModal('changelog-modal'));
+  document.getElementById('btn-support')?.addEventListener('click', () => openModal('support-modal'));
+  document.getElementById('btn-terms')?.addEventListener('click', () => openModal('terms-modal'));
+  document.getElementById('btn-privacy')?.addEventListener('click', () => openModal('privacy-modal'));
+
+  // Close buttons with data-close
+  document.querySelectorAll('[data-close]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const modalId = btn.getAttribute('data-close');
+      const targetModal = document.getElementById(modalId);
+      closeModal(targetModal);
     });
+  });
 
-    closeQrBtn?.addEventListener('click', () => {
-      qrModal.classList.remove('active');
-    });
+  // Modal default close button (#modal-close-btn for QR)
+  document.getElementById('modal-close-btn')?.addEventListener('click', () => {
+    closeModal(document.getElementById('qr-modal'));
+  });
 
-    // Close when clicking outside the box
-    qrModal.addEventListener('click', (e) => {
-      if (e.target === qrModal) {
-        qrModal.classList.remove('active');
+  // Close when clicking overlay backdrop
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        closeModal(overlay);
       }
     });
+  });
 
-    // Close on Escape key
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && qrModal.classList.contains('active')) {
-        qrModal.classList.remove('active');
-      }
-    });
-  }
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay.active').forEach(modal => closeModal(modal));
+    }
+  });
 
   // 3. Copy APK Download Link
   const copyBtn = document.getElementById('btn-copy-link');
@@ -89,8 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const x = e.clientX - rect.left - rect.width / 2;
       const y = e.clientY - rect.top - rect.height / 2;
       
-      const rotateX = (-y / rect.height) * 14;
-      const rotateY = (x / rect.width) * 14;
+      const rotateX = (-y / rect.height) * 12;
+      const rotateY = (x / rect.width) * 12;
       
       phoneFrame.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-8px)`;
     });

@@ -1456,6 +1456,169 @@ h1, h2, h3, h4, h5 {
   width: 100%;
 }
 
+/* Real App Screenshot Inside Phone Frame */
+.real-screen-img {
+  width: 100%;
+  height: 100%;
+  max-height: 520px;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+  border-radius: 18px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.app-view {
+  display: none;
+  padding: 8px;
+  animation: fadeIn 0.3s ease;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.app-view::-webkit-scrollbar {
+  display: none;
+}
+
+/* Modal Large & Content Styles */
+.modal-lg {
+  max-width: 650px;
+  text-align: left;
+}
+
+.modal-subhead {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+}
+
+.modal-scroll-content {
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(108, 99, 255, 0.4) transparent;
+}
+
+/* Changelog Styles */
+.changelog-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.changelog-item.highlight {
+  border-color: var(--border-glass-glow);
+  background: rgba(108, 99, 255, 0.08);
+}
+
+.cl-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.cl-ver {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.cl-badge {
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+}
+
+.cl-date {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+
+.cl-list {
+  padding-left: 20px;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.cl-list li {
+  margin-bottom: 6px;
+}
+
+.cl-list strong {
+  color: #E2E8F0;
+}
+
+/* Support Styles */
+.support-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.support-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: left;
+}
+
+.support-icon {
+  font-size: 2rem;
+}
+
+.support-detail strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+.support-detail p {
+  font-size: 0.9rem;
+  color: var(--secondary);
+  margin-bottom: 2px !important;
+}
+
+.support-detail small {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+/* Terms & Privacy Body */
+.modal-text-body h4 {
+  font-size: 1.05rem;
+  color: #fff;
+  margin: 16px 0 6px;
+}
+
+.modal-text-body h4:first-child {
+  margin-top: 0;
+}
+
+.modal-text-body p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
 /* ==========================================================
    RESPONSIVE DESIGN
    ========================================================== */
