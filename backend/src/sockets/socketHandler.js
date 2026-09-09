@@ -294,11 +294,14 @@ const sendNotificationToGroup = (io, groupId, eventName, payload) => {
 
 module.exports = {
   initSocketHandler,
+  getIO,
   getSocketId,
   getOnlineUsers,
   isUserOnline,
   sendNotificationToUser,
+  kickUserSockets,
   broadcastToUsers,
   sendNotificationToGroup,
 };
+
 
