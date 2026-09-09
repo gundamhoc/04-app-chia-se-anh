@@ -246,13 +246,15 @@ async function loadDashboardStats() {
     if (stats.recent_users && stats.recent_users.length > 0) {
       recentUsersContainer.innerHTML = stats.recent_users.map(u => `
         <div class="user-item">
-          <img src="${resolveMediaUrl(u.avatar_url)}" alt="${escapeHtml(u.username)}" class="user-avatar" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'">
-          <div class="user-details">
-            <span class="user-name">${escapeHtml(u.full_name || u.username)}</span>
-            <span class="user-sub">@${escapeHtml(u.username)} • ${formatDate(u.created_at)}</span>
+          <div class="user-item-main">
+            <img src="${resolveMediaUrl(u.avatar_url)}" alt="${escapeHtml(u.username)}" class="user-avatar" onerror="this.src='https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'">
+            <div class="user-details">
+              <span class="user-name">${escapeHtml(u.full_name || u.username)}</span>
+              <span class="user-sub">@${escapeHtml(u.username)} • ${formatDate(u.created_at)}</span>
+            </div>
           </div>
           <span class="status-pill status-${u.is_active ? 'active' : 'inactive'}">
-            ${u.is_active ? 'Hoạt động' : 'Bị khóa'}
+            ${u.is_active ? '✓ Hoạt động' : '🔒 Đã khóa'}
           </span>
         </div>
       `).join('');
@@ -263,24 +265,31 @@ async function loadDashboardStats() {
     // Recent Posts List
     const recentPostsContainer = document.getElementById('overview-recent-posts');
     if (stats.recent_posts && stats.recent_posts.length > 0) {
-      recentPostsContainer.innerHTML = stats.recent_posts.map(p => `
-        <div class="post-preview-item">
-          <div class="post-preview-thumb">
-            ${p.media_type === 'video' 
-              ? `<video src="${resolveMediaUrl(p.media_url)}" muted></video><div class="thumb-badge">VIDEO</div>`
-              : `<img src="${resolveMediaUrl(p.media_url)}" alt="Post image" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200'">`
-            }
-          </div>
-          <div class="post-preview-info">
-            <span class="post-caption">${escapeHtml(p.caption || '(Không có chú thích)')}</span>
-            <div class="post-meta-line">
-              <span>Đăng bởi <strong>@${escapeHtml(p.username)}</strong></span>
-              <span>• ${formatDate(p.created_at)}</span>
-              <span>• ❤️ ${p.reactions_count || 0}</span>
+      recentPostsContainer.innerHTML = stats.recent_posts.map(p => {
+        const isVideo = p.media_type === 'video' || !!p.video_url;
+        const mediaSource = p.media_url || p.video_url || p.image_url;
+        const resolvedMedia = resolveMediaUrl(mediaSource);
+        const authorUsername = p.username || p.author_username || 'unknown';
+
+        return `
+          <div class="post-preview-item">
+            <div class="post-preview-thumb" onclick="previewMedia('${resolvedMedia}', '${isVideo ? 'video' : 'image'}', '${escapeHtml(p.caption || '')}')" title="Bấm để xem ảnh/video lớn">
+              ${isVideo 
+                ? `<video src="${resolvedMedia}" muted></video><div class="thumb-badge">▶ VIDEO</div>`
+                : `<img src="${resolvedMedia}" alt="Post thumbnail" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200'">`
+              }
+            </div>
+            <div class="post-preview-info">
+              <span class="post-caption" title="${escapeHtml(p.caption || '')}">${escapeHtml(p.caption || '(Không có chú thích)')}</span>
+              <div class="post-meta-line">
+                <span>Đăng bởi <strong>@${escapeHtml(authorUsername)}</strong></span>
+                <span>• ${formatDate(p.created_at)}</span>
+                <span>• ❤️ ${p.reactions_count || 0}</span>
+              </div>
             </div>
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     } else {
       recentPostsContainer.innerHTML = '<div class="empty-state">Chưa có bài viết nào gần đây.</div>';
     }
