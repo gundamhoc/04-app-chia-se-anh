@@ -22,6 +22,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { ColorScheme } from '../../constants/Colors';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuthStore } from '../../store/authStore';
+import { useMuteStore } from '../../store/muteStore';
 import { useSocket } from '../../hooks/useSocket';
 import { useToast } from '../../hooks/useToast';
 import { useI18n } from '../../utils/i18n';
@@ -184,6 +185,7 @@ export default function ChatScreen() {
       }
       if (data.is_muted !== undefined) {
         setIsMuted(Boolean(data.is_muted));
+        useMuteStore.getState().setDirectMuted(Number(friendId), Boolean(data.is_muted));
       }
       // Đánh dấu đã đọc trên server
       await messageService.markMessagesRead(friendId);
@@ -660,6 +662,7 @@ export default function ChatScreen() {
       const next = !isMuted;
       const res = await messageService.toggleMute(friendId, next);
       setIsMuted(res);
+      useMuteStore.getState().setDirectMuted(Number(friendId), res);
       showToast('success', res ? 'Đã tắt thông báo cuộc trò chuyện! 🔕' : 'Đã bật thông báo cuộc trò chuyện! 🔔');
     } catch {
       showToast('error', 'Không thể thay đổi cài đặt thông báo.');

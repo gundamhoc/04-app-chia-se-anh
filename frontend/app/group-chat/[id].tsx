@@ -23,6 +23,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { ColorScheme } from '../../constants/Colors';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
+import { useMuteStore } from '../../store/muteStore';
 import { useSocket } from '../../hooks/useSocket';
 import { useToast } from '../../hooks/useToast';
 import { useI18n } from '../../utils/i18n';
@@ -134,6 +135,7 @@ export default function GroupChatScreen() {
       }
       if (detail.is_muted !== undefined) {
         setIsMuted(Boolean(detail.is_muted));
+        useMuteStore.getState().setGroupMuted(Number(groupId), Boolean(detail.is_muted));
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Không thể tải tin nhắn nhóm.';
@@ -186,7 +188,9 @@ export default function GroupChatScreen() {
     socket.on('group_members_updated', handleGroupUpdated);
 
     return () => {
-      socket.emit('leave_group', { groupId });
+      // KHONG emit leave_group: phong group duoc quan ly o tang socketService
+      // (join toan bo luc connect de notification nen van chay khi o man hinh khac;
+      // server tu da khoi phong khi bi xoa/roi nhom qua leaveGroupRoom)
       socket.off('new_group_message', handleNewGroupMessage);
       socket.off('user_group_typing', handleGroupTyping);
       socket.off('group_updated', handleGroupUpdated);
@@ -677,6 +681,7 @@ export default function GroupChatScreen() {
       const next = !isMuted;
       const res = await groupService.toggleGroupMute(groupId, next);
       setIsMuted(res);
+      useMuteStore.getState().setGroupMuted(Number(groupId), res);
       showToast('success', res ? 'Đã tắt thông báo nhóm! 🔕' : 'Đã bật thông báo nhóm! 🔔');
     } catch {
       showToast('error', 'Không thể đổi thông báo nhóm.');

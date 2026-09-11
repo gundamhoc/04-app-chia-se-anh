@@ -20,6 +20,7 @@ import { ColorScheme } from '../../constants/Colors';
 import { useTheme } from '../../context/ThemeContext';
 import { useSocket } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
+import { useMuteStore } from '../../store/muteStore';
 import { useI18n } from '../../utils/i18n';
 import { messageService } from '../../services/messageService';
 import { friendService } from '../../services/friendService';
@@ -98,11 +99,13 @@ export default function MessagesScreen() {
         setConversations((prev) =>
           prev.map((c) => (c.friend_id === actionTarget.id ? { ...c, is_muted: newMuted } : c))
         );
+        useMuteStore.getState().setDirectMuted(Number(actionTarget.id), newMuted);
       } else {
         const newMuted = await groupService.toggleGroupMute(actionTarget.id, !actionTarget.is_muted);
         setGroups((prev) =>
           prev.map((g) => (g.id === actionTarget.id ? { ...g, is_muted: newMuted } : g))
         );
+        useMuteStore.getState().setGroupMuted(Number(actionTarget.id), newMuted);
       }
     } catch (err) {
       console.warn('Lỗi đổi thông báo:', err);
@@ -133,6 +136,12 @@ export default function MessagesScreen() {
       setConversations(convs);
       setFriends(friendsList);
       setGroups(groupsList);
+      useMuteStore.getState().setMutedDirect(
+        convs.filter((c) => c.is_muted).map((c) => Number(c.friend_id))
+      );
+      useMuteStore.getState().setMutedGroups(
+        groupsList.filter((g) => g.is_muted).map((g) => Number(g.id))
+      );
     } catch (e) {
       console.warn('Lỗi tải danh sách tin nhắn:', e);
     } finally {

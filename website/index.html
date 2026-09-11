@@ -1,634 +1,1234 @@
 <!DOCTYPE html>
 <html lang="vi">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Masita - Mạng Xã Hội Chia Sẻ Khoảnh Khắc Thế Hệ Mới</title>
-  <meta name="description"
-    content="Khám phá Masita - Ứng dụng mạng xã hội hiện đại: chia sẻ khoảnh khắc, lướt video mượt mà, trò chuyện thời gian thực và kết nối không giới hạn. Tải APK v1.0.5 ngay!">
+  <title>Masita — Mạng Xã Hội Chia Sẻ Khoảnh Khắc</title>
+  <meta name="description" content="Masita là ứng dụng mạng xã hội thế hệ mới: chia sẻ khoảnh khắc, chat realtime, video feed mượt mà. Tải APK v1.0.6 miễn phí ngay hôm nay.">
   <link rel="icon" type="image/png" href="assets/favicon.png">
-
-  <!-- Google Fonts: Outfit & Plus Jakarta Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  <link rel="stylesheet" href="styles.css">
+    :root {
+      --bg: #050508;
+      --bg2: #0a0a12;
+      --surface: #0f0f1a;
+      --surface2: #141424;
+      --border: rgba(255,255,255,0.07);
+      --border2: rgba(255,255,255,0.12);
+      --purple: #7C3AED;
+      --purple-light: #A855F7;
+      --pink: #EC4899;
+      --blue: #3B82F6;
+      --cyan: #06B6D4;
+      --text: #F1F5F9;
+      --text2: #94A3B8;
+      --text3: #475569;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 0 60px rgba(124,58,237,0.15);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* ─── NOISE TEXTURE ─── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    /* ─── GRADIENT ORBS ─── */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+      animation: floatOrb 20s ease-in-out infinite;
+    }
+    .orb-1 { width: 600px; height: 600px; background: rgba(124,58,237,0.12); top: -200px; left: -100px; animation-delay: 0s; }
+    .orb-2 { width: 500px; height: 500px; background: rgba(236,72,153,0.08); top: 30%; right: -150px; animation-delay: -7s; }
+    .orb-3 { width: 400px; height: 400px; background: rgba(59,130,246,0.08); bottom: 10%; left: 20%; animation-delay: -14s; }
+
+    @keyframes floatOrb {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -30px) scale(1.05); }
+      66% { transform: translate(-20px, 20px) scale(0.95); }
+    }
+
+    /* ─── LAYOUT ─── */
+    .container { max-width: 1160px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+    /* ─── NAV ─── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      background: rgba(5,5,8,0.8);
+      border-bottom: 1px solid var(--border);
+      transition: all 0.3s;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo img { width: 32px; height: 32px; border-radius: 8px; }
+    .nav-logo span { font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+    .nav-logo .dot { color: var(--purple-light); }
+    .nav-links { display: flex; gap: 32px; }
+    .nav-links a { color: var(--text2); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta { display: flex; align-items: center; gap: 12px; }
+    .btn-ghost {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border2); background: transparent;
+      color: var(--text2); font-size: 13px; font-weight: 500;
+      text-decoration: none; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-ghost:hover { border-color: rgba(255,255,255,0.25); color: var(--text); background: rgba(255,255,255,0.05); }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 20px; border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--purple), var(--purple-light));
+      color: #fff; font-size: 14px; font-weight: 600;
+      text-decoration: none; border: none; cursor: pointer;
+      transition: all 0.2s; box-shadow: 0 4px 20px rgba(124,58,237,0.35);
+      white-space: nowrap;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(124,58,237,0.5); }
+    .btn-primary:active { transform: translateY(0); }
+
+    /* ─── HERO ─── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding-top: 80px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+      width: 100%;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px 6px 8px;
+      background: rgba(124,58,237,0.12);
+      border: 1px solid rgba(124,58,237,0.3);
+      border-radius: 100px;
+      font-size: 12px; font-weight: 600;
+      color: var(--purple-light);
+      margin-bottom: 24px;
+      width: fit-content;
+    }
+    .hero-badge-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--purple-light);
+      box-shadow: 0 0 8px var(--purple-light);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+    .hero-title {
+      font-size: clamp(40px, 5vw, 64px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -2px;
+      margin-bottom: 20px;
+    }
+    .hero-title .line2 {
+      background: linear-gradient(135deg, var(--purple-light), var(--pink), var(--blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-desc {
+      font-size: 17px;
+      color: var(--text2);
+      line-height: 1.7;
+      margin-bottom: 36px;
+      max-width: 480px;
+    }
+    .hero-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 48px; }
+    .btn-download {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 14px 28px; border-radius: var(--radius);
+      background: linear-gradient(135deg, var(--purple), var(--purple-light));
+      color: #fff; font-size: 15px; font-weight: 700;
+      text-decoration: none; border: none; cursor: pointer;
+      transition: all 0.25s;
+      box-shadow: 0 8px 32px rgba(124,58,237,0.4);
+    }
+    .btn-download:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(124,58,237,0.55); }
+    .btn-outline {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 13px 24px; border-radius: var(--radius);
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--text2); font-size: 15px; font-weight: 600;
+      text-decoration: none; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-outline:hover { border-color: rgba(255,255,255,0.3); color: var(--text); background: rgba(255,255,255,0.04); }
+
+    .hero-stats { display: flex; gap: 32px; }
+    .hero-stat { }
+    .hero-stat-num { font-size: 24px; font-weight: 800; color: var(--text); display: block; letter-spacing: -1px; }
+    .hero-stat-lbl { font-size: 12px; color: var(--text3); font-weight: 500; }
+
+    /* ─── PHONE MOCKUP ─── */
+    .phone-wrap { display: flex; justify-content: center; align-items: center; position: relative; }
+    .phone-glow {
+      position: absolute;
+      width: 320px; height: 500px;
+      background: radial-gradient(ellipse at center, rgba(124,58,237,0.2) 0%, transparent 70%);
+      border-radius: 50%;
+      filter: blur(40px);
+      pointer-events: none;
+    }
+    .phone {
+      width: 260px;
+      background: linear-gradient(160deg, #1a1a2e 0%, #0f0f1a 100%);
+      border-radius: 36px;
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 40px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.1);
+      overflow: hidden;
+      position: relative;
+      animation: phoneFloat 6s ease-in-out infinite;
+    }
+    @keyframes phoneFloat { 0%,100%{transform:translateY(0) rotate(-1deg);} 50%{transform:translateY(-12px) rotate(1deg);} }
+
+    .phone-notch {
+      width: 80px; height: 28px;
+      background: #050508;
+      border-radius: 0 0 20px 20px;
+      margin: 0 auto;
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px;
+    }
+    .phone-notch-dot { width: 8px; height: 8px; border-radius: 50%; background: #1e1e2e; }
+    .phone-notch-dot.camera { background: #2a1f3d; }
+
+    .phone-screen {
+      height: 520px;
+      overflow: hidden;
+      position: relative;
+    }
+    .phone-screen img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: opacity 0.4s ease;
+    }
+    .phone-screen img.hidden { opacity: 0; position: absolute; top: 0; left: 0; }
+    .phone-screen img.active { opacity: 1; }
+
+    .phone-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 20px;
+    }
+    .phone-tab {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 14px; border-radius: 100px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text3); font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .phone-tab.active { border-color: var(--purple); background: rgba(124,58,237,0.15); color: var(--purple-light); }
+    .phone-tab:hover:not(.active) { border-color: var(--border2); color: var(--text2); }
+
+    /* ─── SECTION COMMON ─── */
+    section { padding: 100px 0; position: relative; z-index: 1; }
+    .section-label {
+      display: inline-block;
+      font-size: 11px; font-weight: 700; letter-spacing: 2px;
+      color: var(--purple-light); text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: clamp(28px, 3.5vw, 44px);
+      font-weight: 800; letter-spacing: -1.5px;
+      line-height: 1.15; margin-bottom: 16px;
+    }
+    .section-sub { font-size: 16px; color: var(--text2); line-height: 1.7; max-width: 560px; }
+    .text-center { text-align: center; }
+    .text-center .section-sub { margin: 0 auto; }
+
+    /* ─── DIVIDER ─── */
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border2), transparent);
+      margin: 0;
+    }
+
+    /* ─── FEATURES ─── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+      margin-top: 60px;
+    }
+    .feat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .feat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(124,58,237,0.6), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feat-card:hover { border-color: rgba(124,58,237,0.3); transform: translateY(-3px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+    .feat-card:hover::before { opacity: 1; }
+
+    .feat-card.col-8 { grid-column: span 8; }
+    .feat-card.col-4 { grid-column: span 4; }
+    .feat-card.col-6 { grid-column: span 6; }
+    .feat-card.col-4-sm { grid-column: span 4; }
+
+    .feat-icon-wrap {
+      width: 46px; height: 46px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 18px;
+    }
+    .icon-purple { background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.2); }
+    .icon-pink   { background: rgba(236,72,153,0.15); border: 1px solid rgba(236,72,153,0.2); }
+    .icon-blue   { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.2); }
+    .icon-cyan   { background: rgba(6,182,212,0.15);  border: 1px solid rgba(6,182,212,0.2); }
+    .icon-amber  { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.2); }
+    .icon-green  { background: rgba(34,197,94,0.15);  border: 1px solid rgba(34,197,94,0.2); }
+
+    .feat-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.3px; }
+    .feat-card p { font-size: 14px; color: var(--text2); line-height: 1.65; }
+
+    /* Chat bubble demo */
+    .chat-demo { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+    .bubble {
+      padding: 10px 14px; border-radius: 16px;
+      font-size: 13px; line-height: 1.5; max-width: 85%;
+    }
+    .bubble-in { background: var(--surface2); color: var(--text2); align-self: flex-start; border-radius: 4px 16px 16px 16px; }
+    .bubble-out { background: linear-gradient(135deg, var(--purple), var(--purple-light)); color: #fff; align-self: flex-end; border-radius: 16px 4px 16px 16px; }
+
+    /* Video player demo */
+    .video-demo {
+      margin-top: 20px;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      height: 130px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .video-demo-bg {
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, #1a0533, #0f1929);
+    }
+    .video-play-btn {
+      width: 48px; height: 48px;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(8px);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(255,255,255,0.2);
+      position: relative; z-index: 1;
+      animation: playPulse 2s infinite;
+    }
+    @keyframes playPulse {
+      0%,100%{ box-shadow: 0 0 0 0 rgba(255,255,255,0.15); }
+      50%{ box-shadow: 0 0 0 12px rgba(255,255,255,0); }
+    }
+    .video-progress {
+      position: absolute; bottom: 12px; left: 14px; right: 14px; z-index: 1;
+    }
+    .progress-track { height: 3px; background: rgba(255,255,255,0.2); border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; width: 60%; background: linear-gradient(90deg, var(--purple-light), var(--pink)); border-radius: 2px; }
+
+    /* Tags demo */
+    .tag-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .tag {
+      padding: 5px 12px; border-radius: 100px;
+      font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border2);
+      color: var(--text2);
+    }
+    .tag.purple { background: rgba(124,58,237,0.1); border-color: rgba(124,58,237,0.3); color: var(--purple-light); }
+    .tag.pink { background: rgba(236,72,153,0.1); border-color: rgba(236,72,153,0.3); color: #F472B6; }
+    .tag.blue { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); color: #60A5FA; }
+
+    /* Presence demo */
+    .presence-demo { display: flex; gap: -8px; margin-top: 16px; align-items: center; }
+    .avatar-stack { display: flex; }
+    .av {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 2px solid var(--surface);
+      margin-left: -8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      background: linear-gradient(135deg, var(--purple), var(--pink));
+    }
+    .av:first-child { margin-left: 0; }
+    .online-dot { width: 8px; height: 8px; border-radius: 50%; background: #22C55E; box-shadow: 0 0 8px #22C55E; }
+    .presence-text { font-size: 12px; color: var(--text2); margin-left: 12px; }
+
+    /* ─── TECH STACK ─── */
+    .tech-section { padding: 80px 0; }
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 40px;
+    }
+    .tech-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 20px 16px;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .tech-item:hover { border-color: var(--border2); transform: translateY(-2px); }
+    .tech-icon { font-size: 28px; margin-bottom: 8px; display: block; }
+    .tech-name { font-size: 13px; font-weight: 600; color: var(--text); display: block; }
+    .tech-desc { font-size: 11px; color: var(--text3); margin-top: 2px; display: block; }
+
+    /* ─── DOWNLOAD ─── */
+    .download-section { padding: 100px 0; }
+    .download-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 60px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 60px;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .download-card::before {
+      content: '';
+      position: absolute;
+      top: -100px; left: -100px;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .dl-version-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 100px;
+      background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25);
+      font-size: 12px; font-weight: 600; color: #4ADE80;
+      margin-bottom: 20px;
+    }
+    .dl-title { font-size: 36px; font-weight: 800; letter-spacing: -1.5px; margin-bottom: 12px; }
+    .dl-desc { font-size: 15px; color: var(--text2); line-height: 1.7; margin-bottom: 28px; }
+    .dl-specs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px; }
+    .dl-spec { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+    .dl-spec-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--purple-light); flex-shrink: 0; }
+    .dl-spec span { color: var(--text2); }
+    .dl-spec strong { color: var(--text); }
+    .dl-btns { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .btn-download-xl {
+      display: inline-flex; align-items: center; gap: 12px;
+      padding: 16px 32px; border-radius: var(--radius);
+      background: linear-gradient(135deg, var(--purple), var(--purple-light));
+      color: #fff; font-size: 16px; font-weight: 700;
+      text-decoration: none; border: none; cursor: pointer;
+      transition: all 0.25s;
+      box-shadow: 0 8px 32px rgba(124,58,237,0.4);
+    }
+    .btn-download-xl:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(124,58,237,0.55); }
+
+    /* QR Card */
+    .qr-box {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 20px;
+      padding: 28px;
+      text-align: center;
+      min-width: 200px;
+    }
+    .qr-img { width: 140px; height: 140px; border-radius: 12px; background: #fff; padding: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+    .qr-img img { width: 100%; height: 100%; object-fit: contain; }
+    .qr-label { font-size: 12px; color: var(--text2); font-weight: 500; }
+
+    /* ─── GUIDE ─── */
+    .guide-steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 60px;
+    }
+    .step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      position: relative;
+      transition: all 0.3s;
+    }
+    .step:hover { border-color: rgba(124,58,237,0.3); transform: translateY(-3px); }
+    .step-num {
+      font-size: 56px; font-weight: 900;
+      color: rgba(124,58,237,0.1);
+      line-height: 1;
+      position: absolute; top: 20px; right: 24px;
+      letter-spacing: -3px;
+    }
+    .step-icon { font-size: 32px; margin-bottom: 16px; display: block; }
+    .step h3 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+    .step p { font-size: 14px; color: var(--text2); line-height: 1.65; }
+    .step code {
+      background: var(--surface2); border: 1px solid var(--border);
+      padding: 1px 6px; border-radius: 4px;
+      font-size: 12px; color: var(--purple-light);
+    }
+
+    /* ─── CHANGELOG ─── */
+    .changelog-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 48px;
+    }
+    .cl-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      transition: all 0.2s;
+    }
+    .cl-item.latest {
+      border-color: rgba(124,58,237,0.35);
+      background: linear-gradient(135deg, rgba(124,58,237,0.06), var(--surface));
+    }
+    .cl-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .cl-ver { font-size: 16px; font-weight: 700; }
+    .cl-tag {
+      padding: 3px 10px; border-radius: 100px;
+      font-size: 11px; font-weight: 600;
+      background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3);
+      color: var(--purple-light);
+    }
+    .cl-date { font-size: 12px; color: var(--text3); margin-left: auto; }
+    .cl-ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .cl-ul li { display: flex; gap: 10px; font-size: 14px; color: var(--text2); line-height: 1.55; }
+    .cl-ul li::before { content: '•'; color: var(--purple-light); flex-shrink: 0; margin-top: 1px; }
+    .cl-ul strong { color: var(--text); font-weight: 600; }
+
+    /* ─── FOOTER ─── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 60px 0 32px;
+      position: relative; z-index: 1;
+    }
+    .footer-top {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      gap: 48px;
+      margin-bottom: 48px;
+    }
+    .footer-brand p { font-size: 14px; color: var(--text2); line-height: 1.7; margin-top: 14px; max-width: 220px; }
+    .footer-col h5 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 16px; letter-spacing: 0.3px; }
+    .footer-col a {
+      display: block; font-size: 14px; color: var(--text3);
+      text-decoration: none; margin-bottom: 10px;
+      transition: color 0.2s;
+    }
+    .footer-col a:hover { color: var(--text2); }
+    .footer-bottom {
+      border-top: 1px solid var(--border);
+      padding-top: 28px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .footer-bottom p { font-size: 13px; color: var(--text3); }
+    .footer-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #4ADE80; font-weight: 500; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #22C55E; box-shadow: 0 0 8px #22C55E; animation: pulse 2s infinite; }
+
+    /* ─── MODALS ─── */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 999;
+      background: rgba(5,5,8,0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 24px;
+      padding: 36px;
+      width: 100%;
+      max-width: 480px;
+      position: relative;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+    }
+    .modal-box.wide { max-width: 640px; }
+    .modal-close-btn {
+      position: absolute; top: 16px; right: 16px;
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text2); font-size: 18px; line-height: 1;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .modal-close-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+    .modal-box h3 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .modal-sub { font-size: 14px; color: var(--text2); margin-bottom: 24px; }
+
+    /* ─── COPY TOAST ─── */
+    .toast {
+      position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(80px);
+      background: var(--surface2); border: 1px solid var(--border2);
+      border-radius: var(--radius-sm); padding: 12px 20px;
+      font-size: 14px; font-weight: 500; color: var(--text);
+      z-index: 9999; transition: transform 0.3s ease;
+      white-space: nowrap;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ─── SCROLL FADE ─── */
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.visible { opacity: 1; transform: none; }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 900px) {
+      .hero-inner { grid-template-columns: 1fr; gap: 40px; }
+      .phone-wrap { order: -1; }
+      .phone { width: 220px; }
+      .phone-screen { height: 440px; }
+      .feat-card.col-8, .feat-card.col-4, .feat-card.col-6, .feat-card.col-4-sm { grid-column: span 12; }
+      .download-card { grid-template-columns: 1fr; gap: 40px; }
+      .guide-steps { grid-template-columns: 1fr; }
+      .footer-top { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .features-grid { gap: 12px; }
+      .download-card { padding: 32px 24px; }
+      .footer-top { grid-template-columns: 1fr; gap: 32px; }
+      .hero-stats { gap: 20px; }
+    }
+  </style>
 </head>
-
 <body>
-  <!-- Background Glow & Mesh Orbs -->
-  <div class="bg-glow bg-glow-1"></div>
-  <div class="bg-glow bg-glow-2"></div>
-  <div class="bg-glow bg-glow-3"></div>
 
-  <!-- Header / Navigation -->
-  <header class="site-header">
-    <div class="container nav-container">
-      <a href="#" class="brand-logo">
-        <img src="assets/app_logo.webp" alt="Masita Logo" class="logo-img" onerror="this.src='assets/icon.png'">
-        <span class="brand-name">Masita<span class="brand-dot">.</span></span>
+  <!-- Ambient Orbs -->
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <!-- NAV -->
+  <nav id="navbar">
+    <a href="#" class="nav-logo">
+      <img src="assets/app_logo.webp" alt="Masita" onerror="this.src='assets/icon.png'">
+      <span>Masita<span class="dot">.</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Tính năng</a>
+      <a href="#download">Tải xuống</a>
+      <a href="#guide">Cài đặt</a>
+      <a href="#changelog">Changelog</a>
+    </div>
+    <div class="nav-cta">
+      <a href="https://github.com/gundamhoc/04-app-chia-se-anh" target="_blank" rel="noreferrer" class="btn-ghost">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
       </a>
-
-      <nav class="nav-links">
-        <a href="#features">Tính năng</a>
-        <a href="#preview">Trải nghiệm app</a>
-        <a href="#download">Tải APK</a>
-        <a href="#guide">Hướng dẫn cài</a>
-      </nav>
-
-      <div class="nav-actions">
-        <a href="https://github.com/gundamhoc/04-app-chia-se-anh" target="_blank" rel="noreferrer" class="btn-github">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-          </svg>
-          <span>GitHub</span>
-        </a>
-        <a href="#download" class="btn-primary btn-nav">
-          <span>Tải APK v1.0.5</span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-        </a>
-      </div>
+      <a href="#download" class="btn-primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Tải APK v1.0.6
+      </a>
     </div>
-  </header>
+  </nav>
 
-  <!-- Hero Section -->
-  <section class="hero-section">
-    <div class="container hero-container">
-      <div class="hero-content">
-        <div class="release-badge">
-          <span class="badge-dot"></span>
-          <span>Bản phát hành mới nhất: <strong>v1.0.5 APK</strong></span>
-          <span class="badge-arrow">→</span>
-        </div>
-
-        <h1 class="hero-title">
-          Kết nối cảm xúc,<br>
-          <span class="gradient-text">chia sẻ trọn vẹn</span> khoảnh khắc.
-        </h1>
-
-        <p class="hero-desc">
-          <strong>Masita</strong> là mạng xã hội đa phương tiện thế hệ mới. Trải nghiệm lướt video ngắn mượt mà, trò
-          chuyện thời gian thực, xem và tải ảnh gốc chuẩn HDR với tốc độ siêu tốc.
-        </p>
-
-        <div class="hero-cta-group">
-          <a href="https://expo.dev/artifacts/eas/B2QYyBP1laGT2eZrxI-t4x2_ptKjKJc1IgIMaRuXYQ4.apk"
-            target="_blank" rel="noreferrer" class="btn-primary btn-lg" id="btn-hero-download">
-            <span class="btn-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993s-.4483.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9994.4482.9994.9993s-.4483.9997-.9994.9997m11.4045-6.02l1.997-3.4591a.416.416 0 00-.1523-.5676.416.416 0 00-.5677.1523l-2.0223 3.503c-1.6083-.7336-3.428-.1466-5.1362-.1466-1.708 0-3.528-.587-5.1363.1466L4.838 5.447a.416.416 0 00-.5677-.1523.416.416 0 00-.1523.5676l1.997 3.4591C2.688 11.2338 0 15.2605 0 19.8667h24c0-4.6062-2.688-8.6329-6.1185-10.5453" />
-              </svg>
-            </span>
-            <div class="btn-text-wrap">
-              <span class="btn-subtext">Tải file trực tiếp</span>
-              <span class="btn-maintext">Tải APK Android (v1.0.5)</span>
-            </div>
-          </a>
-
-          <button class="btn-secondary btn-lg" id="btn-show-qr">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
-            <span>Quét mã QR</span>
-          </button>
-        </div>
-
-        <!-- Trust Badges / Stats -->
-        <div class="hero-stats">
-          <div class="stat-item">
-            <span class="stat-num">v1.0.5</span>
-            <span class="stat-label">Bản ổn định nhất</span>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <span class="stat-num">100%</span>
-            <span class="stat-label">Miễn phí trải nghiệm</span>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <span class="stat-num">OTA</span>
-            <span class="stat-label">Cập nhật tự động</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Hero Phone Mockup (Interactive Showcase) -->
-      <div class="hero-mockup-wrap" id="preview">
-        <div class="phone-frame">
-          <div class="phone-speaker"></div>
-          <div class="phone-camera"></div>
-          <div class="phone-screen">
-            <!-- Screen Dynamic View Area (Full Real App Screenshots) -->
-            <div class="screen-content" id="screen-viewport">
-              <!-- View 1: Feed (Default) -->
-              <div class="app-view active" id="view-feed">
-                <img src="assets/screen_feed.png" alt="Bảng tin Masita" class="real-screen-img">
-              </div>
-
-              <!-- View 2: Friends -->
-              <div class="app-view" id="view-friends">
-                <img src="assets/screen_friends.png" alt="Bạn bè Masita" class="real-screen-img">
-              </div>
-
-              <!-- View 3: Chat -->
-              <div class="app-view" id="view-chat">
-                <img src="assets/screen_chat.png" alt="Trò chuyện Masita" class="real-screen-img">
-              </div>
-
-              <!-- View 4: Profile -->
-              <div class="app-view" id="view-profile">
-                <img src="assets/screen_profile.png" alt="Hồ sơ Masita" class="real-screen-img">
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Interactive Screen Switcher Tabs -->
-        <div class="mockup-tab-selector">
-          <button class="mockup-tab-btn active" data-target="view-feed">
-            <span class="tab-icon">🏠</span>
-            <span class="tab-label">Bảng tin</span>
-          </button>
-          <button class="mockup-tab-btn" data-target="view-friends">
-            <span class="tab-icon">👥</span>
-            <span class="tab-label">Bạn bè</span>
-          </button>
-          <button class="mockup-tab-btn" data-target="view-chat">
-            <span class="tab-icon">💬</span>
-            <span class="tab-label">Trò chuyện</span>
-          </button>
-          <button class="mockup-tab-btn" data-target="view-profile">
-            <span class="tab-icon">👤</span>
-            <span class="tab-label">Hồ sơ</span>
-          </button>
-        </div>
-
-        <div class="mockup-hint">
-          <span>👆 Bấm vào các tab trên để xem từng màn hình thực tế của app Masita</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Features Bento Grid -->
-  <section class="features-section" id="features">
+  <!-- HERO -->
+  <section class="hero">
     <div class="container">
-      <div class="section-head text-center">
-        <span class="section-tag">TÍNH NĂNG ĐỈNH CAO</span>
-        <h2 class="section-title">Mọi trải nghiệm bạn yêu thích, trong một ứng dụng duy nhất.</h2>
-        <p class="section-subtitle">Được tối ưu hoá từng mili-giây với kiến trúc hiện đại, đảm bảo mượt mà và bảo mật
-          tối đa.</p>
-      </div>
-
-      <div class="bento-grid">
-        <!-- Feature 1 -->
-        <div class="bento-card bento-lg">
-          <div class="bento-badge">🎬 Đa phương tiện</div>
-          <h3>Lướt Reels & Video Feed Facebook-Style</h3>
-          <p>Tự động phát mượt mà khi cuộn đến với phông nền mờ thích ứng (Adaptive Blur), hỗ trợ streaming video độ
-            phân giải cao trực tiếp.</p>
-          <div class="bento-preview-box video-showcase-box">
-            <div class="player-mock">
-              <span class="play-pulse">▶</span>
-              <div class="stream-progress">
-                <div class="progress-bar-fill"></div>
-              </div>
-            </div>
+      <div class="hero-inner">
+        <div class="hero-content reveal">
+          <div class="hero-badge">
+            <div class="hero-badge-dot"></div>
+            Phiên bản mới nhất: v1.0.6 APK
           </div>
-        </div>
-
-        <!-- Feature 2 -->
-        <div class="bento-card">
-          <div class="bento-badge">💬 Thời gian thực</div>
-          <h3>Chat 1-1 & Nhóm Siêu Tốc</h3>
-          <p>Nhắn tin tức thời với Socket.io, gửi ảnh, video, tài liệu dung lượng lớn và tùy biến màu theme riêng cho
-            từng cuộc trò chuyện.</p>
-          <div class="chat-bubble-preview">
-            <div class="msg-bubble msg-incoming">Chào bạn! Ảnh chuyến đi chụp nét quá 🔥</div>
-            <div class="msg-bubble msg-outgoing">Cảm ơn nhé! Bấm vào xem full rồi tải về máy luôn được á! 📸</div>
-          </div>
-        </div>
-
-        <!-- Feature 3 -->
-        <div class="bento-card">
-          <div class="bento-badge">🖼️ Chất lượng gốc</div>
-          <h3>Xem & Tải Ảnh Toàn Màn Hình</h3>
-          <p>Chạm vào avatar, ảnh bìa hoặc bài viết để mở trình xem ảnh cao cấp, cử chỉ phóng to thu nhỏ 2 ngón tay và
-            tải trực tiếp vào điện thoại.</p>
-          <div class="photo-tools-preview">
-            <span class="tool-tag">🔍 Phóng to 2.5x</span>
-            <span class="tool-tag">⬇️ Lưu vào máy</span>
-            <span class="tool-tag">✨ Giữ nguyên HDR</span>
-          </div>
-        </div>
-
-        <!-- Feature 4 -->
-        <div class="bento-card bento-wide">
-          <div class="bento-badge">🔔 Tương tác thông minh</div>
-          <div class="bento-content-side">
-            <h3>Thông báo tức thì & Đồng ý kết bạn trong 1 giây</h3>
-            <p>Hệ thống thông báo đẩy theo thời gian thực kèm nút Chấp thuận / Từ chối lời mời kết bạn ngay trong thanh
-              thông báo mà không cần chuyển trang.</p>
-          </div>
-          <div class="notif-sample-box">
-            <div class="notif-item-demo">
-              <div class="notif-icon">👋</div>
-              <div class="notif-text">
-                <strong>Minh Khôi</strong> đã gửi lời mời kết bạn
-                <div class="notif-btns">
-                  <button class="btn-sm btn-accept">Chấp nhận</button>
-                  <button class="btn-sm btn-decline">Từ chối</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Feature 5 -->
-        <div class="bento-card">
-          <div class="bento-badge">☁️ Đám mây</div>
-          <h3>Cập Nhật Tức Thì (OTA Updates)</h3>
-          <p>Tự động nhận các bản vá lỗi và tính năng mới nhất qua đám mây mà không cần phải tải lại file cài đặt APK.
+          <h1 class="hero-title">
+            Kết nối cảm xúc,<br>
+            <span class="line2">chia sẻ khoảnh khắc.</span>
+          </h1>
+          <p class="hero-desc">
+            Masita là mạng xã hội đa phương tiện thế hệ mới. Chia sẻ ảnh & video, chat realtime, kết bạn và xây dựng cộng đồng của riêng bạn.
           </p>
+          <div class="hero-actions">
+            <a href="#download" class="btn-download" id="btn-hero-dl">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Tải APK Android
+            </a>
+            <button class="btn-outline" id="btn-qr-hero">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              Quét mã QR
+            </button>
+          </div>
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <span class="hero-stat-num">v1.0.6</span>
+              <span class="hero-stat-lbl">Bản ổn định</span>
+            </div>
+            <div class="hero-stat">
+              <span class="hero-stat-num">100%</span>
+              <span class="hero-stat-lbl">Miễn phí</span>
+            </div>
+            <div class="hero-stat">
+              <span class="hero-stat-num">OTA</span>
+              <span class="hero-stat-lbl">Cập nhật tự động</span>
+            </div>
+            <div class="hero-stat">
+              <span class="hero-stat-num">16+</span>
+              <span class="hero-stat-lbl">Sprint hoàn thiện</span>
+            </div>
+          </div>
         </div>
 
-        <!-- Feature 6 -->
-        <div class="bento-card">
-          <div class="bento-badge">🔒 Riêng tư</div>
-          <h3>Bảo Mật Quyền Riêng Tư</h3>
-          <p>Tùy chọn chia sẻ Công khai, Bạn bè hoặc Chỉ mình tôi cho từng bức ảnh và video của bạn.</p>
+        <div class="phone-wrap reveal">
+          <div class="phone-glow"></div>
+          <div>
+            <div class="phone">
+              <div class="phone-notch">
+                <div class="phone-notch-dot"></div>
+                <div class="phone-notch-dot camera"></div>
+              </div>
+              <div class="phone-screen" id="phone-screen">
+                <img src="assets/screen_feed.png" alt="Feed" class="active" id="sc-feed">
+                <img src="assets/screen_friends.png" alt="Friends" class="hidden" id="sc-friends">
+                <img src="assets/screen_chat.png" alt="Chat" class="hidden" id="sc-chat">
+                <img src="assets/screen_profile.png" alt="Profile" class="hidden" id="sc-profile">
+              </div>
+            </div>
+            <div class="phone-tabs" id="phone-tabs">
+              <button class="phone-tab active" data-sc="sc-feed">🏠 Feed</button>
+              <button class="phone-tab" data-sc="sc-friends">👥 Bạn bè</button>
+              <button class="phone-tab" data-sc="sc-chat">💬 Chat</button>
+              <button class="phone-tab" data-sc="sc-profile">👤 Profile</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Download & QR Section -->
+  <div class="divider"></div>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="container">
+      <div class="text-center reveal">
+        <span class="section-label">Tính năng</span>
+        <h2 class="section-title">Mọi thứ bạn cần,<br>trong một ứng dụng.</h2>
+        <p class="section-sub">Được thiết kế tỉ mỉ qua 16+ sprint phát triển với kiến trúc hiện đại và trải nghiệm người dùng được đặt lên hàng đầu.</p>
+      </div>
+
+      <div class="features-grid">
+        <!-- Video Feed - large -->
+        <div class="feat-card col-8 reveal">
+          <div class="feat-icon-wrap icon-purple">🎬</div>
+          <h3>Video Feed & Ảnh Khoảnh Khắc</h3>
+          <p>Lướt feed kiểu Locket — ảnh & video phát tự động khi cuộn đến, phông nền mờ thích ứng (Adaptive Blur), streaming HTTP/206 mượt mà như YouTube.</p>
+          <div class="video-demo">
+            <div class="video-demo-bg"></div>
+            <div class="video-play-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+            <div class="video-progress">
+              <div class="progress-track"><div class="progress-fill"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- OTA -->
+        <div class="feat-card col-4 reveal">
+          <div class="feat-icon-wrap icon-cyan">☁️</div>
+          <h3>OTA Cloud Updates</h3>
+          <p>Nhận bản cập nhật mới ngay khi mở app mà không cần cài lại APK. Tích hợp Expo EAS Update.</p>
+          <div class="tag-group" style="margin-top: 16px;">
+            <span class="tag cyan">Expo EAS</span>
+            <span class="tag blue">Auto-update</span>
+            <span class="tag purple">Zero downtime</span>
+          </div>
+        </div>
+
+        <!-- Chat -->
+        <div class="feat-card col-6 reveal">
+          <div class="feat-icon-wrap icon-pink">💬</div>
+          <h3>Chat Realtime 1-1 & Nhóm</h3>
+          <p>Socket.io tốc độ cao. Gửi ảnh, video, tài liệu. Tùy biến màu gradient cho từng cuộc trò chuyện. Typing indicator thời gian thực.</p>
+          <div class="chat-demo">
+            <div class="bubble bubble-in">Chào bạn! Ảnh chuyến đi chụp nét quá 🔥</div>
+            <div class="bubble bubble-out">Tải về máy luôn nhé! Bấm giữ ảnh là được 📸</div>
+          </div>
+        </div>
+
+        <!-- Friends -->
+        <div class="feat-card col-6 reveal">
+          <div class="feat-icon-wrap icon-blue">👥</div>
+          <h3>Kết Bạn & Presence Engine</h3>
+          <p>Chấm xanh realtime hiển thị ai đang online. Chấp nhận / từ chối lời mời kết bạn 1-chạm ngay trong thông báo. Gợi ý bạn bè thông minh.</p>
+          <div class="presence-demo" style="margin-top: 16px;">
+            <div class="avatar-stack">
+              <div class="av">😊</div>
+              <div class="av">🎮</div>
+              <div class="av">🌟</div>
+              <div class="av">🦊</div>
+            </div>
+            <div class="online-dot"></div>
+            <span class="presence-text">12 bạn đang online</span>
+          </div>
+        </div>
+
+        <!-- Privacy -->
+        <div class="feat-card col-4-sm reveal">
+          <div class="feat-icon-wrap icon-amber">🔒</div>
+          <h3>Quyền Riêng Tư</h3>
+          <p>Mỗi bài viết có thể đặt chế độ: Công khai, Bạn bè hoặc Chỉ mình tôi. Tài khoản riêng tư cho phép kiểm soát người theo dõi.</p>
+        </div>
+
+        <!-- Download photo -->
+        <div class="feat-card col-4-sm reveal">
+          <div class="feat-icon-wrap icon-green">🖼️</div>
+          <h3>Xem Ảnh Toàn Màn Hình</h3>
+          <p>Pinch to zoom 2.5x, chạm đúp phóng to, tải ảnh gốc HDR trực tiếp vào thư viện máy. Không nén chất lượng.</p>
+        </div>
+
+        <!-- Admin -->
+        <div class="feat-card col-4-sm reveal">
+          <div class="feat-icon-wrap icon-purple">🛡️</div>
+          <h3>Admin Portal</h3>
+          <p>Dashboard quản trị đầy đủ: kiểm duyệt bài viết, khóa tài khoản, hỗ trợ người dùng (Support Tickets), realtime online stats.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- TECH STACK -->
+  <section class="tech-section">
+    <div class="container">
+      <div class="text-center reveal">
+        <span class="section-label">Công nghệ</span>
+        <h2 class="section-title">Được xây dựng trên<br>nền tảng hiện đại nhất.</h2>
+      </div>
+      <div class="tech-grid reveal">
+        <div class="tech-item"><span class="tech-icon">⚛️</span><span class="tech-name">React Native</span><span class="tech-desc">Expo SDK 57</span></div>
+        <div class="tech-item"><span class="tech-icon">🟢</span><span class="tech-name">Node.js</span><span class="tech-desc">Express 4</span></div>
+        <div class="tech-item"><span class="tech-icon">🔌</span><span class="tech-name">Socket.io</span><span class="tech-desc">Realtime engine</span></div>
+        <div class="tech-item"><span class="tech-icon">🐬</span><span class="tech-name">TiDB Cloud</span><span class="tech-desc">MySQL-compatible</span></div>
+        <div class="tech-item"><span class="tech-icon">🐻</span><span class="tech-name">Zustand</span><span class="tech-desc">State management</span></div>
+        <div class="tech-item"><span class="tech-icon">📦</span><span class="tech-name">Google Drive</span><span class="tech-desc">Media storage</span></div>
+        <div class="tech-item"><span class="tech-icon">🚀</span><span class="tech-name">EAS Build</span><span class="tech-desc">CI/CD + OTA</span></div>
+        <div class="tech-item"><span class="tech-icon">🔐</span><span class="tech-name">JWT + Bcrypt</span><span class="tech-desc">Authentication</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- DOWNLOAD -->
   <section class="download-section" id="download">
     <div class="container">
-      <div class="download-banner">
-        <div class="download-info">
-          <span class="badge-accent">SẴN SÀNG TRẢI NGHIỆM</span>
-          <h2 class="download-title">Tải ngay Masita cho Android</h2>
-          <p class="download-desc">Phiên bản <strong>v1.0.5</strong> mới nhất: củng cố bảo mật (IDOR, quyền riêng tư bài
-            viết, xác thực socket), chống race condition tin nhắn realtime và hoàn thiện quy tắc quản trị nhóm.</p>
-
-          <div class="specs-list">
-            <div class="spec-row">
-              <span>Phiên bản:</span>
-              <strong>v1.0.5 (Build 6)</strong>
-            </div>
-            <div class="spec-row">
-              <span>Hệ điều hành:</span>
-              <strong>Android 8.0 trở lên</strong>
-            </div>
-            <div class="spec-row">
-              <span>Định dạng:</span>
-              <strong>File APK cài đặt độc lập</strong>
-            </div>
+      <div class="download-card reveal">
+        <div>
+          <div class="dl-version-badge">
+            <div class="status-dot"></div>
+            Phiên bản mới nhất
           </div>
-
-          <div class="download-btn-group">
+          <div class="dl-title">Tải Masita cho Android</div>
+          <p class="dl-desc">
+            Phiên bản <strong>v1.0.6</strong> (Build 7) — Bản ổn định với đầy đủ tính năng mạng xã hội, bảo mật cao và cập nhật OTA tự động.
+          </p>
+          <div class="dl-specs">
+            <div class="dl-spec"><div class="dl-spec-dot"></div><span>Phiên bản:</span>&nbsp;<strong>v1.0.6 (Build 7)</strong></div>
+            <div class="dl-spec"><div class="dl-spec-dot"></div><span>Hệ điều hành:</span>&nbsp;<strong>Android 8.0 trở lên</strong></div>
+            <div class="dl-spec"><div class="dl-spec-dot"></div><span>Định dạng:</span>&nbsp;<strong>APK cài đặt trực tiếp</strong></div>
+            <div class="dl-spec"><div class="dl-spec-dot"></div><span>Dung lượng:</span>&nbsp;<strong>~65 MB</strong></div>
+          </div>
+          <div class="dl-btns">
             <a href="https://expo.dev/artifacts/eas/B2QYyBP1laGT2eZrxI-t4x2_ptKjKJc1IgIMaRuXYQ4.apk"
-              target="_blank" rel="noreferrer" class="btn-primary btn-xl">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              <span>Tải file APK trực tiếp</span>
+              target="_blank" rel="noreferrer" class="btn-download-xl" id="btn-dl-main">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Tải file APK
             </a>
-            <button class="btn-secondary" id="btn-copy-link">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              <span id="copy-text">Sao chép link tải</span>
+            <button class="btn-outline" id="btn-copy">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span id="copy-txt">Sao chép link</span>
+            </button>
+            <button class="btn-outline" id="btn-qr-dl">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              QR Code
             </button>
           </div>
         </div>
-
-        <div class="download-qr-box">
-          <div class="qr-card">
-            <div class="qr-code-img">
-              <img src="assets/qr_code.png" alt="Mã QR tải APK Masita v1.0.5" class="qr-img-real">
-            </div>
-            <p class="qr-caption">📱 Dùng camera điện thoại quét mã để tải về tức thì</p>
+        <div class="qr-box">
+          <div class="qr-img">
+            <img src="assets/qr_code.png" alt="QR tải APK Masita">
           </div>
+          <p class="qr-label">📱 Quét để tải trực tiếp</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Quick Installation Guide -->
-  <section class="guide-section" id="guide">
+  <!-- GUIDE -->
+  <section id="guide">
     <div class="container">
-      <div class="section-head text-center">
-        <span class="section-tag">HƯỚNG DẪN CÀI ĐẶT</span>
-        <h2 class="section-title">3 Bước Đơn Giản Để Cài Đặt Masita</h2>
-        <p class="section-subtitle">Chỉ mất chưa đầy 1 phút để cài đặt ứng dụng lên máy điện thoại Android của bạn.</p>
+      <div class="text-center reveal">
+        <span class="section-label">Hướng dẫn</span>
+        <h2 class="section-title">3 bước cài đặt<br>đơn giản.</h2>
+        <p class="section-sub">Chỉ mất chưa đầy 1 phút để cài đặt và bắt đầu sử dụng Masita trên điện thoại Android.</p>
       </div>
-
-      <div class="steps-grid">
-        <div class="step-card">
+      <div class="guide-steps">
+        <div class="step reveal">
           <div class="step-num">01</div>
-          <div class="step-icon">⬇️</div>
-          <h4>Tải file APK</h4>
-          <p>Bấm nút <strong>Tải file APK</strong> hoặc quét mã QR ở trên bằng điện thoại để tải file cài đặt
-            <code>masita-v1.0.5.apk</code> về máy.</p>
+          <span class="step-icon">⬇️</span>
+          <h3>Tải file APK</h3>
+          <p>Bấm nút <strong>Tải file APK</strong> hoặc quét mã QR để tải file <code>masita-v1.0.6.apk</code> về điện thoại.</p>
         </div>
-
-        <div class="step-card">
+        <div class="step reveal">
           <div class="step-num">02</div>
-          <div class="step-icon">⚙️</div>
-          <h4>Cho phép cài đặt</h4>
-          <p>Mở file vừa tải về, nếu hệ điều hành Android hỏi xác nhận, chọn <strong>"Cho phép cài đặt từ nguồn
-              này"</strong> (Chrome/Trình quản lý tệp).</p>
+          <span class="step-icon">⚙️</span>
+          <h3>Cho phép cài đặt</h3>
+          <p>Mở file vừa tải. Nếu Android hỏi, chọn <strong>"Cho phép cài đặt từ nguồn này"</strong> (Chrome hoặc trình quản lý tệp).</p>
         </div>
-
-        <div class="step-card">
+        <div class="step reveal">
           <div class="step-num">03</div>
-          <div class="step-icon">🚀</div>
-          <h4>Đăng ký & Trải nghiệm</h4>
-          <p>Mở ứng dụng Masita, tạo tài khoản cá nhân trong 10 giây và bắt đầu chia sẻ những khoảnh khắc tuyệt vời cùng
-            bạn bè!</p>
+          <span class="step-icon">🚀</span>
+          <h3>Đăng ký & Khám phá</h3>
+          <p>Mở Masita, tạo tài khoản miễn phí trong 10 giây và bắt đầu chia sẻ khoảnh khắc cùng bạn bè!</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Footer -->
-  <footer class="site-footer">
-    <div class="container footer-container">
-      <div class="footer-brand">
-        <div class="brand-logo">
-          <img src="assets/app_logo.webp" alt="Masita" class="logo-img" onerror="this.src='assets/icon.png'">
-          <span class="brand-name">Masita<span class="brand-dot">.</span></span>
-        </div>
-        <p class="footer-tagline">Nền tảng mạng xã hội kết nối cảm xúc & chia sẻ khoảnh khắc thế hệ mới.</p>
+  <div class="divider"></div>
+
+  <!-- CHANGELOG -->
+  <section id="changelog">
+    <div class="container">
+      <div class="reveal">
+        <span class="section-label">Changelog</span>
+        <h2 class="section-title">Lịch sử phiên bản.</h2>
+        <p class="section-sub">Toàn bộ các cập nhật, sửa lỗi và tính năng mới qua từng phiên bản Masita.</p>
       </div>
-
-      <div class="footer-links-group">
-        <div class="footer-col">
-          <h5>Ứng Dụng</h5>
-          <a href="#features">Tính năng chính</a>
-          <a href="#preview">Mô phỏng app</a>
-          <a href="#download">Tải bản APK v1.0.5</a>
-          <a href="#guide">Hướng dẫn cài đặt</a>
+      <div class="changelog-list">
+        <div class="cl-item latest reveal">
+          <div class="cl-header">
+            <span class="cl-ver">v1.0.6</span>
+            <span class="cl-tag">Mới nhất · Build 7</span>
+            <span class="cl-date">11/09/2026</span>
+          </div>
+          <ul class="cl-ul">
+            <li><strong>Bump version:</strong> Cập nhật versionCode 7, tương thích đầy đủ với OTA channel preview.</li>
+            <li><strong>Ổn định hóa Socket:</strong> Tăng reconnectionAttempts và cải thiện hành vi kết nối lại khi mất mạng.</li>
+          </ul>
         </div>
-
-        <div class="footer-col">
-          <h5>Phát Triển</h5>
-          <a href="https://github.com/gundamhoc/04-app-chia-se-anh" target="_blank" rel="noreferrer">Mã nguồn GitHub</a>
-          <a href="https://expo.dev/accounts/gundamhoc/projects/masita" target="_blank" rel="noreferrer">Expo EAS
-            Project</a>
-          <a href="javascript:void(0)" id="btn-changelog">Nhật ký phiên bản (Changelog)</a>
+        <div class="cl-item reveal">
+          <div class="cl-header">
+            <span class="cl-ver">v1.0.5</span>
+            <span class="cl-date">10/09/2026</span>
+          </div>
+          <ul class="cl-ul">
+            <li><strong>Củng cố bảo mật toàn diện:</strong> Chặn lỗ hổng IDOR khi tải tệp tin chat, khóa toàn bộ route Admin Portal bằng JWT, kiểm tra quyền xem bài viết trước khi tương tác.</li>
+            <li><strong>Xác thực Realtime Socket:</strong> Mọi kết nối socket bắt buộc kèm JWT hợp lệ, phòng chat chỉ tham gia sau khi server xác nhận thành viên.</li>
+            <li><strong>Chống race condition tin nhắn:</strong> Gộp tin nhắn realtime theo mã thông báo, không bị đè mất khi tải lại.</li>
+            <li><strong>Quy tắc quản trị nhóm:</strong> Chặn admin đá admin khác, chặn admin cuối rời nhóm khi còn thành viên.</li>
+            <li><strong>Developer Tools:</strong> Chuyển đổi nhanh server Render/Ngrok/LAN trong Cài đặt, keep-alive server Render.</li>
+          </ul>
         </div>
-
-        <div class="footer-col">
-          <h5>Liên Hệ & Pháp Lý</h5>
-          <a href="javascript:void(0)" id="btn-support">Hỗ trợ người dùng</a>
-          <a href="javascript:void(0)" id="btn-terms">Điều khoản sử dụng</a>
-          <a href="javascript:void(0)" id="btn-privacy">Chính sách bảo mật</a>
+        <div class="cl-item reveal">
+          <div class="cl-header">
+            <span class="cl-ver">v1.0.4</span>
+            <span class="cl-date">09/09/2026</span>
+          </div>
+          <ul class="cl-ul">
+            <li><strong>Sửa chỉ số lượt thích trên Hồ sơ:</strong> Tự động tải lại số liệu mỗi khi mở tab, cập nhật realtime khi có tương tác.</li>
+            <li><strong>Hiển thị số lượt thích trên nút Thích:</strong> Hiện rõ 🤍 Thích 3 ngay dưới mỗi bài viết trong feed.</li>
+            <li><strong>Sửa lỗi bàn phím che ô bình luận:</strong> Modal bình luận tự đẩy lên trên bàn phím ảo.</li>
+          </ul>
+        </div>
+        <div class="cl-item reveal">
+          <div class="cl-header">
+            <span class="cl-ver">v1.0.3</span>
+            <span class="cl-date">08/09/2026</span>
+          </div>
+          <ul class="cl-ul">
+            <li><strong>Khắc phục crash Video Android:</strong> Tách riêng component trình phát, tự động unmount và giải phóng khi cuộn qua.</li>
+            <li><strong>Tương thích đa nền tảng:</strong> Module mediaSaver riêng cho Web và Native, loại bỏ crash trên trình duyệt.</li>
+            <li><strong>Hoàn thiện Trung tâm Thông báo:</strong> Nút Chấp nhận/Từ chối kết bạn 1-chạm ngay trong thông báo.</li>
+          </ul>
+        </div>
+        <div class="cl-item reveal">
+          <div class="cl-header">
+            <span class="cl-ver">v1.0.2</span>
+            <span class="cl-date">08/09/2026</span>
+          </div>
+          <ul class="cl-ul">
+            <li><strong>Xem & Tải ảnh đại diện / ảnh bìa:</strong> Chạm vào avatar để xem toàn màn hình chất lượng cao và tải về.</li>
+            <li><strong>Cử chỉ phóng to:</strong> Chạm đúp phóng to 2.5x và Pinch to zoom 2 ngón tay.</li>
+            <li><strong>OTA Cloud Updates:</strong> Tích hợp cập nhật tức thì qua đám mây EAS, không cần cài lại APK.</li>
+          </ul>
+        </div>
+        <div class="cl-item reveal">
+          <div class="cl-header">
+            <span class="cl-ver">v1.0.1</span>
+            <span class="cl-date">07/09/2026</span>
+          </div>
+          <ul class="cl-ul">
+            <li><strong>Video Feed Reels Facebook-Style:</strong> Tự động phát khi cuộn tới, Adaptive Blur phông nền.</li>
+            <li><strong>Streaming HTTP 206:</strong> Video từ Google Drive mượt mà không buffer.</li>
+            <li><strong>Tùy biến phòng chat:</strong> Chọn chủ đề màu gradient cho từng cuộc trò chuyện 1-1.</li>
+          </ul>
+        </div>
+        <div class="cl-item reveal">
+          <div class="cl-header">
+            <span class="cl-ver">v1.0.0</span>
+            <span class="cl-date">02/07/2026</span>
+          </div>
+          <ul class="cl-ul">
+            <li>Phát hành bản thử nghiệm đầu tiên với đầy đủ tính năng: Đăng bài, Thả tim, Bình luận, Kết bạn, Nhắn tin realtime Socket.io và Nhóm chat.</li>
+          </ul>
         </div>
       </div>
     </div>
+  </section>
 
-    <div class="footer-bottom">
-      <div class="container bottom-container">
-        <p>© 2026 Masita. Xây dựng với niềm đam mê bởi <strong>gundamhoc</strong>.</p>
-        <span class="badge-status">🟢 Hệ thống Online</span>
+  <!-- FOOTER -->
+  <footer>
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <a href="#" class="nav-logo" style="margin-bottom:0;">
+            <img src="assets/app_logo.webp" alt="Masita" width="28" height="28" style="border-radius:7px;" onerror="this.src='assets/icon.png'">
+            <span style="font-size:16px; font-weight:700;">Masita<span style="color:#A855F7;">.</span></span>
+          </a>
+          <p>Mạng xã hội chia sẻ khoảnh khắc thế hệ mới. Được xây dựng với niềm đam mê.</p>
+        </div>
+        <div class="footer-col">
+          <h5>Ứng dụng</h5>
+          <a href="#features">Tính năng</a>
+          <a href="#download">Tải APK</a>
+          <a href="#guide">Hướng dẫn cài đặt</a>
+          <a href="#changelog">Changelog</a>
+        </div>
+        <div class="footer-col">
+          <h5>Phát triển</h5>
+          <a href="https://github.com/gundamhoc/04-app-chia-se-anh" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="https://expo.dev/accounts/gundamhoc/projects/masita" target="_blank" rel="noreferrer">Expo EAS</a>
+          <a href="#" id="footer-support-btn">Hỗ trợ người dùng</a>
+        </div>
+        <div class="footer-col">
+          <h5>Pháp lý</h5>
+          <a href="#" id="footer-terms-btn">Điều khoản sử dụng</a>
+          <a href="#" id="footer-privacy-btn">Chính sách bảo mật</a>
+          <a href="mailto:24050121@student.bdu.edu.vn">Liên hệ email</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 Masita. Xây dựng bởi <strong>gundamhoc</strong>.</p>
+        <div class="footer-status"><div class="status-dot"></div> Hệ thống đang hoạt động</div>
       </div>
     </div>
   </footer>
 
-  <!-- QR Code Modal (Popup) -->
-  <div class="modal-overlay" id="qr-modal">
-    <div class="modal-box">
-      <button class="modal-close" id="modal-close-btn">&times;</button>
-      <h3>Quét mã để cài Masita</h3>
-      <p>Mở camera điện thoại Android của bạn và quét mã dưới đây để tải trực tiếp:</p>
-      <div class="modal-qr-img">
-        <img src="assets/qr_code.png" alt="QR Code Tải APK" class="qr-server-img">
+  <!-- MODALS -->
+  <!-- QR Modal -->
+  <div class="modal-overlay" id="modal-qr">
+    <div class="modal-box" style="text-align:center;">
+      <button class="modal-close-btn" data-close="modal-qr">✕</button>
+      <h3>📱 Quét mã QR</h3>
+      <p class="modal-sub">Dùng camera điện thoại quét mã để tải Masita v1.0.6</p>
+      <div style="background:#fff; border-radius:16px; padding:16px; display:inline-block; margin:8px 0 16px;">
+        <img src="assets/qr_code.png" alt="QR Code" style="width:180px;height:180px;display:block;">
       </div>
       <a href="https://expo.dev/artifacts/eas/B2QYyBP1laGT2eZrxI-t4x2_ptKjKJc1IgIMaRuXYQ4.apk"
-        target="_blank" rel="noreferrer" class="btn-primary btn-block">Mở link tải trên trình duyệt</a>
-    </div>
-  </div>
-
-  <!-- Changelog Modal -->
-  <div class="modal-overlay" id="changelog-modal">
-    <div class="modal-box modal-lg">
-      <button class="modal-close" data-close="changelog-modal">&times;</button>
-      <h3>🚀 Nhật Ký Cập Nhật Phiên Bản (Changelog)</h3>
-      <p class="modal-subhead">Xem toàn bộ lịch sử cải tiến và các bản sửa lỗi của Masita</p>
-
-      <div class="modal-scroll-content">
-        <div class="changelog-item highlight">
-          <div class="cl-header">
-            <span class="cl-ver">Phiên bản v1.0.5</span>
-            <span class="cl-badge">Mới nhất • Bản build 6</span>
-            <span class="cl-date">11/09/2026</span>
-          </div>
-          <ul class="cl-list">
-            <li><strong>Củng cố bảo mật toàn diện</strong>: Chặn lỗ hổng IDOR khi tải tệp tin chat, khóa toàn bộ route
-              Admin Portal bằng token, kiểm tra quyền xem bài viết trước khi bình luận / thả cảm xúc / lưu / đăng lại.</li>
-            <li><strong>Xác thực Realtime Socket</strong>: Mọi kết nối socket bắt buộc kèm JWT hợp lệ, phòng chat chỉ
-              tham gia được sau khi server xác nhận thành viên.</li>
-            <li><strong>Chống race condition tin nhắn</strong>: Gộp tin nhắn realtime theo mã thông báo, không còn tình
-              trạng tin mới bị đè mất khi tải lại danh sách trò chuyện.</li>
-            <li><strong>Quy tắc quản trị nhóm</strong>: Chặn admin đá admin khác, chặn admin cuối cùng rời nhóm khi còn
-              thành viên.</li>
-            <li><strong>Công cụ Dev</strong>: Chuyển đổi nhanh server Render / Ngrok / LAN ngay trong Cài đặt, giữ server
-              Render luôn nóng bằng keep-alive.</li>
-          </ul>
-        </div>
-
-        <div class="changelog-item">
-          <div class="cl-header">
-            <span class="cl-ver">Phiên bản v1.0.4</span>
-            <span class="cl-date">10/09/2026</span>
-          </div>
-          <ul class="cl-list">
-            <li><strong>Sửa chỉ số Lượt thích trên Hồ sơ</strong>: Tự động tải lại số liệu mỗi lần mở tab, cập nhật realtime
-              ngay khi có người thích bài viết của bạn, đồng bộ thêm cột Đã lưu & Đăng lại từ máy chủ.</li>
-            <li><strong>Hiển thị con số lượt thích trên nút "Thích"</strong>: Bảng tin giờ hiện <code>🤍 Thích 3</code>
-              rõ ràng ngay dưới mỗi bài viết.</li>
-            <li><strong>Sửa lỗi bàn phím che ô bình luận</strong>: Modal bình luận tự động đẩy lên trên bàn phím ảo,
-              không còn che mất chữ đang gõ.</li>
-            <li><strong>Rút gọn tiêu đề Đăng nhập</strong>: "Chào mừng trở lại" → "Chào mừng" tinh gọn, thân thiện.</li>
-          </ul>
-        </div>
-
-        <div class="changelog-item">
-          <div class="cl-header">
-            <span class="cl-ver">Phiên bản v1.0.3</span>
-            <span class="cl-date">09/09/2026</span>
-          </div>
-          <ul class="cl-list">
-            <li><strong>Khắc phục triệt để crash Video Android</strong>: Tách riêng component trình phát độc lập, tự
-              động unmount và giải phóng SurfaceVideoView khi cuộn qua hoặc đóng modal.</li>
-            <li><strong>Tương thích đa nền tảng</strong>: Tách biệt module <code>mediaSaver</code> riêng cho Web (HTML5
-              blob/anchor) và Native (Expo Media Library), loại bỏ hoàn toàn lỗi crash trên trình duyệt.</li>
-            <li><strong>Hoàn thiện Trung tâm Thông báo</strong>: Sửa cấu trúc đọc dữ liệu phản hồi từ backend, bổ sung
-              nút <em>Chấp nhận / Từ chối</em> kết bạn 1-chạm trực tiếp ngay trong thông báo.</li>
-            <li><strong>Tối ưu hóa hiệu năng</strong>: Giảm tải sử dụng bộ nhớ và tối ưu thời lượng pin khi xem feed
-              liên tục.</li>
-          </ul>
-        </div>
-
-        <div class="changelog-item">
-          <div class="cl-header">
-            <span class="cl-ver">Phiên bản v1.0.2</span>
-            <span class="cl-date">08/09/2026</span>
-          </div>
-          <ul class="cl-list">
-            <li><strong>Xem & Tải ảnh đại diện / ảnh bìa</strong>: Cho phép chạm vào avatar hoặc cover photo của bất kỳ
-              người dùng nào để xem toàn màn hình chất lượng cao và tải về máy.</li>
-            <li><strong>Cử chỉ phóng to thu nhỏ</strong>: Hỗ trợ chạm đúp phóng to 2.5x và cử chỉ kéo 2 ngón tay (Pinch
-              to zoom) trên toàn bộ ảnh.</li>
-            <li><strong>OTA Cloud Updates</strong>: Tích hợp dịch vụ cập nhật tức thì qua đám mây EAS không cần cài lại
-              file APK.</li>
-          </ul>
-        </div>
-
-        <div class="changelog-item">
-          <div class="cl-header">
-            <span class="cl-ver">Phiên bản v1.0.1</span>
-            <span class="cl-date">07/09/2026</span>
-          </div>
-          <ul class="cl-list">
-            <li><strong>Video Feed Reels Facebook-Style</strong>: Tự động phát khi cuộn tới với phông nền mờ thích ứng
-              (Adaptive Blur).</li>
-            <li><strong>Streaming HTTP 206</strong>: Phát trực tiếp video dung lượng lớn từ Google Drive mượt mà như
-              YouTube.</li>
-            <li><strong>Tùy biến phòng chat</strong>: Hỗ trợ chọn chủ đề màu gradient độc đáo cho từng cuộc trò chuyện
-              1-1.</li>
-          </ul>
-        </div>
-
-        <div class="changelog-item">
-          <div class="cl-header">
-            <span class="cl-ver">Phiên bản v1.0.0</span>
-            <span class="cl-date">02/07/2026</span>
-          </div>
-          <ul class="cl-list">
-            <li>Phát hành bản thử nghiệm đầu tiên của mạng xã hội Masita với đầy đủ các tính năng: Đăng bài, Thả tim,
-              Bình luận, Bạn bè, Nhắn tin thời gian thực Socket.io và Nhóm chat.</li>
-          </ul>
-        </div>
-      </div>
+        target="_blank" rel="noreferrer" class="btn-primary" style="width:100%;justify-content:center;padding:12px;">
+        Mở link tải trực tiếp
+      </a>
     </div>
   </div>
 
   <!-- Support Modal -->
-  <div class="modal-overlay" id="support-modal">
+  <div class="modal-overlay" id="modal-support">
     <div class="modal-box">
-      <button class="modal-close" data-close="support-modal">&times;</button>
-      <h3>💬 Hỗ Trợ Người Dùng</h3>
-      <p class="modal-subhead">Chúng tôi luôn sẵn sàng lắng nghe và giải đáp mọi thắc mắc của bạn</p>
-
-      <div class="support-channels">
-        <div class="support-card">
-          <div class="support-icon">📧</div>
-          <div class="support-detail">
-            <strong>Email Trực Tiếp</strong>
-            <p>24050121@student.bdu.edu.vn</p>
-            <small>Phản hồi nhanh trong vòng 24 giờ</small>
+      <button class="modal-close-btn" data-close="modal-support">✕</button>
+      <h3>💬 Hỗ trợ người dùng</h3>
+      <p class="modal-sub">Chúng tôi sẵn sàng lắng nghe và giải đáp mọi thắc mắc</p>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;">
+          <span style="font-size:24px;">📧</span>
+          <div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:2px;">Email trực tiếp</div>
+            <div style="font-size:13px;color:var(--text2);">24050121@student.bdu.edu.vn</div>
+            <div style="font-size:11px;color:var(--text3);">Phản hồi trong vòng 24 giờ</div>
           </div>
         </div>
-
-        <div class="support-card">
-          <div class="support-icon">🐙</div>
-          <div class="support-detail">
-            <strong>Báo Lỗi Trên GitHub</strong>
-            <p>04-app-chia-se-anh/issues</p>
-            <small>Dành cho lập trình viên & người dùng kỹ thuật</small>
-          </div>
-        </div>
-
-        <div class="support-card">
-          <div class="support-icon">⚙️</div>
-          <div class="support-detail">
-            <strong>Hỗ Trợ Cài Đặt APK</strong>
-            <p>Android 8.0 trở lên</p>
-            <small>Nếu gặp sự cố cài đặt, hãy kiểm tra quyền "Cho phép nguồn không xác định"</small>
+        <div style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;">
+          <span style="font-size:24px;">🐙</span>
+          <div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:2px;">Báo lỗi trên GitHub</div>
+            <div style="font-size:13px;color:var(--text2);">04-app-chia-se-anh/issues</div>
+            <div style="font-size:11px;color:var(--text3);">Dành cho lỗi kỹ thuật</div>
           </div>
         </div>
       </div>
-
-      <a href="mailto:24050121@student.bdu.edu.vn?subject=Ho%20tro%20app%20Masita" class="btn-primary btn-block">Gửi
-        Email Yêu Cầu Hỗ Trợ</a>
+      <a href="mailto:24050121@student.bdu.edu.vn?subject=Ho+tro+app+Masita" class="btn-primary" style="width:100%;justify-content:center;padding:12px;">
+        Gửi Email hỗ trợ
+      </a>
     </div>
   </div>
 
   <!-- Terms Modal -->
-  <div class="modal-overlay" id="terms-modal">
-    <div class="modal-box modal-lg">
-      <button class="modal-close" data-close="terms-modal">&times;</button>
-      <h3>📜 Điều Khoản Sử Dụng Masita</h3>
-      <p class="modal-subhead">Quy định và quyền lợi khi tham gia mạng xã hội Masita</p>
-
-      <div class="modal-scroll-content modal-text-body">
-        <h4>1. Chấp thuận điều khoản</h4>
-        <p>Bằng việc tải về, cài đặt và sử dụng ứng dụng mạng xã hội Masita, bạn đồng ý tuân thủ các quy định và điều
-          khoản được nêu rõ tại văn bản này.</p>
-
-        <h4>2. Quyền sở hữu nội dung</h4>
-        <p>Người dùng giữ toàn quyền sở hữu đối với các hình ảnh, video và bài viết do chính mình đăng tải trên Masita.
-          Bạn chịu trách nhiệm về tính hợp pháp và bản quyền của những nội dung do bạn chia sẻ.</p>
-
-        <h4>3. Hành vi bị nghiêm cấm</h4>
-        <p>Nghiêm cấm các hành vi: đăng tải nội dung đồi trụy, kích động bạo lực, xúc phạm danh dự cá nhân, spam, phát
-          tán mã độc hoặc cố tình can thiệp vào hệ thống máy chủ của Masita.</p>
-
-        <h4>4. Chấm dứt quyền sử dụng</h4>
-        <p>Masita có quyền khóa hoặc xóa vĩnh viễn các tài khoản vi phạm nghiêm trọng quy chuẩn cộng đồng mà không cần
-          báo trước nhằm đảm bảo môi trường lành mạnh cho tất cả thành viên.</p>
+  <div class="modal-overlay" id="modal-terms">
+    <div class="modal-box wide">
+      <button class="modal-close-btn" data-close="modal-terms">✕</button>
+      <h3>📜 Điều khoản sử dụng</h3>
+      <p class="modal-sub">Quy định khi tham gia mạng xã hội Masita</p>
+      <div style="font-size:14px;color:var(--text2);line-height:1.75;display:flex;flex-direction:column;gap:16px;">
+        <div><strong style="color:var(--text);">1. Chấp thuận điều khoản</strong><br>Bằng việc cài đặt và sử dụng Masita, bạn đồng ý tuân thủ các quy định tại văn bản này.</div>
+        <div><strong style="color:var(--text);">2. Quyền sở hữu nội dung</strong><br>Người dùng giữ toàn quyền sở hữu hình ảnh, video và bài viết do mình đăng tải và chịu trách nhiệm về tính hợp pháp của chúng.</div>
+        <div><strong style="color:var(--text);">3. Hành vi bị nghiêm cấm</strong><br>Nghiêm cấm đăng tải nội dung đồi trụy, kích động bạo lực, spam, phát tán mã độc hoặc can thiệp hệ thống.</div>
+        <div><strong style="color:var(--text);">4. Chấm dứt quyền sử dụng</strong><br>Masita có quyền khóa hoặc xóa các tài khoản vi phạm nghiêm trọng nhằm đảm bảo môi trường lành mạnh.</div>
       </div>
     </div>
   </div>
 
   <!-- Privacy Modal -->
-  <div class="modal-overlay" id="privacy-modal">
-    <div class="modal-box modal-lg">
-      <button class="modal-close" data-close="privacy-modal">&times;</button>
-      <h3>🔒 Chính Sách Bảo Mật Dữ Liệu</h3>
-      <p class="modal-subhead">Cam kết tuyệt đối về an toàn thông tin cá nhân của bạn</p>
-
-      <div class="modal-scroll-content modal-text-body">
-        <h4>1. Thu thập dữ liệu</h4>
-        <p>Chúng tôi chỉ thu thập các thông tin tối thiểu cần thiết để vận hành ứng dụng: Tên tài khoản, email đăng ký,
-          ảnh đại diện và các nội dung bài đăng do bạn chủ động tải lên.</p>
-
-        <h4>2. Mã hóa và an toàn</h4>
-        <p>Tất cả mật khẩu người dùng đều được mã hóa một chiều qua thuật toán chuẩn Bcrypt. Phiên đăng nhập được bảo vệ
-          qua JSON Web Token (JWT) an toàn và lưu trữ trong Expo SecureStore bảo mật trên thiết bị.</p>
-
-        <h4>3. Bảo mật tin nhắn & phương tiện</h4>
-        <p>Tin nhắn cá nhân và hình ảnh/video riêng tư của bạn chỉ được hiển thị cho những người mà bạn cho phép. Masita
-          áp dụng các phân quyền chặt chẽ (Công khai, Bạn bè, Riêng tư).</p>
-
-        <h4>4. Cam kết không chia sẻ bên thứ ba</h4>
-        <p>Masita <strong>không bao giờ bán, cho thuê hoặc chia sẻ</strong> bất kỳ dữ liệu cá nhân hay thói quen sử dụng
-          nào của bạn cho các công ty quảng cáo hoặc bên thứ ba.</p>
+  <div class="modal-overlay" id="modal-privacy">
+    <div class="modal-box wide">
+      <button class="modal-close-btn" data-close="modal-privacy">✕</button>
+      <h3>🔒 Chính sách bảo mật</h3>
+      <p class="modal-sub">Cam kết tuyệt đối về an toàn thông tin cá nhân</p>
+      <div style="font-size:14px;color:var(--text2);line-height:1.75;display:flex;flex-direction:column;gap:16px;">
+        <div><strong style="color:var(--text);">1. Thu thập dữ liệu</strong><br>Chỉ thu thập thông tin tối thiểu: tên tài khoản, email, ảnh đại diện và các nội dung bạn chủ động đăng tải.</div>
+        <div><strong style="color:var(--text);">2. Mã hóa và an toàn</strong><br>Mật khẩu được mã hóa một chiều qua Bcrypt. Phiên đăng nhập bảo vệ bằng JWT lưu trong Expo SecureStore.</div>
+        <div><strong style="color:var(--text);">3. Bảo mật tin nhắn</strong><br>Tin nhắn cá nhân chỉ hiển thị cho người được phép. Phân quyền chặt chẽ: Công khai, Bạn bè, Riêng tư.</div>
+        <div><strong style="color:var(--text);">4. Không chia sẻ bên thứ ba</strong><br>Masita <strong style="color:var(--text);">không bán, cho thuê hoặc chia sẻ</strong> bất kỳ dữ liệu cá nhân nào của bạn.</div>
       </div>
     </div>
   </div>
 
-  <script src="script.js"></script>
-</body>
+  <!-- Copy Toast -->
+  <div class="toast" id="toast">✅ Đã sao chép link tải APK!</div>
 
+  <script>
+    // ── Phone screen switcher
+    const tabs = document.querySelectorAll('.phone-tab');
+    const screens = document.querySelectorAll('#phone-screen img');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.sc;
+        tabs.forEach(t => t.classList.remove('active'));
+        screens.forEach(s => { s.classList.remove('active'); s.classList.add('hidden'); });
+        tab.classList.add('active');
+        const sc = document.getElementById(target);
+        if (sc) { sc.classList.remove('hidden'); sc.classList.add('active'); }
+      });
+    });
+
+    // Auto-rotate screens
+    let autoIdx = 0;
+    const tabsArr = Array.from(tabs);
+    setInterval(() => {
+      autoIdx = (autoIdx + 1) % tabsArr.length;
+      tabsArr[autoIdx].click();
+    }, 3500);
+
+    // ── Modals
+    const openModal = id => document.getElementById(id)?.classList.add('open');
+    const closeModal = id => document.getElementById(id)?.classList.remove('open');
+
+    document.querySelectorAll('[data-close]').forEach(btn => {
+      btn.addEventListener('click', () => closeModal(btn.dataset.close));
+    });
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+    });
+
+    document.getElementById('btn-qr-hero')?.addEventListener('click', () => openModal('modal-qr'));
+    document.getElementById('btn-qr-dl')?.addEventListener('click', () => openModal('modal-qr'));
+    document.getElementById('footer-support-btn')?.addEventListener('click', e => { e.preventDefault(); openModal('modal-support'); });
+    document.getElementById('footer-terms-btn')?.addEventListener('click', e => { e.preventDefault(); openModal('modal-terms'); });
+    document.getElementById('footer-privacy-btn')?.addEventListener('click', e => { e.preventDefault(); openModal('modal-privacy'); });
+
+    // ── Copy link
+    const APK_URL = 'https://expo.dev/artifacts/eas/B2QYyBP1laGT2eZrxI-t4x2_ptKjKJc1IgIMaRuXYQ4.apk';
+    const toast = document.getElementById('toast');
+    document.getElementById('btn-copy')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(APK_URL).then(() => {
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2500);
+      });
+    });
+
+    // ── Scroll reveal
+    const reveals = document.querySelectorAll('.reveal');
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+    reveals.forEach(el => observer.observe(el));
+
+    // ── Escape key
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+    });
+
+    // ── Navbar scroll effect
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+      navbar.style.background = window.scrollY > 20 ? 'rgba(5,5,8,0.95)' : 'rgba(5,5,8,0.8)';
+    });
+  </script>
+</body>
 </html>

@@ -1,18 +1,23 @@
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { useEffect, useRef } from 'react';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { ToastProvider } from '../context/ToastContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { useAppSettings } from '../store/appSettingsStore';
+import { initNotificationHandler } from '../services/localNotificationService';
 
 import { Platform } from 'react-native';
 
 // Giữ splash screen cho đến khi sẵn sàng
 SplashScreen.preventAutoHideAsync();
+
+// Handler notification nen: phai dang ky som nhat (module-level), truoc khi co notification nao bay ve
+initNotificationHandler();
 
 import { BannedAccountModal } from '../components/BannedAccountModal';
 
@@ -54,8 +59,11 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  // URL khi app mo tu notification nen (cold start)
+  const pendingNotificationUrl = useRef<string | null>(null);
+
   useEffect(() => {
-    // Đảm bảo trên Web browser, thêm meta referrer no-referrer để load ảnh ngoại bộ an toàn
+    // Dam bao tren Web browser, thêm meta referrer no-referrer để load ảnh ngoại bộ an toàn
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       let meta = document.querySelector('meta[name="referrer"]');
       if (!meta) {
@@ -67,9 +75,42 @@ export default function RootLayout() {
         meta.setAttribute('content', 'no-referrer');
       }
     }
+
+    // Bam notification nen -> dieu huong dung phong chat / trang ca nhan (push, khong replace)
+    let notificationSubscription: { remove: () => void } | null = null;
+    if (Platform.OS !== 'web') {
+      const navigateFromNotification = (url: unknown) => {
+        if (typeof url === 'string' && url.startsWith('/')) {
+          router.push(url as never);
+        }
+      };
+      const initialResponse = Notifications.getLastNotificationResponse();
+      const initialUrl = initialResponse?.notification.request.content.data?.url;
+      if (typeof initialUrl === 'string' && initialUrl.startsWith('/')) {
+        // Cold start tu notification: luri cho loadStoredAuth xong (isInitializing=false) roi moi dieu huong
+        pendingNotificationUrl.current = initialUrl;
+        Notifications.clearLastNotificationResponseAsync().catch(() => {});
+      }
+      notificationSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+        navigateFromNotification(response.notification.request.content.data?.url);
+      });
+    }
+
     loadStoredAuth();
     loadSettings(); // Load app display settings (theme, language, etc.)
+
+    return () => {
+      notificationSubscription?.remove();
+    };
   }, []);
+
+  useEffect(() => {
+    if (!isInitializing && fontsLoaded && pendingNotificationUrl.current) {
+      const url = pendingNotificationUrl.current;
+      pendingNotificationUrl.current = null;
+      router.push(url as never);
+    }
+  }, [isInitializing, fontsLoaded]);
 
   useEffect(() => {
     if (!isInitializing && fontsLoaded) {
