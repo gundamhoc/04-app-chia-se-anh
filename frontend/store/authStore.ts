@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { storage } from '../utils/storage';
-import api, { setOnBannedCallback } from '../services/api';
-import { connectSocket, disconnectSocket } from '../services/socketService';
+import api, { setOnBannedCallback, loadApiOverride } from '../services/api';
+import { connectSocket, disconnectSocket, setSocketAuthBridge } from '../services/socketService';
 import type { User, LoginPayload, RegisterPayload } from '../types';
 
 
@@ -57,7 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await storage.setItem('auth_token', token);
       await storage.setItem('auth_user', JSON.stringify(user));
 
-      connectSocket(user.id);
+      connectSocket(user.id, token);
 
       // isInitializing KHÔNG được set ở đây — chỉ thay đổi isLoading
       set({ user, token, isAuthenticated: true, isLoading: false });
@@ -97,7 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await storage.setItem('auth_token', token);
       await storage.setItem('auth_user', JSON.stringify(user));
 
-      connectSocket(user.id);
+      connectSocket(user.id, token);
 
       set({ user, token, isAuthenticated: true, isLoading: false });
     } catch (error: any) {
@@ -139,6 +139,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------
   loadStoredAuth: async () => {
     try {
+      // Ap dung cau dao server (neu co) TRUOC khi verify token de khong goi nham server cu
+      await loadApiOverride();
+
       const token = await storage.getItem('auth_token');
       const userStr = await storage.getItem('auth_user');
 
@@ -148,7 +151,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Verify token vẫn còn hiệu lực
         try {
           await api.get('/auth/profile');
-          connectSocket(user.id);
+          connectSocket(user.id, token);
           set({ user, token, isAuthenticated: true, isInitializing: false });
         } catch (error: any) {
           const status = error?.response?.status;
@@ -221,6 +224,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // Đăng ký callback toàn cục với Axios interceptor
 setOnBannedCallback((info) => {
   useAuthStore.getState().handleBanned(info);
+});
+
+// Dang ky cau noi socketService -> authStore (cat Require cycle import tinh)
+setSocketAuthBridge({
+  getToken: () => useAuthStore.getState().token,
+  handleBanned: (info) => useAuthStore.getState().handleBanned(info),
 });
 
 

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { ColorScheme } from '../../constants/Colors';
@@ -26,7 +26,8 @@ import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../services/authService';
 import { photoService } from '../../services/photoService';
 import { friendService } from '../../services/friendService';
-import { BASE_URL } from '../../services/api';
+import { useSocket } from '../../hooks/useSocket';
+import { getApiOrigin } from '../../services/api';
 import { Photo, Friend, User } from '../../types';
 import { SettingsModal, maskEmail } from '../../components/SettingsModal';
 import { EditProfileModal } from '../../components/EditProfileModal';
@@ -38,8 +39,7 @@ type ProfileTab = 'posts' | 'liked' | 'saved' | 'reposts';
 const getAvatarUrl = (avatarUrl?: string | null): string | null => {
   if (!avatarUrl) return null;
   if (avatarUrl.startsWith('http')) return avatarUrl;
-  const base = BASE_URL.replace(/\/api\/?$/, '');
-  return `${base}${avatarUrl}`;
+  return `${getApiOrigin()}${avatarUrl}`;
 };
 
 export default function ProfileScreen() {
@@ -50,6 +50,7 @@ export default function ProfileScreen() {
   const { t } = useI18n();
   const { showToast } = useToast();
   const { user, updateUser } = useAuthStore();
+  const { socket } = useSocket();
 
   const styles = useMemo(() => createStyles(C, isDark, windowWidth), [C, isDark, windowWidth]);
 
@@ -124,14 +125,58 @@ export default function ProfileScreen() {
     }
   }, [updateUser]);
 
-  useEffect(() => {
-    loadProfileData();
-  }, [loadProfileData]);
+  // Tải lại toàn bộ dữ liệu hồ sơ mỗi khi tab được mở (focus)
+  // -> Số liệu likes/saved/reposts luôn mới nhất mà không cần pull-to-refresh thủ công
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileData();
+    }, [loadProfileData])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
     loadProfileData();
   };
+
+  // Realtime: khi có người thích/bỏ thích bài đăng của mình -> cập nhật ngay lượt thích trên Hồ sơ (0ms)
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReactionUpdate = (data?: { action?: string }) => {
+      const currentStats = user?.stats;
+      const current = currentStats?.likes_count ?? 0;
+      if (!currentStats) return;
+      const optimistic =
+        data?.action === 'removed'
+          ? Math.max(current - 1, 0)
+          : data?.action === 'replaced'
+            ? current
+            : current + 1;
+      updateUser({
+        stats: {
+          posts_count: currentStats.posts_count,
+          friends_count: currentStats.friends_count,
+          likes_count: optimistic,
+          saved_count: currentStats.saved_count,
+          reposts_count: currentStats.reposts_count,
+        },
+      });
+      // Tải lại stats chính xác từ server (count có thể tăng hoặc giảm tùy hành động)
+      authService
+        .getProfile()
+        .then((res) => {
+          if (res?.user) updateUser(res.user);
+        })
+        .catch(() => {
+          // Lỗi mạng -> giữ nguyên optimistic, không kick user
+        });
+    };
+
+    socket.on('photo_reaction_updated', handleReactionUpdate);
+    return () => {
+      socket.off('photo_reaction_updated', handleReactionUpdate);
+    };
+  }, [socket, user?.stats, updateUser]);
 
   const [updatingCover, setUpdatingCover] = useState(false);
 

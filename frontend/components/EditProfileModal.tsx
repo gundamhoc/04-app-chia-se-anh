@@ -23,7 +23,7 @@ import { useAuthStore } from '../store/authStore';
 import { authService } from '../services/authService';
 import { useToast } from '../hooks/useToast';
 import { useI18n } from '../utils/i18n';
-import { BASE_URL } from '../services/api';
+import { getApiOrigin } from '../services/api';
 import { WebCameraModal } from './WebCameraModal';
 import { User } from '../types';
 
@@ -36,8 +36,7 @@ interface EditProfileModalProps {
 const getAvatarUrl = (avatarUrl?: string | null): string | null => {
   if (!avatarUrl) return null;
   if (avatarUrl.startsWith('http')) return avatarUrl;
-  const base = BASE_URL.replace(/\/api\/?$/, '');
-  return `${base}${avatarUrl}`;
+  return `${getApiOrigin()}${avatarUrl}`;
 };
 
 export const EditProfileModal: React.FC<EditProfileModalProps> = ({

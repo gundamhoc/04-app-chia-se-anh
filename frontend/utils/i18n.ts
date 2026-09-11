@@ -206,7 +206,7 @@ export const translations = {
     lang_current: 'Ngôn ngữ hiện tại',
 
     // Auth (Login / Register / Forgot Password)
-    welcome_back: 'Chào mừng trở lại',
+    welcome_back: 'Chào mừng',
     login_to_continue: 'Đăng nhập để tiếp tục',
     login_btn: 'Đăng nhập',
     register_btn: 'Tạo tài khoản',

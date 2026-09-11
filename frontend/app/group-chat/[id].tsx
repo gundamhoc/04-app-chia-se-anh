@@ -1410,7 +1410,7 @@ export default function GroupChatScreen() {
                   </View>
 
                   {/* Quyền xóa thành viên dành cho admin */}
-                  {group?.my_role === 'admin' && !item.is_me && (
+                  {group?.my_role === 'admin' && !item.is_me && item.role !== 'admin' && (
                     <TouchableOpacity
                       style={styles.kickMemberBtn}
                       onPress={() => handleRemoveOrLeave(item.user_id, false)}

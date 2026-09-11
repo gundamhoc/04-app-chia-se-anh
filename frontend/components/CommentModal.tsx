@@ -12,7 +12,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Keyboard,
+  KeyboardEvent,
+  useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ColorScheme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
 import { CommentItem, CommentReaction } from '../types';
@@ -68,6 +72,34 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   const [activeEmojiPopoverCommentId, setActiveEmojiPopoverCommentId] = useState<number | null>(null);
 
   const inputRef = useRef<TextInput | null>(null);
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // Lắng nghe sự kiện bàn phím để đẩy modal lên trên (Android Modal không tự adjustResize)
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = (e: KeyboardEvent) => setKeyboardHeight(e.endCoordinates.height);
+    const onHide = () => setKeyboardHeight(0);
+
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Chiều cao tối đa an toàn của card khi bàn phím xuất hiện
+  const maxCardHeight = useMemo(() => {
+    if (keyboardHeight > 0) {
+      return Math.max(260, windowHeight - keyboardHeight - Math.max(insets.top, 24) - 10);
+    }
+    return windowHeight * 0.8;
+  }, [windowHeight, keyboardHeight, insets.top]);
 
   useEffect(() => {
     if (visible && photoId) {
@@ -77,6 +109,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       setInputText('');
       setReplyingTo(null);
       setActiveEmojiPopoverCommentId(null);
+      setKeyboardHeight(0);
     }
   }, [visible, photoId]);
 
@@ -211,7 +244,10 @@ export const CommentModal: React.FC<CommentModalProps> = ({
                 {VALID_EMOJIS.map((emoji) => (
                   <TouchableOpacity
                     key={emoji}
-                    style={styles.floatingEmojiItem}
+                    style={[
+                      styles.floatingEmojiItem,
+                      hasUserReacted && userReaction.emoji === emoji && styles.floatingEmojiItemActive,
+                    ]}
                     onPress={() => {
                       setActiveEmojiPopoverCommentId(null);
                       handleToggleReaction(item.id, emoji);
@@ -320,7 +356,16 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           }}
         />
 
-        <View style={styles.modalCard}>
+        <View
+          style={[
+            styles.modalCard,
+            {
+              maxHeight: maxCardHeight,
+              marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
+              paddingBottom: keyboardHeight > 0 ? 8 : Platform.OS === 'ios' ? 24 : Math.max(insets.bottom, 12),
+            },
+          ]}
+        >
           {/* Drag handle */}
           <View style={styles.dragBar} />
 
@@ -353,6 +398,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
               renderItem={renderCommentItem}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
               onScrollBeginDrag={() => setActiveEmojiPopoverCommentId(null)}
             />
           )}
@@ -618,6 +664,11 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 2,
     borderRadius: 12,
+  },
+  floatingEmojiItemActive: {
+    backgroundColor: 'rgba(108, 99, 255, 0.18)',
+    borderWidth: 1.5,
+    borderColor: C.primary,
   },
   floatingEmojiText: {
     fontSize: 18,

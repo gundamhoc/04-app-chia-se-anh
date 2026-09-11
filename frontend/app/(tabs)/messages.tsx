@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -19,18 +19,27 @@ import { StatusBar } from 'expo-status-bar';
 import { ColorScheme } from '../../constants/Colors';
 import { useTheme } from '../../context/ThemeContext';
 import { useSocket } from '../../hooks/useSocket';
+import { useAuthStore } from '../../store/authStore';
 import { useI18n } from '../../utils/i18n';
 import { messageService } from '../../services/messageService';
 import { friendService } from '../../services/friendService';
 import { groupService } from '../../services/groupService';
-import { Conversation, Friend, Group } from '../../types';
+import { Conversation, Friend, Group, Message } from '../../types';
 import { CreateGroupModal } from '../../components/CreateGroupModal';
 import { ConversationSkeleton } from '../../components/LoadingComponents';
+
+const compareConversationsOrder = (a: Conversation, b: Conversation) => {
+  if (Boolean(b.is_pinned) !== Boolean(a.is_pinned)) return b.is_pinned ? 1 : -1;
+  const ta = a.last_message_time ? new Date(a.last_message_time).getTime() : 0;
+  const tb = b.last_message_time ? new Date(b.last_message_time).getTime() : 0;
+  return tb - ta;
+};
 
 export default function MessagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isConnected, socket, isUserOnline } = useSocket();
+  const { user } = useAuthStore();
   const { colors: C, isDark } = useTheme();
   const { t, formatTime: formatTimeI18n } = useI18n();
   const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
@@ -104,21 +113,33 @@ export default function MessagesScreen() {
   };
 
   // Tải danh sách hội thoại, bạn bè & nhóm
+  const loadSeqRef = useRef(0);
+  const conversationsRef = useRef<Conversation[]>([]);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
   const loadData = async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [convs, friendsList, groupsList] = await Promise.all([
         messageService.getConversations(),
         friendService.getFriendsList(),
         groupService.getMyGroups(),
       ]);
+      // Guard sequence-number: response của lần gọi cũ không được ghi đè lần mới hơn
+      if (seq !== loadSeqRef.current) return;
       setConversations(convs);
       setFriends(friendsList);
       setGroups(groupsList);
     } catch (e) {
       console.warn('Lỗi tải danh sách tin nhắn:', e);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -137,7 +158,38 @@ export default function MessagesScreen() {
       loadData();
     };
 
-    socket.on('new_direct_message', handleDataReload);
+    // Tin nhắn 1-1: cập nhật cục bộ nếu đã có hội thoại; chỉ refetch khi hội thoại chưa tồn tại
+    const handleDirectMessage = (newMsg: Message) => {
+      if (!newMsg || !newMsg.id) return;
+      const otherId = newMsg.sender_id === user?.id ? newMsg.receiver_id : newMsg.sender_id;
+      if (!otherId) return;
+
+      if (conversationsRef.current.some((c) => c.friend_id === otherId)) {
+        setConversations((prev) =>
+          prev
+            .map((target) => {
+              if (target.friend_id !== otherId) return target;
+              return {
+                ...target,
+                last_message_id: newMsg.id,
+                last_message_text: newMsg.message_text ?? target.last_message_text,
+                last_message_image: newMsg.image_url ?? null,
+                last_message_file_url: newMsg.file_url ?? null,
+                last_message_file_name: newMsg.file_name ?? null,
+                last_message_sender_id: newMsg.sender_id,
+                last_message_is_read: Boolean(newMsg.is_read),
+                last_message_time: newMsg.created_at,
+                unread_count: newMsg.is_mine ? target.unread_count : target.unread_count + 1,
+              };
+            })
+            .sort(compareConversationsOrder)
+        );
+      } else {
+        loadData();
+      }
+    };
+
+    socket.on('new_direct_message', handleDirectMessage);
     socket.on('messages_marked_read', handleDataReload);
     socket.on('new_group_message', handleDataReload);
     socket.on('invited_to_group', handleDataReload);
@@ -145,14 +197,14 @@ export default function MessagesScreen() {
     socket.on('group_members_updated', handleDataReload);
 
     return () => {
-      socket.off('new_direct_message', handleDataReload);
+      socket.off('new_direct_message', handleDirectMessage);
       socket.off('messages_marked_read', handleDataReload);
       socket.off('new_group_message', handleDataReload);
       socket.off('invited_to_group', handleDataReload);
       socket.off('group_updated', handleDataReload);
       socket.off('group_members_updated', handleDataReload);
     };
-  }, [socket]);
+  }, [socket, user?.id]);
 
   const onRefresh = () => {
     setRefreshing(true);

@@ -26,6 +26,13 @@ import { useAppSettings } from '../store/appSettingsStore';
 import { useI18n, formatRelativeTime as formatRelativeTimeI18n } from '../utils/i18n';
 import { otaUpdateService, OtaUpdateInfo } from '../services/otaUpdateService';
 import { supportService, SupportTicket } from '../services/supportService';
+import {
+  getApiBaseUrl,
+  getApiOverride,
+  applyApiBaseUrlOverride,
+} from '../services/api';
+import { disconnectSocket, connectSocket } from '../services/socketService';
+import { SERVER_RENDER_URL, SERVER_NGROK_URL } from '../constants/servers';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -44,6 +51,7 @@ type DetailModalType =
   | 'privacy_center'
   | 'terms_policies'
   | 'app_version'
+  | 'developer'
   | null;
 
 /**
@@ -131,6 +139,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, 
   const [otaProgress, setOtaProgress] = useState(0);
   const [otaDownloaded, setOtaDownloaded] = useState(false);
   const [otaChecked, setOtaChecked] = useState(false);
+
+  // ===== Cau noi Developer: chon server backend luc chay (chi __DEV__) =====
+  const [serverDisplay, setServerDisplay] = useState<string>(() => getApiBaseUrl());
+  const [customServerInput, setCustomServerInput] = useState<string>('');
+
+  const handleSwitchServer = async (rootUrl: string | null) => {
+    try {
+      const nextBase = await applyApiBaseUrlOverride(rootUrl);
+      // Ket noi lai socket troi sang server moi (giu nguyen phien login neu server chia chung JWT/DB)
+      const st = useAuthStore.getState();
+      if (st.isAuthenticated && st.user?.id) {
+        disconnectSocket();
+        connectSocket(st.user.id, st.token);
+      }
+      setServerDisplay(nextBase);
+      showToast(
+        'success',
+        language === 'vi'
+          ? 'Đã chuyển máy chủ. Nếu dữ liệu không khớp, hãy đăng xuất rồi đăng nhập lại.'
+          : 'Server switched. Log out and back in if data looks stale.'
+      );
+    } catch (e) {
+      showToast('error', language === 'vi' ? 'Không đổi được máy chủ.' : 'Failed to switch server.');
+    }
+  };
+
+  const handleApplyCustomServer = async () => {
+    const val = customServerInput.trim();
+    if (!/^https?:\/\//i.test(val)) {
+      showToast('warning', language === 'vi' ? 'URL phải bắt đầu bằng http:// hoặc https://' : 'URL must start with http:// or https://');
+      return;
+    }
+    await handleSwitchServer(val);
+  };
+
+  const currentOverride = getApiOverride();
+  const isRenderActive = currentOverride === SERVER_RENDER_URL;
+  const isNgrokActive = currentOverride === SERVER_NGROK_URL;
+  const isDefaultActive = currentOverride === null;
 
   const handleCheckOta = async (simulate?: 'new_version' | 'up_to_date') => {
     setOtaLoading(true);
@@ -2313,6 +2360,116 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, 
         );
       }
 
+      case 'developer':
+        return (
+          <View style={{ padding: 16 }}>
+            <Text style={{ color: isDark ? '#FFFFFF' : '#1A1A2E', fontSize: 17, fontWeight: '700', marginBottom: 4 }}>
+              🧪 {language === 'vi' ? 'Máy chủ (Developer)' : 'Server (Developer)'}
+            </Text>
+            <Text style={{ color: isDark ? C.textMuted : '#6B7280', fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
+              {language === 'vi'
+                ? 'Chọn ngay nơi app kết nối để test, không cần sửa .env hay rebuild. Đang dùng:'
+                : 'Pick where the app connects for testing, no .env edit or rebuild. Currently:'}
+            </Text>
+            <View
+              style={{
+                backgroundColor: isDark ? 'rgba(108,99,255,0.12)' : '#EEF2FF',
+                borderRadius: 10,
+                padding: 10,
+                marginBottom: 16,
+              }}
+            >
+              <Text style={{ color: C.primary, fontSize: 12, fontFamily: 'monospace' }} selectable>
+                {serverDisplay}
+              </Text>
+            </View>
+
+            {(() => {
+              const options: { active: boolean; icon: string; label: string; url: string | null }[] = [
+                { active: isRenderActive, icon: '☁️', label: SERVER_RENDER_URL.replace('https://', ''), url: SERVER_RENDER_URL },
+                { active: isNgrokActive, icon: '🚇', label: SERVER_NGROK_URL.replace('https://', ''), url: SERVER_NGROK_URL },
+                { active: isDefaultActive, icon: '📶', label: language === 'vi' ? 'Mặc định (.env / LAN)' : 'Default (.env / LAN)', url: null },
+              ];
+              return options.map((opt) => (
+                <TouchableOpacity
+                  key={opt.label}
+                  activeOpacity={0.7}
+                  onPress={() => handleSwitchServer(opt.url)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingVertical: 12,
+                    paddingHorizontal: 12,
+                    borderRadius: 10,
+                    marginBottom: 8,
+                    borderWidth: 1.5,
+                    borderColor: opt.active ? C.primary : isDark ? C.border : '#E2E8F0',
+                    backgroundColor: opt.active ? 'rgba(108,99,255,0.12)' : isDark ? C.card : '#FFFFFF',
+                  }}
+                >
+                  <Text style={{ fontSize: 18 }}>{opt.icon}</Text>
+                  <Text
+                    style={{
+                      flex: 1,
+                      color: isDark ? '#FFFFFF' : '#1A1A2E',
+                      fontSize: 14,
+                      fontFamily: 'monospace',
+                    }}
+                    numberOfLines={1}
+                  >
+                    {opt.label}
+                  </Text>
+                  {opt.active && <Text style={{ color: C.primary, fontWeight: '700' }}>✓</Text>}
+                </TouchableOpacity>
+              ));
+            })()}
+
+            <Text style={{ color: isDark ? '#FFFFFF' : '#1A1A2E', fontSize: 15, fontWeight: '600', marginTop: 18, marginBottom: 8 }}>
+              {language === 'vi' ? 'Nhập URL tùy chỉnh' : 'Custom URL'}
+            </Text>
+            <TextInput
+              value={customServerInput}
+              onChangeText={setCustomServerInput}
+              placeholder="https://ten-mien-cua-ban.onrender.com"
+              placeholderTextColor={isDark ? C.textMuted : '#9CA3AF'}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
+                backgroundColor: isDark ? C.card : '#F1F5F9',
+                color: isDark ? '#FFFFFF' : '#1A1A2E',
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: isDark ? C.border : '#E2E8F0',
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                fontSize: 14,
+              }}
+            />
+            <TouchableOpacity
+              onPress={handleApplyCustomServer}
+              activeOpacity={0.7}
+              style={{
+                marginTop: 10,
+                backgroundColor: C.primary,
+                borderRadius: 10,
+                paddingVertical: 12,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15 }}>
+                {language === 'vi' ? 'Áp dụng URL tùy chỉnh' : 'Apply custom URL'}
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={{ color: isDark ? C.textMuted : '#6B7280', fontSize: 12, marginTop: 16, lineHeight: 17 }}>
+              {language === 'vi'
+                ? '⚠️ Mỗi server có tài khoản / dữ liệu riêng. Sau khi đổi, nếu bị văng về đăng nhập là bình thường — hãy đăng nhập lại bằng tài khoản của server đó.'
+                : '⚠️ Each server has its own accounts/data. If you get kicked to login after switching, just log in again on that server.'}
+            </Text>
+          </View>
+        );
+
       default:
         return null;
     }
@@ -2649,6 +2806,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, 
                 <Text style={styles.versionPillText}>v{appVersion}</Text>
               </View>
             </TouchableOpacity>
+
+            {/* 5. Cau noi Developer - chi hien khi __DEV__ */}
+            {__DEV__ && (
+              <>
+                <View style={[styles.separator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F3F4F6' }]} />
+                <TouchableOpacity
+                  style={styles.itemRow}
+                  onPress={() => setActiveDetail('developer')}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.itemIconBox, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                    <Text style={styles.itemIcon}>🧪</Text>
+                  </View>
+                  <View style={styles.itemTextBox}>
+                    <Text style={[styles.itemTitle, { color: isDark ? '#FFFFFF' : '#1A1A2E', fontWeight: highContrast ? '700' : undefined }]}>
+                      {language === 'vi' ? 'Máy chủ (Developer)' : 'Server (Developer)'}
+                    </Text>
+                    <Text style={[styles.itemSub, { color: isDark ? C.textMuted : '#6B7280' }]} numberOfLines={1}>
+                      {serverDisplay.replace(/^https?:\/\//, '').replace(/\/api$/, '')}
+                    </Text>
+                  </View>
+                  <Text style={[styles.chevron, { color: isDark ? C.textMuted : '#9CA3AF' }]}>›</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
           {/* ================= SECTION 4: ĐĂNG XUẤT (LOGOUT) ================= */}

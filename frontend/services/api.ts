@@ -1,13 +1,22 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { storage } from '../utils/storage';
 
 // ====================================================
-// Cách kết nối backend:
-// 1. Ưu tiên: EXPO_PUBLIC_API_URL (ngrok / production server)
-// 2. Tự động lấy IP của máy tính (LAN IP) qua Expo Metro hostUri
-// 3. Fallback: Android emulator (10.0.2.2) hoặc iOS/Web (localhost)
+// Cach ket noi backend (uu tien tu cao xuong thap):
+// 0. OVERRIDE cau dao Developer trong app (luu tai may, doi duoc khong can rebuild)
+// 1. EXPO_PUBLIC_API_URL (ngrok / production server trong .env)
+// 2. Trinh duyet web localhost -> localhost:5000
+// 3. Tu dong lay IP may tinh (LAN IP) qua Expo Metro hostUri
+// 4. Fallback: Android emulator (10.0.2.2) hoac iOS/Web (localhost)
 // ====================================================
+
+const API_OVERRIDE_KEY = '***';
+
+const normalizeRoot = (url: string): string => url.trim().replace(/\/+$/, '').replace(/\/api$/, '');
+
+const toApiBase = (rootUrl: string): string => `${normalizeRoot(rootUrl)}/api`;
 
 const getHostIp = (): string | null => {
   try {
@@ -27,8 +36,8 @@ const getHostIp = (): string | null => {
   return null;
 };
 
-const getBaseUrl = (): string => {
-  // 1. Trình duyệt Web trên máy local (Chrome / Edge localhost) -> Luôn dùng trực tiếp localhost:5000 để tối đa tốc độ và ổn định Socket
+const getDefaultBaseUrl = (): string => {
+  // 1. Trinh duyet Web tren may local (Chrome / Edge localhost) -> dung truc tiep localhost:5000
   if (
     Platform.OS === 'web' &&
     typeof window !== 'undefined' &&
@@ -37,11 +46,10 @@ const getBaseUrl = (): string => {
     return 'http://localhost:5000/api';
   }
 
-  // 2. Thiết bị di động hoặc môi trường cần tunnel ngrok (EXPO_PUBLIC_API_URL trong .env)
+  // 2. Thiet bi di dong hoac moi truong can tunnel (EXPO_PUBLIC_API_URL trong .env)
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   if (envUrl && envUrl.trim().length > 0) {
-    const trimmed = envUrl.trim().replace(/\/+$/, '');
-    return `${trimmed}/api`;
+    return toApiBase(envUrl);
   }
 
   // 3. Fallback cho Web
@@ -49,7 +57,7 @@ const getBaseUrl = (): string => {
     return 'http://localhost:5000/api';
   }
 
-  // 4. Thiết bị thật (Expo Go trên Mobile) -> Tự động phát hiện IP LAN từ Expo Bundler
+  // 4. Thiet bi that (Expo Go tren Mobile) -> Tu dong phat hien IP LAN tu Expo Bundler
   const hostIp = getHostIp();
   if (hostIp) {
     return `http://${hostIp}:5000/api`;
@@ -66,22 +74,71 @@ const getBaseUrl = (): string => {
   return 'http://localhost:5000/api';
 };
 
-const BASE_URL = getBaseUrl();
-if (__DEV__) {
-  console.log('🌐 [API] Base URL configured:', BASE_URL);
-}
+const DEFAULT_BASE_URL = getDefaultBaseUrl();
+
+// Base URL dang hoat dong (co the bi cau dao Developer ghi de)
+let currentBaseUrl: string = DEFAULT_BASE_URL;
+
+export const getApiBaseUrl = (): string => currentBaseUrl;
+export const getDefaultApiBaseUrl = (): string => DEFAULT_BASE_URL;
+export const getApiOrigin = (): string => normalizeRoot(currentBaseUrl);
+export const getApiOverride = (): string | null =>
+  currentBaseUrl === DEFAULT_BASE_URL ? null : normalizeRoot(currentBaseUrl);
+
+const applyBaseUrl = (url: string): void => {
+  currentBaseUrl = url;
+  api.defaults.baseURL = url;
+  if (__DEV__) {
+    console.log('[API] Base URL switched to:', url);
+  }
+};
+
+/**
+ *Doc override da luu tu truoc (goi som nhat co the khi app khoi dong).
+ * Tra ve true neu co override dang duoc ap dung.
+ */
+export const loadApiOverride = async (): Promise<boolean> => {
+  try {
+    const saved = await storage.getItem(API_OVERRIDE_KEY);
+    if (saved && saved.trim().length > 0) {
+      applyBaseUrl(toApiBase(saved));
+      return true;
+    }
+  } catch (e) {
+    console.warn('[API] Load server override failed:', e);
+  }
+  return false;
+};
+
+/**
+ * Cau dao Developer: chuyen server ngay lap tuc, khong can rebuild.
+ * @param rootUrl URL goc (vd https://xxx.onrender.com) hoac null = ve mac dinh (.env/LAN)
+ */
+export const applyApiBaseUrlOverride = async (rootUrl: string | null): Promise<string> => {
+  if (rootUrl && rootUrl.trim().length > 0) {
+    const next = toApiBase(rootUrl);
+    await storage.setItem(API_OVERRIDE_KEY, normalizeRoot(rootUrl));
+    applyBaseUrl(next);
+    return next;
+  }
+  await storage.deleteItem(API_OVERRIDE_KEY);
+  applyBaseUrl(DEFAULT_BASE_URL);
+  return DEFAULT_BASE_URL;
+};
 
 const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: currentBaseUrl,
   timeout: 20000,
   headers: {
     'ngrok-skip-browser-warning': '69420',
   },
 });
 
-import { storage } from '../utils/storage';
+if (__DEV__) {
+  console.log('🌐 [API] Base URL configured:', currentBaseUrl);
+}
 
-// Request interceptor: tự động gắn JWT token
+// Request interceptor: tu dong gan JWT token
 api.interceptors.request.use(
   async (config) => {
     config.headers['ngrok-skip-browser-warning'] = '69420';
@@ -89,7 +146,7 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    // Nếu data là FormData, xóa Content-Type để Axios/Browser/React Native tự động sinh header multipart/form-data kèm boundary chuẩn
+    // Neu data la FormData, xoa Content-Type de Axios/Browser/React Native tu sinh boundary chuan
     const isFormData =
       config.data instanceof FormData ||
       (config.data && typeof (config.data as any).getParts === 'function');
@@ -108,24 +165,24 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Callback xử lý khi bị ban tài khoản (tránh circular dependency với authStore)
+// Callback xu ly khi bi ban tai khoan (tranh circular dependency voi authStore)
 type BannedCallback = (info: { reason?: string; banned_until?: string | null; message?: string }) => void;
 let onBannedHandler: BannedCallback | null = null;
 export const setOnBannedCallback = (cb: BannedCallback) => {
   onBannedHandler = cb;
 };
 
-// Response interceptor: xử lý lỗi global
+// Response interceptor: xu ly loi global
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // 1. Nếu token hết hạn hoặc không hợp lệ -> xóa token
+    // 1. Neu token het han hoac khong hop le -> xoa token
     if (error.response?.status === 401) {
       await storage.deleteItem('auth_token');
       await storage.deleteItem('auth_user');
     }
 
-    // 2. Nếu tài khoản bị Quản trị viên Khóa / Ban (HTTP 403)
+    // 2. Neu tai khoan bi Quan tri vien Khoa / Ban (HTTP 403)
     if (error.response?.status === 403 && error.response?.data?.banned) {
       await storage.deleteItem('auth_token');
       await storage.deleteItem('auth_user');
@@ -138,7 +195,7 @@ api.interceptors.response.use(
       }
     }
 
-    // Nhận diện lỗi khi tunnel ngrok offline hoặc server trả về HTML error page thay vì JSON API
+    // Nhan dien loi khi tunnel ngrok offline hoac server tra HTML error page thay vi JSON
     const isHtmlResponse =
       typeof error?.response?.data === 'string' &&
       (error.response.data.includes('<!DOCTYPE') ||
@@ -156,5 +213,4 @@ api.interceptors.response.use(
 );
 
 export default api;
-export { BASE_URL };
-
+export { api };

@@ -151,7 +151,22 @@ export default function ChatScreen() {
     if (isNaN(friendId)) return;
     try {
       const data = await messageService.getMessages(friendId);
-      setMessages(data.messages);
+      // Merge dedup theo id: giữ tin realtime + trạng thái đã đọc đang bay về giữa fetch, không replace thô
+      setMessages((prev) => {
+        const prevMap = new Map(prev.map((m) => [m.id, m]));
+        const seen = new Set<number>();
+        const merged: Message[] = [];
+        for (const m of data.messages) {
+          seen.add(m.id);
+          const local = prevMap.get(m.id);
+          merged.push(local ? { ...m, is_read: m.is_read || local.is_read } : m);
+        }
+        for (const m of prev) {
+          if (seen.has(m.id)) continue;
+          merged.push(m);
+        }
+        return merged.sort((a, b) => a.id - b.id);
+      });
       if (data.friend) {
         const resolvedName = data.friend.full_name || data.friend.username;
         if (resolvedName) {

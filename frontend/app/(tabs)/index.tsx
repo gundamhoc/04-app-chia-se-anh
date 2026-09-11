@@ -491,7 +491,10 @@ export default function HomeScreen() {
               {EMOJIS.map((emoji) => (
                 <TouchableOpacity
                   key={emoji}
-                  style={styles.floatingEmojiItem}
+                  style={[
+                    styles.floatingEmojiItem,
+                    hasUserReacted && userReaction.emoji === emoji && styles.floatingEmojiItemActive,
+                  ]}
                   onPress={() => {
                     setActiveEmojiPopoverPhotoId(null);
                     handleToggleReaction(item.id, emoji);
@@ -522,6 +525,7 @@ export default function HomeScreen() {
             <Text style={styles.mainActionIcon}>{hasUserReacted ? userReaction.emoji : '🤍'}</Text>
             <Text style={[styles.mainActionText, hasUserReacted && styles.mainActionTextActive]}>
               {hasUserReacted ? t('liked') : t('like')}
+              {totalReactionsCount > 0 ? ` ${totalReactionsCount}` : ''}
             </Text>
           </TouchableOpacity>
 
@@ -1324,6 +1328,11 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  floatingEmojiItemActive: {
+    backgroundColor: 'rgba(108, 99, 255, 0.18)',
+    borderWidth: 1.5,
+    borderColor: C.primary,
   },
   floatingEmojiText: {
     fontSize: 22,

@@ -26,7 +26,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useSocket } from '../../hooks/useSocket';
 import { friendService } from '../../services/friendService';
 import { photoService } from '../../services/photoService';
-import { BASE_URL } from '../../services/api';
+import { getApiOrigin } from '../../services/api';
 import { Photo, OtherUserProfile, FriendshipStatus } from '../../types';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { VideoPlayerModal } from '../../components/VideoPlayerModal';
@@ -34,8 +34,7 @@ import { VideoPlayerModal } from '../../components/VideoPlayerModal';
 const getAvatarUrl = (avatarUrl?: string | null): string | null => {
   if (!avatarUrl) return null;
   if (avatarUrl.startsWith('http')) return avatarUrl;
-  const base = BASE_URL.replace(/\/api\/?$/, '');
-  return `${base}${avatarUrl}`;
+  return `${getApiOrigin()}${avatarUrl}`;
 };
 
 export default function OtherUserProfileScreen() {
