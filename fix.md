@@ -119,7 +119,11 @@
 
 ---
 
-# 📦 CHUẨN BỊ COMMIT (chưa chạy — chờ user, và nên làm SAU khi xong Đợt 2/3)
+# 📦 COMMIT + DEPLOY — ✅ HOÀN THÀNH (2026-09-11)
+- Đã push `main` 3 commit: `fb5083a` security+reaction BE → `3e9dc7c` FE (dev switch + Dot 2-3) → `9764f6f` chore/docs/website/keep-alive.
+- Render redeploy code mới, verify cloud `qa_cloud_test.js` 15/15 PASS (health, register, feed+auth, IDOR 401, receiver 404, admin 401, group admin rule 403, socket reject-no-token / accept-token). Script + dữ liệu QA đã XÓA/dọn sạch. `website/**` + `i18n.ts` được user duyệt commit kèm.
+
+## (Tài liệu cũ) KHUYẾN NGHỊ TÁCH COMMIT — ĐÃ THỰC HIỆN theo Khuyến nghị A
 
 > **CẢNH BÁO quan trọng**: các thay đổi Reaction, Security Đợt 1 và Dev-bridge **xen lẫn trong CÙNG nhiều file** (`photoController.js`, `commentController.js`, `messageController.js`, `socketService.ts`, `authStore.ts`, `profile.tsx`). Không thể tách thành 3 commit ĐỘC LẬP chạy được, vì mỗi commit trung gian sẽ gọi hàm chưa được thêm ở commit sau (ví dụ `canViewPhoto` / `getApiOrigin`). Bisect history sẽ đỏ nếu tách cưỡng ép.
 
