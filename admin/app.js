@@ -813,7 +813,7 @@ function openPostReviewModal(postId) {
   if (!post) return;
 
   const isVideo = post.media_type === 'video' || !!post.video_url || post.is_video;
-  const videoStreamUrl = post.stream_url || `${state.apiBaseUrl}/admin/posts/${post.id}/stream`;
+  const videoStreamUrl = (post.stream_url || `${state.apiBaseUrl}/admin/posts/${post.id}/stream`) + (state.adminToken ? `?token=${encodeURIComponent(state.adminToken)}` : '');
   const resolvedMedia = resolveMediaUrl(post.media_url || post.image_url);
   const authorName = post.full_name || post.author_name || post.username || post.author_username || 'Tác giả';
   const authorUsername = post.username || post.author_username || 'unknown';
