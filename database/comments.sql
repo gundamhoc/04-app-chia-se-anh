@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS comment_reactions (
   emoji VARCHAR(10) NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY unique_user_comment_emoji (comment_id, user_id, emoji),
+  UNIQUE KEY unique_user_comment_reaction (comment_id, user_id),
   CONSTRAINT fk_comment_reactions_comment FOREIGN KEY (comment_id) REFERENCES photo_comments(id) ON DELETE CASCADE,
   CONSTRAINT fk_comment_reactions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

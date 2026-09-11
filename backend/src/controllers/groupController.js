@@ -1,6 +1,6 @@
 const { pool } = require('../config/db');
 const { uploadFileToDrive } = require('../utils/googleDrive');
-const { sendNotificationToGroup, sendNotificationToUser } = require('../sockets/socketHandler');
+const { sendNotificationToGroup, sendNotificationToUser, leaveGroupRoom } = require('../sockets/socketHandler');
 const fs = require('fs');
 
 // Helper chuẩn hóa link ảnh Google Drive hoặc local
@@ -509,6 +509,35 @@ const removeMember = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Chỉ Quản trị viên mới có quyền xóa thành viên.' });
     }
 
+    const [targetMembership] = await pool.query(
+      `SELECT role FROM \`group_members\` WHERE group_id = ? AND user_id = ?`,
+      [groupId, targetUserId]
+    );
+
+    if (targetMembership.length === 0) {
+      return res.status(404).json({ success: false, message: 'Thành viên không tồn tại trong nhóm.' });
+    }
+
+    if (!isSelfLeaving && targetMembership[0].role === 'admin') {
+      return res.status(403).json({ success: false, message: 'Không thể xóa quản trị viên khác.' });
+    }
+
+    if (isSelfLeaving && isAdmin) {
+      const [memberStats] = await pool.query(
+        `SELECT COUNT(*) AS total_members, SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) AS admin_count
+         FROM \`group_members\` WHERE group_id = ?`,
+        [groupId]
+      );
+      const totalMembers = Number(memberStats[0].total_members) || 0;
+      const adminCount = Number(memberStats[0].admin_count) || 0;
+      if (adminCount <= 1 && totalMembers > 1) {
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn là quản trị viên cuối cùng. Hãy thêm hoặc phân quyền quản trị cho thành viên khác trước khi rời nhóm.',
+        });
+      }
+    }
+
     await pool.query(
       `DELETE FROM \`group_members\` WHERE group_id = ? AND user_id = ?`,
       [groupId, targetUserId]
@@ -529,6 +558,8 @@ const removeMember = async (req, res) => {
     }
 
     if (req.io) {
+      // Cuong che nguoi bi xoa/roi nhom ra khoi phong realtime de khong con nghe tin
+      leaveGroupRoom(req.io, groupId, targetUserId);
       sendNotificationToGroup(req.io, groupId, 'group_members_updated', { groupId, removedUserId: targetUserId });
     }
 

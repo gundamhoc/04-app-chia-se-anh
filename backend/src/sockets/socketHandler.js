@@ -4,6 +4,9 @@
  * Giai đoạn 1: Chỉ setup nền tảng, chưa có business logic
  */
 
+const { verifyToken } = require('../utils/jwt');
+const { pool } = require('../config/db');
+
 // Map lưu userId (number) -> Set<socketId> để hỗ trợ nhiều tab/thiết bị đồng thời
 const connectedUsers = new Map();
 
@@ -62,12 +65,24 @@ let ioInstance = null;
 const initSocketHandler = (io) => {
   ioInstance = io;
   // -------------------------------------------------------
-  // Middleware xác thực socket (optional ở sprint 1)
-  // Giai đoạn sau: verify JWT từ socket.handshake.auth.token
+  // Middleware xác thực socket: BẮT BUỘC JWT người dùng hợp lệ
+  // Client gửi token qua socket.handshake.auth.token
   // -------------------------------------------------------
   io.use((socket, next) => {
-    // Tạm thời cho phép tất cả kết nối
-    next();
+    try {
+      const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+      if (!token) {
+        return next(new Error('UNAUTHORIZED: thiếu token xác thực'));
+      }
+      const decoded = verifyToken(token);
+      if (!decoded || !decoded.id || decoded.admin_id) {
+        return next(new Error('UNAUTHORIZED: token không hợp lệ'));
+      }
+      socket.userId = parseInt(decoded.id, 10);
+      next();
+    } catch (err) {
+      next(new Error('UNAUTHORIZED: ' + err.message));
+    }
   });
 
   io.on('connection', (socket) => {
@@ -75,10 +90,9 @@ const initSocketHandler = (io) => {
     // Event: user_online
     // Client gửi khi đăng nhập thành công hoặc reconnect
     // -------------------------------------------------------
-    socket.on('user_online', (data) => {
-      const { userId } = data;
+    socket.on('user_online', () => {
+      const userId = socket.userId;
       if (userId) {
-        socket.userId = userId;
         const becameOnline = addUserSocket(userId, socket.id);
         console.log(`👤 User ${userId} is online (socket: ${socket.id}, active sockets: ${connectedUsers.get(parseInt(userId, 10))?.size || 1})`);
         
@@ -105,8 +119,8 @@ const initSocketHandler = (io) => {
     // Event: user_offline
     // Client gửi khi chủ động đăng xuất
     // -------------------------------------------------------
-    socket.on('user_offline', (data) => {
-      const { userId } = data;
+    socket.on('user_offline', () => {
+      const userId = socket.userId;
       if (userId) {
         const becameOffline = removeUserSocket(userId, socket.id);
         if (becameOffline) {
@@ -120,29 +134,46 @@ const initSocketHandler = (io) => {
     // -------------------------------------------------------
     // Event: join_conversation / leave_conversation (1-1 chat)
     // -------------------------------------------------------
+    // RoomId LUÔN do server tính từ socket.userId (chống nghe lén hội thoại người khác)
+    const buildChatRoom = (friendId) => {
+      const fid = parseInt(friendId, 10);
+      if (!socket.userId || isNaN(fid) || fid <= 0) return null;
+      return `chat_${[socket.userId, fid].sort((a, b) => a - b).join('_')}`;
+    };
+
     socket.on('join_conversation', (data) => {
-      const { conversationId, friendId } = data || {};
-      const roomId = conversationId || (friendId ? [socket.userId, friendId].sort().join('_') : null);
+      const roomId = buildChatRoom(data?.friendId);
       if (roomId) {
-        socket.join(`chat_${roomId}`);
+        socket.join(roomId);
       }
     });
 
     socket.on('leave_conversation', (data) => {
-      const { conversationId, friendId } = data || {};
-      const roomId = conversationId || (friendId ? [socket.userId, friendId].sort().join('_') : null);
+      const roomId = buildChatRoom(data?.friendId);
       if (roomId) {
-        socket.leave(`chat_${roomId}`);
+        socket.leave(roomId);
       }
     });
 
     // -------------------------------------------------------
     // Event: join_group / leave_group (Group chat)
     // -------------------------------------------------------
-    socket.on('join_group', (data) => {
-      const groupId = data?.groupId;
-      if (groupId) {
-        socket.join(`group_${groupId}`);
+    socket.on('join_group', async (data) => {
+      const groupId = parseInt(data?.groupId, 10);
+      if (!groupId || !socket.userId) return;
+      try {
+        // CHỈ thành viên nhóm mới được vào phòng realtime của nhóm
+        const [membership] = await pool.query(
+          'SELECT id FROM `group_members` WHERE group_id = ? AND user_id = ?',
+          [groupId, socket.userId]
+        );
+        if (membership.length > 0) {
+          socket.join(`group_${groupId}`);
+        } else {
+          console.warn(`⛔ [Socket] User ${socket.userId} try join group_${groupId} WITHOUT membership - blocked`);
+        }
+      } catch (err) {
+        console.error('join_group membership check error:', err.message);
       }
     });
 
@@ -179,8 +210,8 @@ const initSocketHandler = (io) => {
     socket.on('group_typing_start', (data) => {
       const groupId = data?.groupId;
       const userName = data?.userName || 'Thành viên';
-      const senderId = socket.userId || data?.userId;
-      if (groupId) {
+      const senderId = socket.userId;
+      if (groupId && senderId) {
         socket.to(`group_${groupId}`).emit('user_group_typing', {
           groupId,
           userId: senderId,
@@ -192,8 +223,8 @@ const initSocketHandler = (io) => {
 
     socket.on('group_typing_stop', (data) => {
       const groupId = data?.groupId;
-      const senderId = socket.userId || data?.userId;
-      if (groupId) {
+      const senderId = socket.userId;
+      if (groupId && senderId) {
         socket.to(`group_${groupId}`).emit('user_group_typing', {
           groupId,
           userId: senderId,
@@ -285,6 +316,22 @@ const broadcastToUsers = (io, targetUserIds, eventName, payload) => {
 /**
  * Gửi thông báo tới cả phòng nhóm (room group_${groupId})
  */
+/**
+ * Cưỡng chế 1 user rời khỏi phòng realtime của nhóm (khi bị xóa / rời nhóm)
+ */
+const leaveGroupRoom = (io, groupId, userId) => {
+  const theIO = io || ioInstance;
+  const uid = parseInt(userId, 10);
+  if (!theIO || isNaN(uid) || !groupId) return;
+  const socketIds = connectedUsers.get(uid);
+  if (socketIds) {
+    socketIds.forEach((sId) => {
+      const sock = theIO.sockets?.sockets?.get(sId);
+      if (sock) sock.leave(`group_${groupId}`);
+    });
+  }
+};
+
 const sendNotificationToGroup = (io, groupId, eventName, payload) => {
   const theIO = io || ioInstance;
   if (!theIO || !groupId) return false;
@@ -302,6 +349,7 @@ module.exports = {
   kickUserSockets,
   broadcastToUsers,
   sendNotificationToGroup,
+  leaveGroupRoom,
 };
 
 

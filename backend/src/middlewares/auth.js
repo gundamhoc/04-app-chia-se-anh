@@ -19,6 +19,14 @@ const authMiddleware = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = verifyToken(token);
 
+    // Chặn token Quản Trị dùng trên API người dùng (token admin có admin_id)
+    if (decoded.admin_id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token không hợp lệ cho hệ thống người dùng.',
+      });
+    }
+
     // Kiểm tra trạng thái tài khoản trong DB (đặc biệt khi bị ban/khóa)
     const [rows] = await pool.query(
       'SELECT id, username, email, is_active, banned_until, ban_reason FROM users WHERE id = ?',

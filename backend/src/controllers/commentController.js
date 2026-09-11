@@ -1,6 +1,7 @@
 const { pool } = require('../config/db');
 const { sendNotificationToUser } = require('../sockets/socketHandler');
 const { createNotification } = require('../services/notificationService');
+const { canViewPhoto } = require('../controllers/photoController');
 
 // ============================================================
 // Controller: Quản lý Bình luận & Thả cảm xúc bình luận
@@ -17,6 +18,15 @@ const getComments = async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const photoId = req.params.id;
+
+    // KIỂM TRA QUYỀN: không xem được bài viết thì không đọc được bình luận
+    const view = await canViewPhoto(photoId, currentUserId);
+    if (!view.allowed) {
+      return res.status(view.reason === 'not_found' ? 404 : 403).json({
+        success: false,
+        message: view.reason === 'not_found' ? 'Không tìm thấy bài viết.' : 'Bạn không có quyền xem bình luận của bài viết này.',
+      });
+    }
 
     // Lấy danh sách bình luận kèm thông tin tác giả và người được reply
     const [rows] = await pool.query(
@@ -137,14 +147,15 @@ const createComment = async (req, res) => {
       });
     }
 
-    // Kiểm tra ảnh có tồn tại
-    const [photos] = await pool.query(`SELECT id, user_id FROM photos WHERE id = ?`, [photoId]);
-    if (photos.length === 0) {
-      return res.status(404).json({
+    // Kiểm tra ảnh tồn tại + QUYỀN bình luận (bị ẩn/private/không phải bạn bè -> chặn)
+    const view = await canViewPhoto(photoId, currentUserId);
+    if (!view.allowed) {
+      return res.status(view.reason === 'not_found' ? 404 : 403).json({
         success: false,
-        message: 'Không tìm thấy bức ảnh này.',
+        message: view.reason === 'not_found' ? 'Không tìm thấy bức ảnh này.' : 'Bạn không có quyền bình luận bài viết này.',
       });
     }
+    const [photos] = await pool.query('SELECT id, user_id FROM photos WHERE id = ?', [photoId]);
     const photoAuthorId = photos[0].user_id;
 
     let parentId = null;
@@ -270,7 +281,7 @@ const deleteComment = async (req, res) => {
     // Chỉ tác giả bình luận HOẶC tác giả bài viết mới được xóa
     const [comments] = await pool.query(
       `
-      SELECT c.id, c.user_id, p.user_id AS photo_author_id 
+      SELECT c.id, c.user_id, c.photo_id, p.user_id AS photo_author_id 
       FROM photo_comments c
       JOIN photos p ON c.photo_id = p.id
       WHERE c.id = ?
@@ -286,6 +297,14 @@ const deleteComment = async (req, res) => {
     }
 
     const comment = comments[0];
+    // Người xóa PHẢI còn quyền xem bài viết (chủ bài hoặc tác giả comment)
+    const view = await canViewPhoto(comment.photo_id, currentUserId);
+    if (!view.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền xóa bình luận này.',
+      });
+    }
     if (comment.user_id !== currentUserId && comment.photo_author_id !== currentUserId) {
       return res.status(403).json({
         success: false,
@@ -328,7 +347,7 @@ const toggleCommentReaction = async (req, res) => {
     }
 
     // Kiểm tra bình luận có tồn tại
-    const [comments] = await pool.query(`SELECT id, user_id FROM photo_comments WHERE id = ?`, [commentId]);
+    const [comments] = await pool.query(`SELECT id, user_id, photo_id FROM photo_comments WHERE id = ?`, [commentId]);
     if (comments.length === 0) {
       return res.status(404).json({
         success: false,
@@ -338,16 +357,30 @@ const toggleCommentReaction = async (req, res) => {
 
     const commentAuthorId = comments[0].user_id;
 
-    // Kiểm tra đã thả chưa
+    // KIỂM TRA QUYỀN: phải xem được bài viết chứa bình luận mới được thả cảm xúc
+    const view = await canViewPhoto(comments[0].photo_id, currentUserId);
+    if (!view.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền tương tác với bình luận này.',
+      });
+    }
+
+    // Kiểm tra đã thả chưa (1 người chỉ có DUY NHẤT 1 cảm xúc trên 1 bình luận - kiểu Facebook)
     const [existing] = await pool.query(
-      `SELECT id FROM comment_reactions WHERE comment_id = ? AND user_id = ? AND emoji = ?`,
-      [commentId, currentUserId, emoji]
+      `SELECT id, emoji FROM comment_reactions WHERE comment_id = ? AND user_id = ?`,
+      [commentId, currentUserId]
     );
 
     let action = '';
     if (existing.length > 0) {
-      await pool.query(`DELETE FROM comment_reactions WHERE id = ?`, [existing[0].id]);
-      action = 'removed';
+      if (existing[0].emoji === emoji) {
+        await pool.query(`DELETE FROM comment_reactions WHERE id = ?`, [existing[0].id]);
+        action = 'removed';
+      } else {
+        await pool.query(`UPDATE comment_reactions SET emoji = ? WHERE id = ?`, [emoji, existing[0].id]);
+        action = 'replaced';
+      }
     } else {
       await pool.query(
         `INSERT INTO comment_reactions (comment_id, user_id, emoji) VALUES (?, ?, ?)`,
@@ -407,7 +440,12 @@ const toggleCommentReaction = async (req, res) => {
 
     return res.json({
       success: true,
-      message: action === 'added' ? `Đã thả ${emoji}` : `Đã bỏ ${emoji}`,
+      message:
+        action === 'added'
+          ? `Đã thả ${emoji}`
+          : action === 'replaced'
+            ? `Đã đổi cảm xúc sang ${emoji}`
+            : `Đã bỏ ${emoji}`,
       data: {
         comment_id: parseInt(commentId, 10),
         reactions: formattedReactions,

@@ -276,6 +276,27 @@ const getMessages = async (req, res) => {
  * POST /api/messages
  * Body: { receiver_id, message_text }
  */
+
+// ============================================================
+// HELPER: Kiểm tra receiver (tin nhắn 1-1)
+// - receiver PHẢI là tài khoản đang hoạt động
+// - CHẶN tự nhắn cho chính mình
+// (Người lạ nhắn được với nhau là FEATURE theo thiết kế Masita)
+// ============================================================
+const validateDirectReceiver = async (receiverId, currentUserId) => {
+  if (isNaN(receiverId)) {
+    return { ok: false, status: 400, message: 'Người nhận không hợp lệ.' };
+  }
+  if (receiverId === currentUserId) {
+    return { ok: false, status: 400, message: 'Không thể gửi tin nhắn cho chính mình.' };
+  }
+  const [users] = await pool.query('SELECT id FROM users WHERE id = ? AND is_active = 1', [receiverId]);
+  if (users.length === 0) {
+    return { ok: false, status: 404, message: 'Người nhận không tồn tại.' };
+  }
+  return { ok: true };
+};
+
 const sendMessage = async (req, res) => {
   try {
     const currentUserId = req.user.id;
@@ -284,8 +305,9 @@ const sendMessage = async (req, res) => {
     const host = req.get('host');
 
     const receiverId = parseInt(receiver_id, 10);
-    if (isNaN(receiverId)) {
-      return res.status(400).json({ success: false, message: 'Người nhận không hợp lệ.' });
+    const receiverCheck = await validateDirectReceiver(receiverId, currentUserId);
+    if (!receiverCheck.ok) {
+      return res.status(receiverCheck.status).json({ success: false, message: receiverCheck.message });
     }
 
     if (!message_text || message_text.trim().length === 0) {
@@ -377,8 +399,9 @@ const sendImageMessage = async (req, res) => {
     const host = req.get('host');
 
     const receiverId = parseInt(receiver_id, 10);
-    if (isNaN(receiverId)) {
-      return res.status(400).json({ success: false, message: 'Người nhận không hợp lệ.' });
+    const receiverCheck = await validateDirectReceiver(receiverId, currentUserId);
+    if (!receiverCheck.ok) {
+      return res.status(receiverCheck.status).json({ success: false, message: receiverCheck.message });
     }
 
     if (!req.file) {
@@ -518,8 +541,9 @@ const sendFileMessage = async (req, res) => {
     const host = req.get('host');
 
     const receiverId = parseInt(receiver_id, 10);
-    if (isNaN(receiverId)) {
-      return res.status(400).json({ success: false, message: 'Người nhận không hợp lệ.' });
+    const receiverCheck = await validateDirectReceiver(receiverId, currentUserId);
+    if (!receiverCheck.ok) {
+      return res.status(receiverCheck.status).json({ success: false, message: receiverCheck.message });
     }
 
     if (!req.file) {
@@ -758,7 +782,7 @@ const downloadMessageFile = async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      `SELECT id, file_url, image_url, file_name, file_size, file_type FROM messages WHERE id = ?`,
+      `SELECT id, sender_id, receiver_id, group_id, file_url, image_url, file_name, file_size, file_type FROM messages WHERE id = ?`,
       [messageId]
     );
 
@@ -767,6 +791,21 @@ const downloadMessageFile = async (req, res) => {
     }
 
     const msg = rows[0];
+
+    // KIỂM TRA QUYỀN TẢI FILE: chỉ người gửi, người nhận (1-1) hoặc thành viên nhóm
+    const currentUserId = req.user.id;
+    if (msg.group_id) {
+      const [membership] = await pool.query(
+        `SELECT id FROM \`group_members\` WHERE group_id = ? AND user_id = ?`,
+        [msg.group_id, currentUserId]
+      );
+      if (membership.length === 0) {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền tải tệp tin này.' });
+      }
+    } else if (msg.sender_id !== currentUserId && msg.receiver_id !== currentUserId) {
+      return res.status(403).json({ success: false, message: 'Bạn không có quyền tải tệp tin này.' });
+    }
+
     const targetUrl = msg.file_url || msg.image_url;
     if (!targetUrl) {
       return res.status(404).json({ success: false, message: 'Tin nhắn không có tệp tin đính kèm.' });

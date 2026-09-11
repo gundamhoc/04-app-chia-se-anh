@@ -33,8 +33,16 @@ const verifyAdminToken = async (req, res, next) => {
       });
     }
 
+    // Token PHẢI là token Quản Trị (có admin_id) — chặn token người dùng thông thường
+    if (!decoded.admin_id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token không hợp lệ cho hệ thống quản trị.',
+      });
+    }
+
     // Tra cứu tài khoản trong bảng admin_users
-    const adminId = decoded.admin_id || decoded.id;
+    const adminId = decoded.admin_id;
     const [rows] = await pool.query(
       'SELECT id, username, full_name, email, role, is_active FROM admin_users WHERE id = ?',
       [adminId]

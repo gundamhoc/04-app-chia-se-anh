@@ -227,11 +227,21 @@ const getProfile = async (req, res) => {
       'SELECT COUNT(*) as count FROM photo_reactions pr JOIN photos p ON pr.photo_id = p.id WHERE p.user_id = ?',
       [req.user.id]
     );
+    const [savedRows] = await pool.query(
+      'SELECT COUNT(*) as count FROM saved_photos WHERE user_id = ?',
+      [req.user.id]
+    );
+    const [repostRows] = await pool.query(
+      'SELECT COUNT(*) as count FROM photo_reposts WHERE user_id = ?',
+      [req.user.id]
+    );
 
     user.stats = {
       posts_count: parseInt(postRows[0]?.count || 0, 10),
       friends_count: parseInt(friendRows[0]?.count || 0, 10),
       likes_count: parseInt(likeRows[0]?.count || 0, 10),
+      saved_count: parseInt(savedRows[0]?.count || 0, 10),
+      reposts_count: parseInt(repostRows[0]?.count || 0, 10),
     };
 
     return res.status(200).json({

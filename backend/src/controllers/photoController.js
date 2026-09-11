@@ -647,6 +647,14 @@ const toggleSavePhoto = async (req, res) => {
       return res.status(400).json({ success: false, message: 'ID ảnh không hợp lệ.' });
     }
 
+    const view = await canViewPhoto(photoId, currentUserId);
+    if (!view.allowed) {
+      return res.status(view.reason === 'not_found' ? 404 : 403).json({
+        success: false,
+        message: view.reason === 'not_found' ? 'Không tìm thấy bài viết.' : 'Bạn không có quyền thao tác với bài viết này.',
+      });
+    }
+
     const [existing] = await pool.query(
       'SELECT id FROM saved_photos WHERE user_id = ? AND photo_id = ?',
       [currentUserId, photoId]
@@ -757,6 +765,14 @@ const toggleRepost = async (req, res) => {
       return res.status(400).json({ success: false, message: 'ID ảnh không hợp lệ.' });
     }
 
+    const view = await canViewPhoto(photoId, currentUserId);
+    if (!view.allowed) {
+      return res.status(view.reason === 'not_found' ? 404 : 403).json({
+        success: false,
+        message: view.reason === 'not_found' ? 'Không tìm thấy bài viết.' : 'Bạn không có quyền thao tác với bài viết này.',
+      });
+    }
+
     const [existing] = await pool.query(
       'SELECT id FROM photo_reposts WHERE user_id = ? AND photo_id = ?',
       [currentUserId, photoId]
@@ -834,17 +850,29 @@ const toggleReaction = async (req, res) => {
 
     const photoAuthorId = photos[0].user_id;
 
-    // Kiểm tra đã thả chưa
+    // KIỂM TRA QUYỀN: không xem được bài thì không thả được cảm xúc
+    const view = await canViewPhoto(photoId, currentUserId);
+    if (!view.allowed) {
+      return res.status(403).json({ success: false, message: 'Bạn không có quyền tương tác với bài viết này.' });
+    }
+
+    // Kiểm tra đã thả chưa (1 người chỉ có DUY NHẤT 1 cảm xúc trên 1 bài - kiểu Facebook)
     const [existing] = await pool.query(
-      `SELECT id FROM photo_reactions WHERE photo_id = ? AND user_id = ? AND emoji = ?`,
-      [photoId, currentUserId, emoji]
+      `SELECT id, emoji FROM photo_reactions WHERE photo_id = ? AND user_id = ?`,
+      [photoId, currentUserId]
     );
 
     let action = '';
     if (existing.length > 0) {
-      // Đã thả -> Bỏ thả
-      await pool.query(`DELETE FROM photo_reactions WHERE id = ?`, [existing[0].id]);
-      action = 'removed';
+      if (existing[0].emoji === emoji) {
+        // Đã thả đúng emoji này -> Bỏ thả
+        await pool.query(`DELETE FROM photo_reactions WHERE id = ?`, [existing[0].id]);
+        action = 'removed';
+      } else {
+        // Đã thả emoji khác -> Thay thế cảm xúc
+        await pool.query(`UPDATE photo_reactions SET emoji = ? WHERE id = ?`, [emoji, existing[0].id]);
+        action = 'replaced';
+      }
     } else {
       // Chưa thả -> Thả mới
       await pool.query(
@@ -907,7 +935,12 @@ const toggleReaction = async (req, res) => {
 
     return res.json({
       success: true,
-      message: action === 'added' ? `Đã thả ${emoji}` : `Đã bỏ ${emoji}`,
+      message:
+        action === 'added'
+          ? `Đã thả ${emoji}`
+          : action === 'replaced'
+            ? `Đã đổi cảm xúc sang ${emoji}`
+            : `Đã bỏ ${emoji}`,
       data: {
         photo_id: parseInt(photoId, 10),
         reactions: formattedReactions,
@@ -1230,6 +1263,55 @@ const streamPhotoVideo = async (req, res) => {
   }
 };
 
+
+// ============================================================
+// HELPER: Kiểm tra 1 user có QUYỀN XEM 1 bài viết hay không
+// (tái dùng đúng điều kiện phạm vi của getPhotoFeed + getUserProfile)
+// Trả về: { allowed: boolean, reason?: 'not_found' | 'private' | 'friends' | 'recipient' }
+// ============================================================
+const canViewPhoto = async (photoId, viewerId) => {
+  const [photos] = await pool.query(
+    'SELECT id, user_id, recipient_id, privacy FROM photos WHERE id = ?',
+    [photoId]
+  );
+  if (photos.length === 0) {
+    return { allowed: false, reason: 'not_found' };
+  }
+  const photo = photos[0];
+  const pid = parseInt(photoId, 10);
+  const vid = parseInt(viewerId, 10);
+
+  // Chủ bài luôn xem được bài của mình
+  if (photo.user_id === vid) return { allowed: true };
+
+  // Bài gửi riêng tư: chỉ người gửi + người nhận
+  if (photo.recipient_id) {
+    if (photo.recipient_id === vid) return { allowed: true };
+    return { allowed: false, reason: 'recipient' };
+  }
+
+  // Bài riêng tư: chỉ mình chủ bài
+  if (photo.privacy === 'private') return { allowed: false, reason: 'private' };
+
+  // Kiểm tra quan hệ bạn bè + tài khoản riêng tư của tác giả
+  const [rel] = await pool.query(
+    "SELECT id FROM friendships WHERE ((requester_id = ? AND receiver_id = ?) OR (requester_id = ? AND receiver_id = ?)) AND status = 'accepted'",
+    [photo.user_id, vid, vid, photo.user_id]
+  );
+  const isFriend = rel.length > 0;
+
+  if (photo.privacy === 'friends') {
+    return isFriend ? { allowed: true } : { allowed: false, reason: 'friends' };
+  }
+
+  // privacy === 'public'
+  const [author] = await pool.query('SELECT is_private_account FROM users WHERE id = ?', [photo.user_id]);
+  const authorPrivate = author.length > 0 && Number(author[0].is_private_account) === 1;
+  if (authorPrivate && !isFriend) return { allowed: false, reason: 'friends' };
+
+  return { allowed: true };
+};
+
 module.exports = {
   uploadPhoto,
   uploadVideoPost,
@@ -1247,5 +1329,6 @@ module.exports = {
   streamPhotoVideo,
   formatImageUrl,
   enrichPhotosWithReactionsAndComments,
+  canViewPhoto,
 };
 

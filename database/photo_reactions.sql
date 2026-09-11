@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS photo_reactions (
   emoji       VARCHAR(10)   NOT NULL,
   created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY unique_user_photo_emoji (photo_id, user_id, emoji),
+  UNIQUE KEY unique_user_photo_reaction (photo_id, user_id),
   FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

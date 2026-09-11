@@ -18,14 +18,14 @@ const {
   searchDirectMessages,
 } = require('../controllers/messageController');
 
-// Route tải tệp tin đính kèm trực tiếp (cho phép truy cập tải về máy)
-router.get('/download/:messageId', downloadMessageFile);
-
 // Route stream video chuẩn HTTP 206 Range Request (xác thực qua token query hoặc Bearer)
 router.get('/video-stream/:messageId', streamMessageVideo);
 
 // Tất cả các route còn lại yêu cầu xác thực JWT
 router.use(authMiddleware);
+
+// Route tải tệp tin đính kèm (YÊU CẦU đăng nhập + là người gửi/người nhận/thành viên nhóm)
+router.get('/download/:messageId', downloadMessageFile);
 
 // 1. Lấy danh sách cuộc hội thoại gần nhất
 router.get('/conversations', getConversations);
