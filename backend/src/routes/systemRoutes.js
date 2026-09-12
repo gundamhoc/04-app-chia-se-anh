@@ -4,22 +4,20 @@ const router = express.Router();
 // Định nghĩa thông tin các phiên bản OTA trên hệ thống
 const SYSTEM_VERSIONS = {
   production: {
-    latest_version: '1.2.7',
-    release_date: '2026-09-08',
-    bundle_size: '3.5 MB',
+    latest_version: '1.0.7',
+    release_date: '2026-09-12',
+    bundle_size: '3.6 MB',
     mandatory: false,
     channel: 'production',
     changelog_vi: [
-      'Xem trang cá nhân người dùng khác: bấm vào avatar để xem profile chi tiết, khoảnh khắc và trạng thái quan hệ.',
-      'Bổ sung ảnh bìa hồ sơ (Cover Banner) nằm ngang nghệ thuật phía trên avatar hiệu ứng 3D.',
-      'Tùy chọn bài viết: Bổ sung tính năng Lưu bài viết, Bỏ lưu và Đăng lại (Repost) khoảnh khắc.',
-      'Giao diện mặc định Trắng (Light mode) và tối ưu hóa cuộn bàn phím khi nhập Bio trong hồ sơ.',
+      'Tối ưu hóa giao diện Máy tính bảng / Tablet: Hỗ trợ xoay ngang (Landscape), căn giữa bảng tin, ảnh, video, ô chat và modal với maxWidth chuẩn.',
+      'Sửa lỗi tải về bài đăng video: Tải đúng tệp video .mp4 vào thiết bị thay vì tải nhầm ảnh thumbnail .jpg.',
+      'Đồng bộ giao diện Website Landing Page sang nền trắng (Light Theme) hiện đại, tinh khôi.',
     ],
     changelog_en: [
-      'View other user profiles: tap any avatar to view detailed profile, moments, and friendship status.',
-      'Added profile Cover Banner header above avatar with modern 3D depth effect.',
-      'Post actions: Save post, Unsave post, and Repost moment.',
-      'Default Light theme mode and enhanced keyboard auto-scrolling when editing Bio.',
+      'Tablet Landscape optimization: Support horizontal rotation, centered feed, media, chat, and modals with responsive maxWidth.',
+      'Fixed video post download: Directly saves .mp4 video files to device instead of thumbnail image.',
+      'Synchronized website landing page to modern clean white light theme.',
     ],
   },
   beta: {

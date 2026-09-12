@@ -36,7 +36,7 @@ export const otaUpdateService = {
           // Lấy changelog từ backend để hiển thị đầy đủ tính năng cho người dùng
           let changelogVi = ['Bản cập nhật OTA trực tiếp từ Expo EAS Server.'];
           let changelogEn = ['Direct OTA update package from Expo EAS Server.'];
-          let latestVer = '1.2.7';
+          let latestVer = '1.0.7';
           try {
             const apiRes = await api.get('/system/ota-check', {
               params: { current_version: appVersion, channel: activeChannel },
@@ -53,7 +53,7 @@ export const otaUpdateService = {
             current_version: appVersion,
             latest_version: latestVer,
             release_date: new Date().toISOString().split('T')[0],
-            bundle_size: '3.5 MB',
+            bundle_size: '3.6 MB',
             mandatory: false,
             channel: activeChannel,
             changelog_vi: changelogVi,
@@ -63,13 +63,13 @@ export const otaUpdateService = {
         } else {
           // Bản cập nhật native đã được áp dụng, ứng dụng đã ở bản mới nhất!
           useAppSettings.getState().setLastOtaCheckTime(new Date().toISOString());
-          if (appVersion !== '1.2.7') {
-            await useAppSettings.getState().setAppVersion('1.2.7');
+          if (appVersion !== '1.0.7') {
+            await useAppSettings.getState().setAppVersion('1.0.7');
           }
           return {
             is_update_available: false,
-            current_version: '1.2.7',
-            latest_version: '1.2.7',
+            current_version: '1.0.7',
+            latest_version: '1.0.7',
             release_date: new Date().toISOString().split('T')[0],
             bundle_size: '0 MB',
             mandatory: false,

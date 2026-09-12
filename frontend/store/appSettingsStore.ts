@@ -66,7 +66,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   highContrast: false,
   reduceMotion: false,
   largeText: false,
-  appVersion: '1.2.7',
+  appVersion: '1.0.7',
   otaChannel: 'production',
   autoCheckOta: true,
   lastOtaCheckTime: null,
