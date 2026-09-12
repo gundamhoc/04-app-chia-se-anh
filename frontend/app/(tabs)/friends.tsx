@@ -614,6 +614,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 6,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   headerTitle: {
     fontSize: 22,
@@ -623,6 +626,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   searchContainer: {
     paddingHorizontal: 20,
     paddingVertical: 8,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   searchBox: {
     flexDirection: 'row',
@@ -656,6 +662,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 40,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   searchSection: {
     marginBottom: 20,
@@ -675,6 +684,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     marginBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   tabBtn: {
     paddingVertical: 10,
@@ -706,6 +718,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 60,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   card: {
     flexDirection: 'row',
@@ -872,6 +887,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingVertical: 40,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   emptyIcon: {
     fontSize: 46,

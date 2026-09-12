@@ -141,7 +141,7 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* 1. Lớp nền mờ Ambient (Blurred Backdrop) tự động tương thích tỉ lệ khung hình */}
+      {/* 1. Lớp nền mờ Ambient (Blurred Backdrop) hoặc Nền Poster Điện Ảnh khi chưa có thumbnail */}
       {thumbnailUrl ? (
         <Image
           source={{ uri: thumbnailUrl }}
@@ -150,40 +150,53 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
           resizeMode="cover"
           {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
         />
-      ) : null}
+      ) : (
+        <View style={styles.defaultAmbientBackdrop}>
+          <View style={styles.defaultAmbientGlow} />
+          <View style={styles.defaultAmbientGlowSecondary} />
+        </View>
+      )}
 
       {/* Lớp phủ tương phản tối */}
       <View style={styles.backdropDarkOverlay} />
 
-      {/* 2. Trình phát Video chính hoặc Thumbnail khi chưa phát */}
+      {/* 2. Trình phát Video chính hoặc Poster / Thumbnail khi chưa phát */}
       <TouchableOpacity
         style={styles.mediaTouchArea}
         activeOpacity={0.96}
         onPress={onExpand}
       >
         <View style={styles.videoPlayerWrapper}>
+          {/* Lớp Poster / Thumbnail nền (luôn hiển thị để chống chớp đen trong lúc video đang nạp) */}
+          {thumbnailUrl ? (
+            <Image
+              source={{ uri: thumbnailUrl }}
+              style={styles.thumbnailImage}
+              resizeMode="contain"
+              {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
+            />
+          ) : (
+            <View style={styles.defaultPosterCard}>
+              <View style={styles.defaultPosterIconBox}>
+                <Text style={styles.defaultPosterIcon}>🎬</Text>
+              </View>
+              <Text style={styles.defaultPosterTitle}>Khoảnh khắc Video</Text>
+            </View>
+          )}
+
+          {/* Khi kích hoạt tự phát: hiển thị trình phát video đè lên */}
           {shouldPlay && videoSourceUrl ? (
             <ActiveVideoPlayer sourceUrl={videoSourceUrl} isMuted={isMuted} />
           ) : (
-            <>
-              {thumbnailUrl ? (
-                <Image
-                  source={{ uri: thumbnailUrl }}
-                  defaultSource={require('../assets/splash-icon.png')}
-                  style={styles.thumbnailImage}
-                  resizeMode="contain"
-                  {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
-                />
-              ) : null}
-
-              {/* Nút Play trung tâm khi video chưa active */}
-              <View style={styles.centerPlayOverlay}>
-                <View style={styles.centerPlayCircle}>
-                  <Text style={styles.centerPlayIcon}>▶</Text>
-                </View>
-                <Text style={styles.centerPlayHint}>Lướt tới để tự phát</Text>
+            /* Nút Play trung tâm phong cách Glassmorphism khi video chưa active */
+            <View style={styles.centerPlayOverlay}>
+              <View style={styles.centerPlayCircle}>
+                <Text style={styles.centerPlayIcon}>▶</Text>
               </View>
-            </>
+              <View style={styles.centerPlayPill}>
+                <Text style={styles.centerPlayHint}>Chạm để xem • Cuộn để phát</Text>
+              </View>
+            </View>
           )}
         </View>
       </TouchableOpacity>
@@ -231,6 +244,8 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
     height: 380,
     backgroundColor: '#0a0a0e',
     overflow: 'hidden',
@@ -244,7 +259,57 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.48)',
+    backgroundColor: 'rgba(0, 0, 0, 0.42)',
+  },
+  defaultAmbientBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#0c0a18',
+    overflow: 'hidden',
+  },
+  defaultAmbientGlow: {
+    position: 'absolute',
+    top: -60,
+    left: -40,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(108, 99, 255, 0.28)',
+  },
+  defaultAmbientGlowSecondary: {
+    position: 'absolute',
+    bottom: -50,
+    right: -30,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: 'rgba(255, 107, 107, 0.18)',
+  },
+  defaultPosterCard: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#121124',
+  },
+  defaultPosterIconBox: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: 'rgba(108, 99, 255, 0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(108, 99, 255, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  defaultPosterIcon: {
+    fontSize: 34,
+  },
+  defaultPosterTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#D1D5DB',
+    letterSpacing: 0.3,
   },
   mediaTouchArea: {
     width: '100%',
@@ -280,34 +345,43 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
   },
   centerPlayCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(15, 16, 26, 0.78)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.35)',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 8,
   },
   centerPlayIcon: {
-    fontSize: 26,
+    fontSize: 28,
     color: '#FFFFFF',
-    marginLeft: 3,
+    marginLeft: 4,
+  },
+  centerPlayPill: {
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.68)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   centerPlayHint: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 13,
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '600',
-    marginTop: 10,
-    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },

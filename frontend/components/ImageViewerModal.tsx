@@ -48,6 +48,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   const [currentZoomLevel, setCurrentZoomLevel] = useState(1);
   const [showControls, setShowControls] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
 
   const targetImageUrl = imageUrl || photo?.image_url;
   const displayName = authorName || photo?.author_name || title || 'Ảnh';
@@ -70,6 +71,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     if (visible) {
       resetZoom(false);
       setShowControls(true);
+      setImageLoading(true);
     }
   }, [visible, photo?.id, imageUrl]);
 
@@ -299,10 +301,6 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
   if (!targetImageUrl) return null;
 
-  const authorAvatarUri = displayAvatar
-    ? { uri: displayAvatar }
-    : require('../assets/splash-icon.png');
-
   return (
     <Modal
       visible={visible}
@@ -326,7 +324,15 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
             {/* Tác giả hoặc Tiêu đề */}
             <View style={styles.authorHeader}>
-              <Image source={authorAvatarUri} style={styles.authorAvatar} />
+              {displayAvatar ? (
+                <Image source={{ uri: displayAvatar }} style={styles.authorAvatar} />
+              ) : (
+                <View style={styles.authorAvatarPlaceholder}>
+                  <Text style={styles.authorAvatarInitial}>
+                    {(displayName || 'U')[0]?.toUpperCase()}
+                  </Text>
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={styles.authorName} numberOfLines={1}>
                   {displayName}
@@ -366,6 +372,13 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
         {/* Khung chứa ảnh có cử chỉ Zoom và Pan */}
         <View style={styles.imageViewport} {...panResponder.panHandlers}>
+          {imageLoading && (
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <View style={styles.loaderCenterBox}>
+                <ActivityIndicator size="large" color="#6C63FF" />
+              </View>
+            </View>
+          )}
           <Animated.View
             style={[
               styles.imageWrapper,
@@ -380,9 +393,11 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           >
             <Image
               source={{ uri: targetImageUrl }}
-              defaultSource={require('../assets/splash-icon.png')}
               style={[styles.mainImage, { width: windowWidth, height: windowHeight * 0.75 }]}
               resizeMode="contain"
+              onLoadStart={() => setImageLoading(true)}
+              onLoadEnd={() => setImageLoading(false)}
+              onError={() => setImageLoading(false)}
               {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}
             />
           </Animated.View>
@@ -463,6 +478,24 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     backgroundColor: '#2A2A3E',
+  },
+  authorAvatarPlaceholder: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#6C63FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  authorAvatarInitial: {
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF',
+  },
+  loaderCenterBox: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   authorName: {
     fontSize: 15,

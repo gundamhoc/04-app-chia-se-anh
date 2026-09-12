@@ -97,7 +97,12 @@ export const saveVideoToDevice = async (
       };
     }
 
-    const safeFilename = filename || `masita_video_${Date.now()}.mp4`;
+    let safeFilename = filename
+      ? filename.replace(/[^a-zA-Z0-9._-]/g, '_')
+      : `masita_video_${Date.now()}.mp4`;
+    if (!safeFilename.toLowerCase().endsWith('.mp4') && !safeFilename.toLowerCase().endsWith('.mov')) {
+      safeFilename = `${safeFilename}.mp4`;
+    }
     const targetFileUri = `${FileSystem.documentDirectory}${safeFilename}`;
 
     const downloaded = await FileSystem.downloadAsync(videoUrl, targetFileUri);

@@ -557,6 +557,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     flex: 1,
   },
   header: {
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -598,6 +601,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
   },
   content: {
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
     padding: 20,
   },
   imagePreviewContainer: {

@@ -459,6 +459,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     flex: 1,
   },
   modalCard: {
+    width: '100%',
+    maxWidth: 620,
+    alignSelf: 'center',
     backgroundColor: C.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

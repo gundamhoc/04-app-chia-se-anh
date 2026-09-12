@@ -267,6 +267,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) =>
       flex: 1,
     },
     sheetCard: {
+      width: '100%',
+      maxWidth: 580,
+      alignSelf: 'center',
       backgroundColor: C.card,
       borderTopLeftRadius: 26,
       borderTopRightRadius: 26,

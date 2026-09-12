@@ -109,20 +109,20 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     showToast('info', 'Đang tải video về máy...');
 
     try {
-      if (Platform.OS === 'web') {
-        const res = await saveVideoToDevice(videoUrl, fileName || `masita_${Date.now()}.mp4`);
-        if (res.success) {
-          showToast('success', res.message);
-        } else {
-          showToast('error', res.message);
-        }
+      const cleanName = fileName ? fileName.replace(/[^a-zA-Z0-9._-]/g, '_') : '';
+      const safeFilename = cleanName
+        ? (cleanName.endsWith('.mp4') ? cleanName : `${cleanName}.mp4`)
+        : `masita_video_${Date.now()}.mp4`;
+
+      const res = await saveVideoToDevice(videoUrl, safeFilename);
+      if (res.success) {
+        showToast('success', res.message);
       } else {
-        const res = await saveVideoToDevice(videoUrl, fileName || `masita_${Date.now()}.mp4`);
-        if (res.success) {
-          showToast('success', res.message);
-        } else {
+        if (Platform.OS !== 'web') {
           // Fallback mở link ngoài nếu quyền lưu trữ không cho phép
           await Linking.openURL(videoUrl);
+        } else {
+          showToast('error', res.message);
         }
       }
     } catch (e) {

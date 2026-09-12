@@ -59,7 +59,34 @@ export const saveVideoToDevice = async (
   filename?: string
 ): Promise<{ success: boolean; message: string }> => {
   try {
-    const safeFilename = filename || `masita_video_${Date.now()}.mp4`;
+    let safeFilename = filename
+      ? filename.replace(/[^a-zA-Z0-9._-]/g, '_')
+      : `masita_video_${Date.now()}.mp4`;
+    if (!safeFilename.toLowerCase().endsWith('.mp4') && !safeFilename.toLowerCase().endsWith('.mov')) {
+      safeFilename = `${safeFilename}.mp4`;
+    }
+
+    // Thử tải qua fetch blob để trigger save file trực tiếp nếu cùng origin hoặc có CORS
+    try {
+      const response = await fetch(videoUrl, { mode: 'cors' });
+      if (response.ok) {
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = safeFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+        return {
+          success: true,
+          message: 'Đã lưu video về máy của bạn! 🎬',
+        };
+      }
+    } catch {
+      // Fallback thẻ a trực tiếp nếu CORS fetch bị chặn
+    }
 
     const link = document.createElement('a');
     link.href = videoUrl;

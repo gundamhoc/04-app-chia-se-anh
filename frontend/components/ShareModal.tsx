@@ -14,9 +14,9 @@ import { ColorScheme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
 import { Photo } from '../types';
 import { useToast } from '../hooks/useToast';
-import { savePhotoToDevice } from '../utils/mediaSaver';
+import { useAuth } from '../hooks/useAuth';
+import { savePhotoToDevice, saveVideoToDevice } from '../utils/mediaSaver';
 import { useI18n } from '../utils/i18n';
-
 import { photoService } from '../services/photoService';
 
 interface ShareModalProps {
@@ -34,31 +34,64 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const { colors: C, isDark } = useTheme();
   const { t } = useI18n();
   const styles = useMemo(() => createStyles(C, isDark), [C, isDark]);
+  const { token } = useAuth();
   const [saving, setSaving] = useState(false);
 
   if (!photo) return null;
 
-  // 1. Lưu ảnh về thiết bị
-  const handleSavePhoto = async () => {
+  const isVideo = photo.media_type === 'video' || Boolean(photo.video_url);
+
+  const getVideoDownloadUrl = (): string => {
+    if (!photo.video_url && photo.media_type !== 'video') return '';
+    if (
+      photo.video_url &&
+      photo.video_url.startsWith('http') &&
+      !photo.video_url.includes('googleusercontent.com') &&
+      !photo.video_url.includes('drive.google.com')
+    ) {
+      return photo.video_url;
+    }
+    return photoService.getPhotoVideoStreamUrl(photo.id, token);
+  };
+
+  // 1. Lưu ảnh hoặc video về thiết bị
+  const handleSaveMedia = async () => {
     setSaving(true);
     try {
-      if (Platform.OS !== 'web') {
-        showToast('info', 'Đang tải và lưu ảnh vào máy...');
-      }
-
-      const filename = `masita_${photo.id || Date.now()}.jpg`;
-      const result = await savePhotoToDevice(photo.image_url, filename);
-
-      if (result.success) {
-        showToast('success', result.message);
-        onClose();
+      if (isVideo) {
+        if (Platform.OS !== 'web') {
+          showToast('info', 'Đang tải và lưu video vào máy...');
+        }
+        const videoDownloadUrl = getVideoDownloadUrl();
+        if (!videoDownloadUrl) {
+          showToast('error', 'Không tìm thấy liên kết tải video.');
+          return;
+        }
+        const filename = `masita_video_${photo.id || Date.now()}.mp4`;
+        const result = await saveVideoToDevice(videoDownloadUrl, filename);
+        if (result.success) {
+          showToast('success', result.message);
+          onClose();
+        } else {
+          showToast('error', result.message);
+        }
       } else {
-        showToast('error', result.message);
+        if (Platform.OS !== 'web') {
+          showToast('info', 'Đang tải và lưu ảnh vào máy...');
+        }
+        const filename = `masita_${photo.id || Date.now()}.jpg`;
+        const result = await savePhotoToDevice(photo.image_url, filename);
+        if (result.success) {
+          showToast('success', result.message);
+          onClose();
+        } else {
+          showToast('error', result.message);
+        }
       }
     } catch (err) {
-      console.warn('Lỗi lưu ảnh:', err);
+      console.warn('Lỗi lưu media:', err);
       const errMsg = err instanceof Error ? err.message : 'Lỗi không xác định';
-      showToast('error', 'Lưu ảnh thất bại: ' + errMsg);
+      showToast('error', (isVideo ? 'Lưu video thất bại: ' : 'Lưu ảnh thất bại: ') + errMsg);
     } finally {
       setSaving(false);
     }
@@ -67,7 +100,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   // 2. Sao chép đường link
   const handleCopyLink = async () => {
     try {
-      await Clipboard.setStringAsync(photo.image_url);
+      const targetUrl = isVideo ? getVideoDownloadUrl() : photo.image_url;
+      await Clipboard.setStringAsync(targetUrl);
       showToast('success', 'Đã sao chép liên kết vào bộ nhớ tạm! 📋');
       onClose();
     } catch (err) {
@@ -79,12 +113,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   // 3. Chia sẻ qua các ứng dụng khác
   const handleShareToApps = async () => {
     try {
-      const message = `${photo.author_name} chia sẻ khoảnh khắc trên Masita: ${photo.caption || ''}\n${photo.image_url}`;
+      const targetUrl = isVideo ? getVideoDownloadUrl() : photo.image_url;
+      const mediaLabel = isVideo ? 'video' : 'khoảnh khắc';
+      const message = `${photo.author_name} chia sẻ ${mediaLabel} trên Masita: ${photo.caption || ''}\n${targetUrl}`;
 
       await Share.share({
-        title: 'Khoảnh khắc Masita 📸',
+        title: isVideo ? 'Video Masita 📹' : 'Khoảnh khắc Masita 📸',
         message,
-        url: photo.image_url,
+        url: targetUrl,
       });
 
       onClose();
@@ -167,23 +203,27 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </View>
             </TouchableOpacity>
 
-            {/* Tùy chọn 3: Lưu ảnh về máy */}
+            {/* Tùy chọn 3: Lưu ảnh hoặc video về máy */}
             <TouchableOpacity
               style={styles.optionItem}
-              onPress={handleSavePhoto}
+              onPress={handleSaveMedia}
               disabled={saving}
               activeOpacity={0.7}
             >
-              <View style={[styles.optionIconBox, { backgroundColor: 'rgba(76, 175, 80, 0.15)' }]}>
+              <View style={[styles.optionIconBox, { backgroundColor: isVideo ? 'rgba(255, 107, 107, 0.15)' : 'rgba(76, 175, 80, 0.15)' }]}>
                 {saving ? (
-                  <ActivityIndicator size="small" color="#4CAF50" />
+                  <ActivityIndicator size="small" color={isVideo ? '#FF6B6B' : '#4CAF50'} />
                 ) : (
-                  <Text style={styles.optionIcon}>📥</Text>
+                  <Text style={styles.optionIcon}>{isVideo ? '🎬' : '📥'}</Text>
                 )}
               </View>
               <View style={styles.optionTextBox}>
-                <Text style={styles.optionTitle}>{t('save_to_device')}</Text>
-                <Text style={styles.optionSubtitle}>{t('save_to_device_desc')}</Text>
+                <Text style={styles.optionTitle}>
+                  {isVideo ? 'Lưu video về máy' : t('save_to_device')}
+                </Text>
+                <Text style={styles.optionSubtitle}>
+                  {isVideo ? 'Tải và lưu video về bộ sưu tập thiết bị' : t('save_to_device_desc')}
+                </Text>
               </View>
             </TouchableOpacity>
 
@@ -238,6 +278,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     flex: 1,
   },
   sheetCard: {
+    width: '100%',
+    maxWidth: 580,
+    alignSelf: 'center',
     backgroundColor: C.card,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,

@@ -186,6 +186,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) =>
     },
     scrollContent: {
       flexGrow: 1,
+      width: '100%',
+      maxWidth: 480,
+      alignSelf: 'center',
       paddingHorizontal: 28,
       paddingTop: 60,
       paddingBottom: 40,

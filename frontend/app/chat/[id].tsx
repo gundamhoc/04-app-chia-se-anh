@@ -1705,6 +1705,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     backgroundColor: C.background,
   },
   header: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -1782,6 +1785,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     color: C.textMuted,
   },
   listContainer: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
     gap: 10,
@@ -2043,6 +2049,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     color: '#00E676',
   },
   typingBanner: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 20,
     paddingVertical: 6,
     backgroundColor: 'rgba(108, 99, 255, 0.08)',
@@ -2054,6 +2063,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     fontStyle: 'italic',
   },
   attachmentPreviewBar: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -2138,6 +2150,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     marginTop: 2,
   },
   actionMenuContainer: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     backgroundColor: C.card,
     borderTopWidth: 1,
     borderTopColor: C.border,
@@ -2177,6 +2192,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     textAlign: 'center',
   },
   bottomBar: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
@@ -2298,6 +2316,7 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 440,
+    alignSelf: 'center',
     borderWidth: 1,
     borderColor: C.border,
   },
@@ -2441,6 +2460,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     marginLeft: 2,
   },
   chatSearchBar: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1E1E2D',
@@ -2511,6 +2533,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     justifyContent: 'flex-end',
   },
   themeModalCard: {
+    width: '100%',
+    maxWidth: 580,
+    alignSelf: 'center',
     backgroundColor: isDark ? '#1E1E2D' : '#F8FAFC',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

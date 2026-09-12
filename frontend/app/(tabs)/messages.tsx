@@ -715,6 +715,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
   },
   appBarTitleBox: {
     flexDirection: 'row',
@@ -784,6 +787,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingVertical: 8,
     borderWidth: 1,
     borderColor: C.border,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
   },
   searchIcon: {
     fontSize: 14,
@@ -808,6 +814,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     marginTop: 10,
     marginBottom: 4,
     gap: 8,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
   },
   tabFilterItem: {
     paddingHorizontal: 14,
@@ -834,6 +843,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
   },
   sectionHeader: {
     fontSize: 13,
@@ -883,6 +895,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   listContent: {
     paddingVertical: 8,
     paddingHorizontal: 16,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
   },
   groupSectionBlock: {
     marginBottom: 16,
@@ -1083,6 +1098,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     gap: 8,
+    width: '100%',
+    maxWidth: 540,
+    alignSelf: 'center',
   },
   actionModalTitle: {
     fontSize: 15,

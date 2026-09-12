@@ -65,11 +65,12 @@ export default function OtherUserProfileScreen() {
   const [selectedVideoForView, setSelectedVideoForView] = useState<Photo | null>(null);
   const [viewingCustomImage, setViewingCustomImage] = useState<{ url: string; title: string } | null>(null);
 
-  // Kích thước ô lưới ảnh (3 cột)
+  // Kích thước ô lưới ảnh (3 cột) - Co giãn linh hoạt chuẩn Tablet & Landscape
   const gridItemSize = useMemo(() => {
+    const effectiveWidth = Math.min(windowWidth, 680);
     const horizontalPadding = 16 * 2;
     const gap = 4 * 2;
-    return Math.floor((windowWidth - horizontalPadding - gap) / 3);
+    return Math.floor((effectiveWidth - horizontalPadding - gap) / 3);
   }, [windowWidth]);
 
   // Tải dữ liệu hồ sơ
@@ -633,6 +634,9 @@ const createStyles = (C: ColorScheme, isDark: boolean, windowWidth: number) =>
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: C.border,
       backgroundColor: C.surface,
+      width: '100%',
+      maxWidth: 680,
+      alignSelf: 'center',
     },
     backButton: {
       width: 40,
@@ -671,6 +675,9 @@ const createStyles = (C: ColorScheme, isDark: boolean, windowWidth: number) =>
     },
     contentContainer: {
       paddingBottom: 40,
+      width: '100%',
+      maxWidth: 680,
+      alignSelf: 'center',
     },
     loadingBox: {
       paddingTop: 80,

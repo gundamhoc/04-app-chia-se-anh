@@ -38,6 +38,152 @@ import { FeedSkeleton } from '../../components/LoadingComponents';
 
 const EMOJIS = ['❤️', '🔥', '😂', '😮', '😢'];
 
+interface FeedImageItemProps {
+  imageUrl: string;
+  onPress: () => void;
+  top2Reactions: Array<{ emoji: string; count: number }>;
+  totalReactionsCount: number;
+}
+
+/**
+ * Component hiển thị ảnh bài đăng với lớp Placeholder tải ảnh thanh lịch
+ * Loại bỏ hoàn toàn logo splash-icon và tránh tình trạng chớp trắng/vỡ ảnh khi mạng chậm
+ */
+const FeedImageItem: React.FC<FeedImageItemProps> = ({
+  imageUrl,
+  onPress,
+  top2Reactions,
+  totalReactionsCount,
+}) => {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  return (
+    <TouchableOpacity
+      style={feedImageStyles.container}
+      activeOpacity={0.92}
+      onPress={onPress}
+    >
+      {/* 1. Lớp Placeholder thanh lịch khi ảnh đang nạp qua mạng */}
+      {loading && (
+        <View style={feedImageStyles.placeholderOverlay}>
+          <ActivityIndicator size="small" color="#6C63FF" />
+          <Text style={feedImageStyles.placeholderText}>Đang tải ảnh...</Text>
+        </View>
+      )}
+
+      {/* 2. Hiển thị ảnh hoặc Fallback khi link ảnh hỏng */}
+      {loadError ? (
+        <View style={feedImageStyles.errorFallback}>
+          <Text style={feedImageStyles.errorIcon}>🖼️</Text>
+          <Text style={feedImageStyles.errorText}>Không thể tải hình ảnh</Text>
+        </View>
+      ) : (
+        <Image
+          source={{ uri: imageUrl }}
+          style={feedImageStyles.image}
+          resizeMode="cover"
+          onLoadStart={() => {
+            setLoading(true);
+            setLoadError(false);
+          }}
+          onLoadEnd={() => {
+            setLoading(false);
+          }}
+          onError={() => {
+            setLoading(false);
+            setLoadError(true);
+          }}
+          {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
+        />
+      )}
+
+      {/* 3. Float Emoji Badge */}
+      {top2Reactions.length > 0 && (
+        <View style={feedImageStyles.topEmojiFloatBadge}>
+          <Text style={feedImageStyles.topEmojiFloatIcons}>
+            {top2Reactions.map((r) => r.emoji).join(' ')}
+          </Text>
+          <Text style={feedImageStyles.topEmojiFloatCount}>
+            {totalReactionsCount}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+};
+
+const feedImageStyles = StyleSheet.create({
+  container: {
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+    height: 380,
+    backgroundColor: '#0c0a18',
+    position: 'relative',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  placeholderOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#121124',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+    gap: 8,
+  },
+  placeholderText: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+  },
+  errorFallback: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#131320',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  errorIcon: {
+    fontSize: 32,
+    opacity: 0.7,
+  },
+  errorText: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+  },
+  topEmojiFloatBadge: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 0.8,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    zIndex: 10,
+  },
+  topEmojiFloatIcons: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  topEmojiFloatCount: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+});
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user, token } = useAuth();
@@ -350,9 +496,6 @@ export default function HomeScreen() {
 
   const renderPhotoCard = ({ item }: { item: Photo }) => {
     const isOwner = user?.id === item.user_id;
-    const authorAvatarUri = item.author_avatar
-      ? { uri: item.author_avatar }
-      : require('../../assets/splash-icon.png');
 
     const reactions = item.reactions || [];
     // Tính toán Top 2 Emoji có lượt thả nhiều nhất (giới hạn tối đa đúng 2 emoji)
@@ -384,7 +527,15 @@ export default function HomeScreen() {
             onPress={handleAuthorPress}
             activeOpacity={0.7}
           >
-            <Image source={authorAvatarUri} style={styles.authorAvatar} />
+            {item.author_avatar ? (
+              <Image source={{ uri: item.author_avatar }} style={styles.authorAvatar} />
+            ) : (
+              <View style={styles.authorAvatarPlaceholder}>
+                <Text style={styles.authorAvatarInitial}>
+                  {(item.author_name || item.author_username || 'U')[0]?.toUpperCase()}
+                </Text>
+              </View>
+            )}
             <View style={styles.authorInfo}>
               <View style={styles.authorRow}>
                 <Text style={styles.authorName} numberOfLines={1}>
@@ -440,31 +591,12 @@ export default function HomeScreen() {
             totalReactionsCount={totalReactionsCount}
           />
         ) : (
-          <TouchableOpacity
-            style={styles.imageContainer}
-            activeOpacity={0.92}
+          <FeedImageItem
+            imageUrl={item.image_url}
             onPress={() => setSelectedViewerPhoto(item)}
-          >
-            <Image
-              source={{ uri: item.image_url }}
-              defaultSource={require('../../assets/splash-icon.png')}
-              style={styles.photoImage}
-              resizeMode="cover"
-              {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
-            />
-
-            {/* Biểu tượng góc bên phải: hiện số lượt thẻ emoji nhiều nhất và giới hạn 2 emoji */}
-            {top2Reactions.length > 0 && (
-              <View style={styles.topEmojiFloatBadge}>
-                <Text style={styles.topEmojiFloatIcons}>
-                  {top2Reactions.map((r) => r.emoji).join(' ')}
-                </Text>
-                <Text style={styles.topEmojiFloatCount}>
-                  {totalReactionsCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+            top2Reactions={top2Reactions}
+            totalReactionsCount={totalReactionsCount}
+          />
         )}
 
         {/* Caption */}
@@ -997,6 +1129,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   appName: {
     fontSize: 22,
@@ -1089,6 +1224,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 80,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   photoCard: {
     backgroundColor: C.card,
@@ -1097,6 +1235,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     overflow: 'hidden',
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1113,6 +1254,19 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: C.separator,
+  },
+  authorAvatarPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: C.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  authorAvatarInitial: {
+    fontSize: 17,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF',
   },
   authorInfo: {
     flex: 1,
@@ -1426,6 +1580,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   loadingText: {
     color: C.textMuted,
@@ -1467,6 +1624,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.border,
     backgroundColor: C.card,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   searchBarWrapper: {
     flexDirection: 'row',
@@ -1550,6 +1710,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: `${C.primary}30`,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   searchBannerText: {
     fontSize: 12,

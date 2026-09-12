@@ -73,11 +73,12 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Tính toán kích thước ô lưới ảnh (3 cột)
+  // Tính toán kích thước ô lưới ảnh (3 cột) - Co giãn linh hoạt chuẩn Tablet & Landscape
   const gridItemSize = useMemo(() => {
+    const effectiveWidth = Math.min(windowWidth, 680);
     const horizontalPadding = 16 * 2;
     const gap = 3 * 2;
-    return Math.floor((windowWidth - horizontalPadding - gap) / 3);
+    return Math.floor((effectiveWidth - horizontalPadding - gap) / 3);
   }, [windowWidth]);
 
   // Tải dữ liệu toàn diện hồ sơ (Bài viết, Đã thích, Đã lưu, Đăng lại, Bạn bè)
@@ -823,6 +824,9 @@ const createStyles = (C: ColorScheme, isDark: boolean, windowWidth: number) =>
     },
     contentContainer: {
       paddingBottom: 40,
+      width: '100%',
+      maxWidth: 680,
+      alignSelf: 'center',
     },
     topHeader: {
       flexDirection: 'row',
@@ -830,6 +834,9 @@ const createStyles = (C: ColorScheme, isDark: boolean, windowWidth: number) =>
       alignItems: 'center',
       paddingHorizontal: 20,
       paddingVertical: 12,
+      width: '100%',
+      maxWidth: 680,
+      alignSelf: 'center',
     },
     topTitle: {
       fontSize: 26,

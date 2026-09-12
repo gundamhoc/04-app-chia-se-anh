@@ -287,6 +287,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     backgroundColor: C.background,
   },
   header: {
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -335,6 +338,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
     fontSize: 14,
   },
   listContent: {
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
     padding: 16,
   },
   userCard: {
@@ -438,6 +444,9 @@ const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   },
   centerContainer: {
     flex: 1,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
