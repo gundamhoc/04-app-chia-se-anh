@@ -113,8 +113,17 @@ npm run db:restore
 
 ```
 masita/
-├── backend/          # Node.js Express & Socket.io server (OTA, DB Auto-init, Google Drive Storage)
-├── frontend/         # Expo React Native đa nền tảng (Bilingual i18n, Theme Engine, OTA Update)
-├── database/         # MySQL schema, migrations và backups
+├── admin/            # Cổng quản trị hệ thống Masita (Dashboard, Quản lý tài khoản, Giám sát Realtime)
+├── backend/          # Node.js Express & Socket.io server (TiDB Cloud, Realtime Engine, Google Drive Storage)
+├── database/         # MySQL / TiDB schema, migrations và backups
+├── frontend/         # Expo React Native đa nền tảng Android / iOS / Tablet / Web (Theme Engine, OTA Update)
+├── website/          # Landing Page giới thiệu, quét mã QR & tải file APK v1.0.7 (GitHub Pages)
 └── README.md         # Tài liệu dự án
 ```
+
+## 📱 Tải ứng dụng APK Android (v1.0.7)
+
+- **Landing Page & Web App**: [https://gundamhoc.github.io/04-app-chia-se-anh/](https://gundamhoc.github.io/04-app-chia-se-anh/)
+- **Tải trực tiếp APK (Build 8)**: [Tải Masita v1.0.7 APK](https://expo.dev/artifacts/eas/SjJ7qKPPxFCaSPGlCx18j5MtD63AuN9UlaI8vFFMOkA.apk)
+- **EAS Cloud Build Details**: [Expo EAS Build Page](https://expo.dev/accounts/gundamhoc/projects/masita/builds/5f942933-5b97-4328-8b36-b55d48150f80)
+
