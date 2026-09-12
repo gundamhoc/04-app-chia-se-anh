@@ -1,4 +1,5 @@
 name: Deploy website to GitHub Pages
+# trigger: push main (website/** or this file) or manual
 
 on:
   push:
