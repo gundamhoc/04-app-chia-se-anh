@@ -1198,6 +1198,106 @@ const replySupportTicket = async (req, res) => {
   }
 };
 
+/**
+ * 12. Lấy dữ liệu tăng trưởng người dùng (Analytics Chart)
+ * GET /api/admin/analytics/user-growth?days=7
+ */
+const buildChartDayKeys = (startDate, days) => {
+  const keys = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(startDate.getTime() + i * 86400000);
+    keys.push(d.toISOString().split('T')[0]);
+  }
+  return keys;
+};
+
+const getAnalyticsUserGrowth = async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 30);
+    // Tính mốc theo UTC để khớp DATE_FORMAT (server TiDB chạy UTC, mysql2 timezone 'Z')
+    const startDate = new Date();
+    startDate.setUTCHours(0, 0, 0, 0);
+    startDate.setUTCDate(startDate.getUTCDate() - days + 1);
+
+    // Dùng DATE_FORMAT để nhận về string 'YYYY-MM-DD' (DATE() trả Date object → lệch key Map)
+    const [rows] = await pool.query(`
+      SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as date, COUNT(*) as count
+      FROM users
+      WHERE created_at >= ?
+      GROUP BY date
+      ORDER BY date ASC
+    `, [startDate]);
+
+    // Build complete date range with zero counts for missing dates
+    const map = new Map();
+    rows.forEach(r => map.set(r.date, Number(r.count)));
+
+    const labels = buildChartDayKeys(startDate, days);
+    const values = labels.map(key => map.get(key) || 0);
+
+    return res.json({
+      success: true,
+      data: { labels, values }
+    });
+  } catch (error) {
+    console.error('getAnalyticsUserGrowth error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi lấy dữ liệu tăng trưởng' });
+  }
+};
+
+/**
+ * 13. Lấy dữ liệu bài viết & tương tác (Analytics Chart)
+ * GET /api/admin/analytics/posts-interaction?days=7
+ */
+const getAnalyticsPostsInteraction = async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 30);
+    const startDate = new Date();
+    startDate.setUTCHours(0, 0, 0, 0);
+    startDate.setUTCDate(startDate.getUTCDate() - days + 1);
+
+    const [postRows] = await pool.query(`
+      SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as date, COUNT(*) as count
+      FROM photos
+      WHERE created_at >= ?
+      GROUP BY date
+      ORDER BY date ASC
+    `, [startDate]);
+
+    const [reactRows] = await pool.query(`
+      SELECT DATE_FORMAT(pr.created_at, '%Y-%m-%d') as date, COUNT(*) as count
+      FROM photo_reactions pr
+      WHERE pr.created_at >= ?
+      GROUP BY date
+      ORDER BY date ASC
+    `, [startDate]);
+
+    const [commentRows] = await pool.query(`
+      SELECT DATE_FORMAT(pc.created_at, '%Y-%m-%d') as date, COUNT(*) as count
+      FROM photo_comments pc
+      WHERE pc.created_at >= ?
+      GROUP BY date
+      ORDER BY date ASC
+    `, [startDate]);
+
+    const postMap = new Map(postRows.map(r => [r.date, Number(r.count)]));
+    const reactMap = new Map(reactRows.map(r => [r.date, Number(r.count)]));
+    const commentMap = new Map(commentRows.map(r => [r.date, Number(r.count)]));
+
+    const labels = buildChartDayKeys(startDate, days);
+    const posts = labels.map(key => postMap.get(key) || 0);
+    const interactions = labels.map(key => (reactMap.get(key) || 0) + (commentMap.get(key) || 0));
+
+    return res.json({
+      success: true,
+      data: { labels, posts, interactions }
+    });
+  } catch (error) {
+    console.error('getAnalyticsPostsInteraction error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi lấy dữ liệu bài viết/tương tác' });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getUsers,
@@ -1216,4 +1316,6 @@ module.exports = {
   toggleStaffStatus,
   getSupportTickets,
   replySupportTicket,
+  getAnalyticsUserGrowth,
+  getAnalyticsPostsInteraction,
 };

@@ -169,6 +169,7 @@ export const FeedVideoPost: React.FC<FeedVideoPostProps> = ({
               {thumbnailUrl ? (
                 <Image
                   source={{ uri: thumbnailUrl }}
+                  defaultSource={require('../assets/splash-icon.png')}
                   style={styles.thumbnailImage}
                   resizeMode="contain"
                   {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}

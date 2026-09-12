@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import api from './api';
-import { ApiResponse, Photo, PhotoReaction, PhotoPrivacy } from '../types';
+import { ApiResponse, Photo, PhotoReaction, PhotoPrivacy, ReactionUserInfo } from '../types';
 import { compressImage } from '../utils/imageCompressor';
 
 export interface PhotoFeedResponse {
@@ -282,11 +282,22 @@ export const photoService = {
     return res.data.data;
   },
 
-  // Lấy URL phát luồng video bài viết chuẩn HTTP 206 (YouTube Progressive Buffer Streaming)
+   // Lấy URL phát luồng video bài viết chuẩn HTTP 206 (YouTube Progressive Buffer Streaming)
   getPhotoVideoStreamUrl(photoId: number, token?: string | null): string {
     const baseURL = api.defaults.baseURL || '';
     const cleanBase = baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL;
     return `${cleanBase}/photos/video-stream/${photoId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
+
+  // Lấy danh sách người đã thả cảm xúc cho bài viết (theo từng emoji)
+  async getPhotoReactions(photoId: number): Promise<Record<string, ReactionUserInfo[]>> {
+    const res = await api.get<ApiResponse<{ photo_id: number; reactions: Record<string, ReactionUserInfo[]> }>>(
+      `/photos/${photoId}/reactions`
+    );
+    if (!res.data.data) {
+      throw new Error(res.data.message || 'Không thể lấy danh sách cảm xúc.');
+    }
+    return res.data.data.reactions;
   },
 };
 

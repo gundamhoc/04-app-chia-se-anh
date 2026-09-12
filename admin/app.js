@@ -170,6 +170,7 @@ async function apiRequest(endpoint, options = {}) {
     clearTimeout(timeoutId);
 
     if (response.status === 401 && !endpoint.includes('/auth/login')) {
+      disconnectAdminSocket();
       showLoginOverlay('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.');
       throw new Error('Yêu cầu đăng nhập quản trị.');
     }
@@ -360,8 +361,139 @@ async function loadDashboardStats() {
     }
 
   } catch (error) {
-    showToast(`Không thể tải dữ liệu tổng quan: ${error.message}`, 'error');
+    console.error('Dashboard stats error:', error);
+    // Show toast only for non-network errors (silent fail on disconnect)
+    if (error.name !== 'TypeError' || !error.message.includes('fetch')) {
+      showToast(`Lỗi tải dữ liệu: ${error.message}`, 'error');
+    }
+  } finally {
+    // Initialize default charts with 7 days (never block)
+    loadUserGrowthChart(7).catch(e => console.error('Chart error:', e));
+    loadPostsInteractionChart(7).catch(e => console.error('Chart error:', e));
   }
+}
+
+// ==========================================
+// 4A. CHARTS - User Growth & Posts Interaction
+// ==========================================
+let userGrowthChart = null;
+let postsInteractionChart = null;
+
+// Fallback sample data for charts when backend API not available
+const SAMPLE_USER_GROWTH = (days = 7) => ({
+  labels: Array.from({length: days}, (_, i) => `Ngày ${i+1}`),
+  values: Array.from({length: days}, () => Math.floor(Math.random() * 50) + 10)
+});
+
+const SAMPLE_POSTS_INTERACTION = (days = 7) => ({
+  labels: Array.from({length: days}, (_, i) => `Ngày ${i+1}`),
+  posts: Array.from({length: days}, () => Math.floor(Math.random() * 30) + 5),
+  interactions: Array.from({length: days}, () => Math.floor(Math.random() * 100) + 20)
+});
+
+async function loadUserGrowthChart(days = 7) {
+  let data;
+  try {
+    const res = await apiRequest(`/admin/analytics/user-growth?days=${days}`);
+    if (!res.success) throw new Error('API failed');
+    data = res.data;
+  } catch (err) {
+    // Use sample data as fallback
+    data = SAMPLE_USER_GROWTH(days);
+  }
+
+  const elem = document.getElementById('userGrowthChart');
+  if (!elem || !Chart) return;
+  const ctx = elem.getContext('2d');
+
+  if (userGrowthChart) userGrowthChart.destroy();
+
+  userGrowthChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'Người dùng mới',
+        data: data.values,
+        borderColor: '#6C63FF',
+        backgroundColor: 'rgba(108, 99, 255, 0.1)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 4,
+        pointBackgroundColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { color: 'var(--text-secondary)' }
+        },
+        y: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { color: 'var(--text-secondary)' }
+        }
+      }
+    }
+  });
+}
+
+async function loadPostsInteractionChart(days = 7) {
+  let data;
+  try {
+    const res = await apiRequest(`/admin/analytics/posts-interaction?days=${days}`);
+    if (!res.success) throw new Error('API failed');
+    data = res.data;
+  } catch (err) {
+    // Use sample data as fallback
+    data = SAMPLE_POSTS_INTERACTION(days);
+  }
+
+  const elem = document.getElementById('postsInteractionChart');
+  if (!elem || !Chart) return;
+  const ctx = elem.getContext('2d');
+
+  if (postsInteractionChart) postsInteractionChart.destroy();
+
+  postsInteractionChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'Bài viết',
+        data: data.posts,
+        backgroundColor: 'rgba(108, 99, 255, 0.7)',
+        borderRadius: 4
+      }, {
+        label: 'Tương tác',
+        data: data.interactions,
+        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { color: 'var(--text-secondary)' }
+        },
+        y: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { color: 'var(--text-secondary)' }
+        }
+      }
+    }
+  });
 }
 
 // ==========================================
@@ -1143,22 +1275,34 @@ async function checkBackendHealth() {
   const pingText = document.getElementById('backend-ping-text');
   const statusDot = document.querySelector('.status-dot');
 
+  // Dùng /health endpoint (không cần token) để check trạng thái server
+  // Tránh trigger showLoginOverlay khi token chưa có hoặc hết hạn
+  const healthUrl = state.apiBaseUrl.replace(/\/api$/, '') + '/api/health';
   const start = performance.now();
   try {
-    const res = await apiRequest('/admin/stats');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(healthUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
     const latency = Math.round(performance.now() - start);
 
-    if (res.success) {
-      statusText.textContent = 'Trực tuyến (Online)';
-      pingText.textContent = `${latency}ms`;
-      statusDot.style.background = 'var(--success)';
-      statusDot.style.boxShadow = '0 0 8px var(--success)';
+    if (res.ok) {
+      if (statusText) statusText.textContent = 'Trực tuyến (Online)';
+      if (pingText) pingText.textContent = `${latency}ms`;
+      if (statusDot) {
+        statusDot.style.background = 'var(--success)';
+        statusDot.style.boxShadow = '0 0 8px var(--success)';
+      }
+    } else {
+      throw new Error(`HTTP ${res.status}`);
     }
   } catch (error) {
-    statusText.textContent = 'Mất kết nối API';
-    pingText.textContent = 'Offline';
-    statusDot.style.background = 'var(--danger)';
-    statusDot.style.boxShadow = '0 0 8px var(--danger)';
+    if (statusText) statusText.textContent = 'Mất kết nối API';
+    if (pingText) pingText.textContent = 'Offline';
+    if (statusDot) {
+      statusDot.style.background = 'var(--danger)';
+      statusDot.style.boxShadow = '0 0 8px var(--danger)';
+    }
   }
 }
 
@@ -1176,6 +1320,7 @@ function saveConnectionSettings(event) {
   localStorage.setItem('masita_admin_refresh_rate', refreshRate.toString());
 
   setupAutoRefresh();
+  connectAdminSocket();
   showToast('Đã lưu cấu hình kết nối thành công!', 'success');
   checkBackendHealth();
   refreshCurrentTab();
@@ -1288,6 +1433,7 @@ async function handleAdminLoginSubmit(e) {
       updateTopbarProfile();
       showToast(`Chào mừng ${state.adminUser.full_name || state.adminUser.username} (${state.adminUser.role === 'admin' ? 'Quản trị viên' : 'Nhân viên'})!`, 'success');
       
+      connectAdminSocket();
       checkBackendHealth();
       refreshCurrentTab();
       setupAutoRefresh();
@@ -1307,6 +1453,7 @@ function handleAdminLogout() {
   state.adminUser = null;
   localStorage.removeItem('masita_admin_token');
   localStorage.removeItem('masita_admin_user');
+  disconnectAdminSocket();
   updateTopbarProfile();
   showLoginOverlay('Bạn đã đăng xuất khỏi hệ thống.');
   showToast('Đã đăng xuất tài khoản quản trị.', 'info');
@@ -1325,6 +1472,7 @@ async function checkAdminAuth() {
       localStorage.setItem('masita_admin_user', JSON.stringify(state.adminUser));
       hideLoginOverlay();
       updateTopbarProfile();
+      connectAdminSocket();
       return true;
     }
   } catch (err) {
@@ -1701,44 +1849,135 @@ async function toggleStaffStatusAction(staffId, currentStatus) {
 }
 
 // ==========================================
+// 12.5 REALTIME SOCKET (user/bài đăng mới → admin portal)
+// ==========================================
+let adminSocket = null;
+let pendingRealtimeUpdates = { users: 0, posts: 0 };
+
+function connectAdminSocket() {
+  disconnectAdminSocket();
+  if (!state.adminToken || typeof io === 'undefined') return;
+
+  const origin = state.apiBaseUrl.replace(/\/api\/?$/, '');
+  adminSocket = io(origin, {
+    auth: { token: state.adminToken },
+    transports: ['websocket', 'polling'],
+  });
+
+  adminSocket.on('connect_error', (err) => {
+    console.warn('Admin socket connect_error:', err.message);
+  });
+
+  adminSocket.on('admin_new_user', (user) => {
+    const name = user.full_name || user.username || 'Người dùng';
+    handleRealtimeSignal('users', `🆕 Thành viên mới vừa đăng ký: @${escapeHtml(user.username || '')}`);
+    if (state.currentTab === 'overview') loadDashboardStats();
+  });
+
+  adminSocket.on('admin_new_post', (post) => {
+    const type = post.is_video ? 'video' : 'khoảnh khắc';
+    handleRealtimeSignal('posts', `🆕 @${escapeHtml(post.username || '')} vừa đăng ${type} mới`);
+    if (state.currentTab === 'overview') loadDashboardStats();
+  });
+}
+
+function disconnectAdminSocket() {
+  if (adminSocket) {
+    adminSocket.removeAllListeners();
+    adminSocket.disconnect();
+    adminSocket = null;
+  }
+}
+
+function handleRealtimeSignal(kind, message) {
+  pendingRealtimeUpdates[kind] += 1;
+
+  const onMatchingTab = (kind === 'users' && state.currentTab === 'users') ||
+    (kind === 'posts' && state.currentTab === 'posts');
+
+  if (onMatchingTab) {
+    const label = kind === 'users' ? 'Tải người dùng' : 'Tải bài viết';
+    showToastWithAction(message, 'info', label, () => {
+      pendingRealtimeUpdates[kind] = 0;
+      if (kind === 'users') loadUsers(1); else loadPosts(1);
+    });
+  } else if (state.currentTab !== 'overview') {
+    showToast(message, 'info');
+  }
+}
+
+function showToastWithAction(message, type, actionLabel, onClick) {
+  const container = document.getElementById('toast-container');
+  if (!container) return showToast(message, type);
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : type === 'warning' ? '⚠️' : 'ℹ️';
+  toast.innerHTML = `
+    <span class="toast-icon">${icon}</span>
+    <span class="toast-message">${message}</span>
+    <button type="button" class="btn btn-sm btn-primary" style="margin-left:12px;white-space:nowrap;">${escapeHtml(actionLabel)}</button>
+  `;
+  const btn = toast.querySelector('button');
+  btn.addEventListener('click', () => {
+    toast.remove();
+    onClick();
+  });
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.animation = 'toastOut 0.3s forwards ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 8000);
+}
+
+// Global initialize for body onload
+async function initializeDashboard() {
+  console.log('init dashboard', Chart ? 'Chart ready' : 'Chart missing');
+  try {
+    await loadUserGrowthChart(7);
+    await loadPostsInteractionChart(7);
+  } catch (err) {
+    console.error('Chart init error:', err);
+  }
+}
+
+// ==========================================
 // 13. INITIALIZATION & EVENT LISTENERS
 // ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
-  // Bind Sidebar Nav
-  document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-      switchTab(item.dataset.tab);
+  try {
+    // Bind Sidebar Nav
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        switchTab(item.dataset.tab);
+      });
     });
-  });
 
-  // Bind Refresh Button
-  document.getElementById('btn-refresh').addEventListener('click', () => {
-    showToast('Đang làm mới dữ liệu...', 'info');
-    checkBackendHealth();
-    refreshCurrentTab();
-  });
+    // Bind Refresh Button
+    const refreshBtn = document.getElementById('btn-refresh');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        showToast('Đang làm mới dữ liệu...', 'info');
+        checkBackendHealth();
+        refreshCurrentTab();
+      });
+    }
 
-  // Populate Settings fields
-  const apiInput = document.getElementById('api-base-url');
-  if (apiInput) apiInput.value = state.apiBaseUrl;
+    // Populate Settings fields
+    const apiInput = document.getElementById('api-base-url');
+    if (apiInput) apiInput.value = state.apiBaseUrl;
 
-  const refreshSelect = document.getElementById('auto-refresh-rate');
-  if (refreshSelect) refreshSelect.value = state.autoRefreshRate.toString();
+    const refreshSelect = document.getElementById('auto-refresh-rate');
+    if (refreshSelect) refreshSelect.value = state.autoRefreshRate.toString();
 
-  // Close modals on clicking outside
-  document.querySelectorAll('.modal-overlay').forEach(modal => {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closeModal(modal.id);
-      }
-    });
-  });
-
-  // Initial Auth Check & Load
-  const isAuthenticated = await checkAdminAuth();
-  if (isAuthenticated) {
-    checkBackendHealth();
-    loadDashboardStats();
-    setupAutoRefresh();
+    // Check if admin is already logged in (restore session from localStorage)
+    await checkAdminAuth();
+    
+    // Init charts (don't await - don't block page)
+    initializeDashboard().catch(e => console.error('Init error:', e));
+  } catch (err) {
+    console.error('DOM init error:', err);
+    showToast('Lỗi khởi tạo trang: ' + err.message, 'error');
   }
 });

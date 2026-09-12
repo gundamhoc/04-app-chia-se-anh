@@ -13,6 +13,7 @@ const {
   getRepostedPhotos,
   toggleRepost,
   toggleReaction,
+  getPhotoReactions,
   deletePhoto,
   updatePhoto,
   getDriveImage,
@@ -47,6 +48,7 @@ router.post('/upload-video', handleUploadPostVideo, uploadVideoPost);
 
 // 3. Thả / bỏ thả biểu tượng cảm xúc bài viết & Lưu / Đăng lại
 router.post('/:id/react', toggleReaction);
+router.get('/:id/reactions', getPhotoReactions);
 router.post('/:id/save', toggleSavePhoto);
 router.post('/:id/repost', toggleRepost);
 

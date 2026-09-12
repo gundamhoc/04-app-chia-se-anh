@@ -2,24 +2,22 @@ import { useEffect, useRef } from 'react';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Notifications from 'expo-notifications';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { ToastProvider } from '../context/ToastContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { useAppSettings } from '../store/appSettingsStore';
-import { initNotificationHandler } from '../services/localNotificationService';
-
+import { initNotificationHandler, getLastNotificationResponse, clearLastNotificationResponse, addNotificationResponseListener } from '../utils/notificationClient';
 import { Platform } from 'react-native';
+
+import { BannedAccountModal } from '../components/BannedAccountModal';
 
 // Giữ splash screen cho đến khi sẵn sàng
 SplashScreen.preventAutoHideAsync();
 
-// Handler notification nen: phai dang ky som nhat (module-level), truoc khi co notification nao bay ve
+// Handler notification: phải đăng ký sớm nhất (module-level), trước khi có notification nào bay về
 initNotificationHandler();
-
-import { BannedAccountModal } from '../components/BannedAccountModal';
 
 // Inner layout component — dùng theme context để set statusbar
 function InnerLayout() {
@@ -84,15 +82,21 @@ export default function RootLayout() {
           router.push(url as never);
         }
       };
-      const initialResponse = Notifications.getLastNotificationResponse();
-      const initialUrl = initialResponse?.notification.request.content.data?.url;
-      if (typeof initialUrl === 'string' && initialUrl.startsWith('/')) {
-        // Cold start tu notification: luri cho loadStoredAuth xong (isInitializing=false) roi moi dieu huong
-        pendingNotificationUrl.current = initialUrl;
-        Notifications.clearLastNotificationResponseAsync().catch(() => {});
-      }
-      notificationSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+
+      // Cold start từ notification
+      getLastNotificationResponse().then((initialResponse) => {
+        const initialUrl = initialResponse?.notification.request.content.data?.url;
+        if (typeof initialUrl === 'string' && initialUrl.startsWith('/')) {
+          pendingNotificationUrl.current = initialUrl;
+          clearLastNotificationResponse().catch(() => {});
+        }
+      });
+
+      // Listener khi app đang chạy
+      addNotificationResponseListener((response) => {
         navigateFromNotification(response.notification.request.content.data?.url);
+      }).then((sub) => {
+        notificationSubscription = sub;
       });
     }
 

@@ -380,6 +380,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
           >
             <Image
               source={{ uri: targetImageUrl }}
+              defaultSource={require('../assets/splash-icon.png')}
               style={[styles.mainImage, { width: windowWidth, height: windowHeight * 0.75 }]}
               resizeMode="contain"
               {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as unknown as object) : {})}

@@ -28,6 +28,7 @@ import { Photo, PhotoReaction } from '../../types';
 import { CommentModal } from '../../components/CommentModal';
 import { NotificationModal } from '../../components/NotificationModal';
 import { ShareModal } from '../../components/ShareModal';
+import { ReactionModal } from '../../components/ReactionModal';
 import { PostOptionsModal } from '../../components/PostOptionsModal';
 import { EditPostModal } from '../../components/EditPostModal';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
@@ -59,6 +60,8 @@ export default function HomeScreen() {
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
   const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<Photo | null>(null);
   const [selectedVideoPost, setSelectedVideoPost] = useState<Photo | null>(null);
+  const [activeReactionsPhotoId, setActiveReactionsPhotoId] = useState<number | null>(null);
+  const [reactionsModalVisible, setReactionsModalVisible] = useState(false);
   const [isNotificationModalVisible, setIsNotificationModalVisible] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState<number>(0);
 
@@ -84,7 +87,8 @@ export default function HomeScreen() {
     editingPhoto ||
     selectedViewerPhoto ||
     selectedVideoPost ||
-    isNotificationModalVisible
+    isNotificationModalVisible ||
+    reactionsModalVisible
   );
 
   const viewabilityConfig = useRef({
@@ -334,6 +338,16 @@ export default function HomeScreen() {
     }
   };
 
+  const handleOpenReactionsModal = (photoId: number, emoji?: string) => {
+    setActiveReactionsPhotoId(photoId);
+    setReactionsModalVisible(true);
+  };
+
+  const handleCloseReactionsModal = () => {
+    setReactionsModalVisible(false);
+    setActiveReactionsPhotoId(null);
+  };
+
   const renderPhotoCard = ({ item }: { item: Photo }) => {
     const isOwner = user?.id === item.user_id;
     const authorAvatarUri = item.author_avatar
@@ -433,6 +447,7 @@ export default function HomeScreen() {
           >
             <Image
               source={{ uri: item.image_url }}
+              defaultSource={require('../../assets/splash-icon.png')}
               style={styles.photoImage}
               resizeMode="cover"
               {...(Platform.OS === 'web' ? ({ referrerPolicy: 'no-referrer' } as any) : {})}
@@ -463,14 +478,18 @@ export default function HomeScreen() {
         {(totalReactionsCount > 0 || (item.comment_count && item.comment_count > 0)) ? (
           <View style={styles.metricsBar}>
             {top2Reactions.length > 0 ? (
-              <View style={styles.metricsReactionTag}>
+              <TouchableOpacity
+                style={styles.metricsReactionTag}
+                onPress={() => handleOpenReactionsModal(item.id, top2Reactions[0]?.emoji)}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.metricsEmojiIcons}>
                   {top2Reactions.map((r) => r.emoji).join('')}
                 </Text>
                 <Text style={styles.metricsReactionCount}>
                   {totalReactionsCount} {t('interactions')}
                 </Text>
-              </View>
+              </TouchableOpacity>
             ) : <View />}
 
             {item.comment_count && item.comment_count > 0 ? (
@@ -953,6 +972,13 @@ export default function HomeScreen() {
             });
           }
         }}
+      />
+
+      {/* Reaction Modal (Xem ai đã thả cảm xúc) */}
+      <ReactionModal
+        visible={reactionsModalVisible}
+        photoId={activeReactionsPhotoId}
+        onClose={handleCloseReactionsModal}
       />
     </View>
   );

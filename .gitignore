@@ -23,6 +23,8 @@ backend/uploads/*
 backend/ngrok/
 *.exe
 *.log
+*.apk
+*.aab
 
 # IDE & OS files
 .DS_Store

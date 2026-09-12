@@ -1008,7 +1008,11 @@ export default function ChatScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+          style={[styles.container, { paddingTop: insets.top }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          enabled={true}
+        >
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
       {/* Hình nền cuộc trò chuyện toàn màn hình (đồng bộ cả Header và Bottom Bar) */}
@@ -1688,11 +1692,12 @@ export default function ChatScreen() {
               </View>
             )}
           </View>
-        </View>
-      </Modal>
-    </View>
-  );
+          </View>
+        </Modal>
+      </KeyboardAvoidingView>
+    );
 }
+
 
 const createStyles = (C: ColorScheme, isDark: boolean) => StyleSheet.create({
   container: {

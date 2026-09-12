@@ -110,6 +110,13 @@ export interface PhotoReaction {
   user_reacted: boolean;
 }
 
+export interface ReactionUserInfo {
+  user_id: number;
+  username: string;
+  full_name: string;
+  avatar_url: string | null;
+}
+
 export type PhotoPrivacy = 'public' | 'friends' | 'private';
 
 export interface Photo {
@@ -186,6 +193,7 @@ export interface Message {
   file_size?: number | null;
   file_type?: string | null;
   is_read: boolean;
+  is_delivered?: boolean | null;
   created_at: string;
   sender_name?: string;
   sender_avatar?: string | null;

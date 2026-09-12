@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 3. Copy APK Download Link
   const copyBtn = document.getElementById('btn-copy-link');
   const copyText = document.getElementById('copy-text');
-  const downloadUrl = 'https://expo.dev/artifacts/eas/v7n44OY6KQjVJHSdmnoePTdCynlDcU8Uw6H_qxqZKRk.apk';
+  const downloadUrl = 'https://expo.dev/artifacts/eas/cJdawXIXYkxVQBxDQj5vAKbONvzA86J-mKSxkn_yONI.apk';
 
   if (copyBtn && copyText) {
     copyBtn.addEventListener('click', async () => {

@@ -18,6 +18,8 @@ const {
   toggleStaffStatus,
   getSupportTickets,
   replySupportTicket,
+  getAnalyticsUserGrowth,
+  getAnalyticsPostsInteraction,
 } = require('../controllers/adminController');
 
 const {
@@ -64,8 +66,12 @@ router.get('/posts/:id/stream', streamPostVideo);
 router.get('/posts/:id/video', streamPostVideo);
 router.delete('/posts/:id', deletePost);
 
-// 8. Quản lý & Giải đáp thắc mắc người dùng (Support Tickets)
+// 8. Quản lý & Giải đáp thắc mắn người dùng (Support Tickets)
 router.get('/support-tickets', getSupportTickets);
 router.put('/support-tickets/:id/reply', replySupportTicket);
+
+// 9. Analytics charts cho Dashboard
+router.get('/analytics/user-growth', getAnalyticsUserGrowth);
+router.get('/analytics/posts-interaction', getAnalyticsPostsInteraction);
 
 module.exports = router;

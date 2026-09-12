@@ -75,7 +75,13 @@ const initSocketHandler = (io) => {
         return next(new Error('UNAUTHORIZED: thiếu token xác thực'));
       }
       const decoded = verifyToken(token);
-      if (!decoded || !decoded.id || decoded.admin_id) {
+      if (decoded && decoded.admin_id) {
+        // Token quản trị viên / nhân viên admin portal → vào room 'admins' nhận realtime event
+        socket.isAdmin = true;
+        socket.adminId = parseInt(decoded.admin_id, 10);
+        return next();
+      }
+      if (!decoded || !decoded.id) {
         return next(new Error('UNAUTHORIZED: token không hợp lệ'));
       }
       socket.userId = parseInt(decoded.id, 10);
@@ -86,6 +92,16 @@ const initSocketHandler = (io) => {
   });
 
   io.on('connection', (socket) => {
+    // -------------------------------------------------------
+    // Admin portal socket: chỉ join room 'admins', không tính presence
+    // -------------------------------------------------------
+    if (socket.isAdmin) {
+      socket.join('admins');
+      console.log(`👑 Admin ${socket.adminId} connected to realtime feed (socket: ${socket.id})`);
+      return;
+    }
+
+
     // -------------------------------------------------------
     // Event: user_online
     // Client gửi khi đăng nhập thành công hoặc reconnect

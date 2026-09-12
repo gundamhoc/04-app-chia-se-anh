@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
 const { generateToken } = require('../utils/jwt');
 const { uploadFileToDrive } = require('../utils/googleDrive');
+const { getIO, isUserOnline } = require('../sockets/socketHandler');
 const fs = require('fs');
 
 // ============================================================
@@ -56,6 +57,24 @@ const register = async (req, res) => {
 
     // Tạo JWT token
     const token = generateToken({ id: userId, username, email });
+
+    // Realtime: thông báo bảng điều khiển admin có thành viên mới
+    try {
+      const io = getIO();
+      if (io) {
+        io.to('admins').emit('admin_new_user', {
+          id: userId,
+          username,
+          full_name: full_name || null,
+          avatar_url: null,
+          is_active: 1,
+          created_at: new Date().toISOString(),
+          is_online: isUserOnline(userId),
+        });
+      }
+    } catch (emitErr) {
+      console.error('Emit admin_new_user error:', emitErr);
+    }
 
     return res.status(201).json({
       success: true,

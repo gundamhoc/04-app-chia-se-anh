@@ -1,6 +1,6 @@
-import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
 import { useAppSettings } from '../store/appSettingsStore';
+import { initNotificationHandler as initClient, ensureNotificationPermissions as ensurePerms, scheduleLocalNotification as scheduleClient } from '../utils/notificationClient';
 
 const CHANNEL_ID = 'masita';
 
@@ -12,59 +12,25 @@ export interface LocalNotificationInput {
 
 let permissionsRequested = false;
 
-export const initNotificationHandler = (): void => {
-  if (Platform.OS === 'web') return;
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+// Khởi tạo handler cho local notification (foreground)
+export const initNotificationHandler = async (): Promise<void> => {
+  await initClient();
 };
 
+// Đảm bảo quyền thông báo và channel
 export const ensureNotificationPermissions = async (): Promise<void> => {
-  if (Platform.OS === 'web' || permissionsRequested) return;
-  permissionsRequested = true;
-  try {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-        name: 'Masita',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#6C63FF',
-      });
-    }
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    if (existing !== 'granted') {
-      await Notifications.requestPermissionsAsync();
-    }
-  } catch (e) {
-    console.warn('[LocalNotification] Khong the khoi tao quyen thong bao:', e);
-  }
+  await ensurePerms();
 };
 
-const isAppActive = async (): Promise<boolean> => {
-  return AppState.currentState === 'active';
+const isAppActive = (): Promise<boolean> => {
+  return Promise.resolve(AppState.currentState === 'active');
 };
 
 export const showLocalNotification = async (input: LocalNotificationInput): Promise<void> => {
   if (Platform.OS === 'web') return;
   try {
     if (await isAppActive()) return;
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: input.title,
-        body: input.body,
-        data: input.url ? { url: input.url } : {},
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: 1,
-        channelId: CHANNEL_ID,
-      },
-    });
+    await scheduleClient(input);
   } catch (e) {
     console.warn('[LocalNotification] Loi gui thong bao:', e);
   }

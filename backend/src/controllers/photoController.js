@@ -1,10 +1,39 @@
 const { pool } = require('../config/db');
 const { uploadFileToDrive, getDriveClient } = require('../utils/googleDrive');
-const { sendNotificationToUser, broadcastToUsers } = require('../sockets/socketHandler');
+const { sendNotificationToUser, broadcastToUsers, getIO } = require('../sockets/socketHandler');
 const { createNotification } = require('../services/notificationService');
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
+
+/**
+ * Realtime: phát sự kiện bài đăng mới tới room 'admins' (Admin Portal)
+ */
+const emitAdminNewPost = (photo, host, protocol) => {
+  try {
+    const io = getIO();
+    if (!io) return;
+    const isVideo = photo.media_type === 'video' || !!photo.video_url;
+    io.to('admins').emit('admin_new_post', {
+      id: photo.id,
+      user_id: photo.user_id,
+      caption: photo.caption,
+      image_url: photo.image_url,
+      video_url: photo.video_url || null,
+      media_type: photo.media_type || 'image',
+      privacy: photo.privacy,
+      created_at: photo.created_at,
+      username: photo.author_username,
+      full_name: photo.author_name,
+      avatar_url: photo.author_avatar,
+      is_video: isVideo,
+      reactions_count: 0,
+      stream_url: isVideo ? `${protocol}://${host}/api/admin/posts/${photo.id}/stream` : null,
+    });
+  } catch (emitErr) {
+    console.warn('⚠️ Lỗi emit admin_new_post:', emitErr.message);
+  }
+};
 
 // Helper chuẩn hóa link ảnh: chuyển link Google Drive sang proxy route backend để tránh lỗi Google 429 trên Web
 function formatImageUrl(rawUrl, protocol, host) {
@@ -237,6 +266,9 @@ const uploadPhoto = async (req, res) => {
       console.warn('⚠️ Lỗi gửi socket notification cho photo:', socketErr.message);
     }
 
+    // Realtime: thông báo bảng điều khiển admin có bài viết mới
+    emitAdminNewPost(createdPhoto, host, protocol);
+
     return res.status(201).json({
       success: true,
       message: 'Đăng ảnh khoảnh khắc Locket thành công! 📸',
@@ -372,6 +404,9 @@ const uploadVideoPost = async (req, res) => {
     } catch (socketErr) {
       console.warn('⚠️ Lỗi gửi socket notification cho video photo:', socketErr.message);
     }
+
+    // Realtime: thông báo bảng điều khiển admin có video mới
+    emitAdminNewPost(createdPhoto, host, protocol);
 
     return res.status(201).json({
       success: true,
@@ -956,6 +991,95 @@ const toggleReaction = async (req, res) => {
 };
 
 /**
+ * 3.1. Lấy danh sách người đã thả cảm xúc cho bài viết (theo từng emoji)
+ * GET /api/photos/:id/reactions
+ */
+const getPhotoReactions = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const photoId = parseInt(req.params.id, 10);
+
+    if (!photoId || isNaN(photoId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID ảnh không hợp lệ.',
+      });
+    }
+
+    // Kiểm tra người dùng có xem được bài viết không
+    const view = await canViewPhoto(photoId, currentUserId);
+    if (!view.allowed) {
+      return res.status(view.reason === 'not_found' ? 404 : 403).json({
+        success: false,
+        message: view.reason === 'not_found' ? 'Không tìm thấy bài viết.' : 'Bạn không có quyền xem bài viết này.',
+      });
+    }
+
+    // Lấy danh sách các cảm xúc kèm thông tin người dùng
+    const [rows] = await pool.query(
+      `
+      SELECT 
+        u.id AS user_id,
+        u.username,
+        u.full_name,
+        u.avatar_url,
+        pr.emoji
+      FROM photo_reactions pr
+      JOIN users u ON pr.user_id = u.id
+      WHERE pr.photo_id = ?
+      ORDER BY pr.emoji, pr.created_at ASC
+      `,
+      [photoId]
+    );
+
+    // Nhóm theo emoji
+    const reactionsMap = {};
+    rows.forEach((row) => {
+      const emoji = row.emoji;
+      if (!reactionsMap[emoji]) {
+        reactionsMap[emoji] = [];
+      }
+      reactionsMap[emoji].push({
+        user_id: row.user_id,
+        username: row.username,
+        full_name: row.full_name,
+        avatar_url: row.avatar_url,
+      });
+    });
+
+    // Build response với avatar_url đầy đủ
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const reactions = {};
+    for (const emoji of Object.keys(reactionsMap)) {
+      reactions[emoji] = reactionsMap[emoji].map((user) => ({
+        user_id: user.user_id,
+        username: user.username,
+        full_name: user.full_name,
+        avatar_url: user.avatar_url && !user.avatar_url.startsWith('http')
+          ? `${protocol}://${host}${user.avatar_url.startsWith('/') ? '' : '/'}${user.avatar_url}`
+          : user.avatar_url,
+      }));
+    }
+
+    return res.json({
+      success: true,
+      message: 'Lấy danh sách người đã thả cảm xúc thành công.',
+      data: {
+        photo_id: photoId,
+        reactions,
+      },
+    });
+  } catch (error) {
+    console.error('Get photo reactions error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ khi lấy danh sách cảm xúc.',
+    });
+  }
+};
+
+/**
  * 4. Xóa ảnh khoảnh khắc của chính mình
  * DELETE /api/photos/:id
  */
@@ -1323,6 +1447,7 @@ module.exports = {
   getRepostedPhotos,
   toggleRepost,
   toggleReaction,
+  getPhotoReactions,
   deletePhoto,
   updatePhoto,
   getDriveImage,
